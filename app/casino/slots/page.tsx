@@ -33,6 +33,7 @@ export default function SlotsPage() {
 
   const [holdMask, setHoldMask] = useState<boolean[]>([false, false, false, false, false]);
   const [nudge, setNudge] = useState<number[]>([0, 0, 0, 0, 0]); // -1/0/+1, applied to held reels
+  const MAX_HELD_REELS = 2;
 
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0);
   const [pendingGamble, setPendingGamble] = useState<number | null>(null);
@@ -165,7 +166,9 @@ export default function SlotsPage() {
         setHoldMask([false, false, false, false, false]);
         setNudge([0, 0, 0, 0, 0]);
       } else {
-        // nudges are single-use
+        // Holds are single-use (apply to NEXT spin only), nudges are also single-use.
+        // This keeps them "finite" like a physical cabinet.
+        setHoldMask([false, false, false, false, false]);
         setNudge([0, 0, 0, 0, 0]);
       }
 
@@ -513,7 +516,11 @@ export default function SlotsPage() {
                     onClick={() =>
                       setHoldMask((m) => {
                         const next = [...m];
-                        next[i] = !next[i];
+                        const nextVal = !next[i];
+                        const heldCount = next.filter(Boolean).length;
+                        // Limit holds (finite) to avoid indefinite advantage.
+                        if (nextVal && heldCount >= MAX_HELD_REELS) return next;
+                        next[i] = nextVal;
                         return next;
                       })
                     }
@@ -532,9 +539,10 @@ export default function SlotsPage() {
                       className="rounded-xl bg-white/5 px-2 py-1 text-xs text-white/75 disabled:opacity-30"
                       onClick={() =>
                         setNudge((n) => {
-                          const next = [...n];
+                          // Only allow one nudge per spin (finite).
+                          const next = [0, 0, 0, 0, 0];
                           next[i] = -1;
-                          return next;
+                          return next as number[];
                         })
                       }
                       title="Nudge up"
@@ -547,9 +555,10 @@ export default function SlotsPage() {
                       className="rounded-xl bg-white/5 px-2 py-1 text-xs text-white/75 disabled:opacity-30"
                       onClick={() =>
                         setNudge((n) => {
-                          const next = [...n];
+                          // Only allow one nudge per spin (finite).
+                          const next = [0, 0, 0, 0, 0];
                           next[i] = 1;
-                          return next;
+                          return next as number[];
                         })
                       }
                       title="Nudge down"
@@ -570,6 +579,9 @@ export default function SlotsPage() {
               >
                 Clear holds
               </button>
+              <p className="mt-2 text-[11px] leading-5 text-white/55">
+                Limits: up to {MAX_HELD_REELS} held reels; one nudge per spin; holds apply once then reset.
+              </p>
             </div>
           ) : null}
 
