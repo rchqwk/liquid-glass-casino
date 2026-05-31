@@ -20,6 +20,7 @@ export function Topbar() {
   const now = Date.now();
   const refillCooldownMs = Math.max(0, refill5000AvailableAt - now);
   const refill100CooldownMs = Math.max(0, refill100AvailableAt - now);
+  const canRefill = !loading && !!user;
   const refillLabel = useMemo(() => {
     if (role >= 1) return "+5000";
     if (refillCooldownMs <= 0) return "+5000";
@@ -73,6 +74,10 @@ export function Topbar() {
             className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
             onClick={() => {
               setMsg(null);
+              if (!canRefill) {
+                setMsg("Sign in to refill.");
+                return;
+              }
               const res = deposit(100, { bypassCooldown: role >= 1 });
               if (!res.ok) {
                 setMsg(
@@ -82,7 +87,7 @@ export function Topbar() {
                 );
               }
             }}
-            disabled={role < 1 && refill100CooldownMs > 0}
+            disabled={!canRefill || (role < 1 && refill100CooldownMs > 0)}
             type="button"
           >
             {refill100Label}
@@ -91,6 +96,10 @@ export function Topbar() {
             className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
             onClick={() => {
               setMsg(null);
+              if (!canRefill) {
+                setMsg("Sign in to refill.");
+                return;
+              }
               const res = deposit(5000, { bypassCooldown: role >= 1 });
               if (!res.ok) {
                 setMsg(
@@ -100,20 +109,22 @@ export function Topbar() {
                 );
               }
             }}
-            disabled={role < 1 && refillCooldownMs > 0}
+            disabled={!canRefill || (role < 1 && refillCooldownMs > 0)}
             type="button"
             title={role < 1 ? "Standard users: one +5000 refill every 15 minutes" : "Admin: unlimited refills"}
           >
             {refillLabel}
           </button>
-          <button
-            className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
-            onClick={reset}
-            type="button"
-            title="Reset wallet + RNG seeds"
-          >
-            Reset
-          </button>
+          {role >= 1 ? (
+            <button
+              className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
+              onClick={reset}
+              type="button"
+              title="Reset wallet + RNG seeds"
+            >
+              Reset
+            </button>
+          ) : null}
         </div>
       </div>
       {msg ? (

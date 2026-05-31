@@ -12,7 +12,16 @@ export function normalizeUsername(raw: string) {
 
 type Store = {
   nextUserId: number;
-  users: Array<{ id: number; username: string; role_level: number; created_at: number }>;
+  users: Array<{
+    id: number;
+    username: string;
+    role_level: number;
+    created_at: number;
+    fingerprint?: string;
+    active_session_token?: string | null;
+    last_seen?: number;
+    last_signout?: number;
+  }>;
   sessions: Array<{ token: string; user_id: number; created_at: number }>;
   leaderboard: Array<{
     user_id: number;
@@ -20,6 +29,7 @@ type Store = {
     wager_total: number;
     bets: number;
     updated_at: number;
+    active?: boolean;
   }>;
   config: Record<string, { value: string; updated_at: number }>;
 };
@@ -134,15 +144,28 @@ async function ensureSchema() {
       updated_at BIGINT NOT NULL
     )
   `;
+
+  // Migrations / new columns
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS fingerprint TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS active_session_token TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen BIGINT NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_signout BIGINT NOT NULL DEFAULT 0`;
+
+  await sql`ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`;
   schemaReady = true;
 }
+
 
 export async function findUserByUsername(username: string) {
   const sql = getSql();
   if (sql) {
     await ensureSchema();
     const rows =
-      (await sql`SELECT id, username, role_level, created_at FROM users WHERE username = ${username}`) as any[];
+      (await sql`
+        SELECT id, username, role_level, created_at,
+               fingerprint, active_session_token, last_seen, last_signout
+        FROM users WHERE username = ${username}
+      `) as any[];
     return rows[0] ?? null;
   }
   return withStore((s) => s.users.find((u) => u.username === username) ?? null);
@@ -172,8 +195,8 @@ export async function getOrCreateUser(username: string) {
     if (!user) throw new Error("Failed to create user");
 
     await sql`
-      INSERT INTO leaderboard (user_id, profit_total, wager_total, bets, updated_at)
-      VALUES (${user.id}, 0, 0, 0, ${now})
+      INSERT INTO leaderboard (user_id, profit_total, wager_total, bets, updated_at, active)
+      VALUES (${user.id}, 0, 0, 0, ${now}, TRUE)
       ON CONFLICT (user_id) DO NOTHING
     `;
     return user as { id: number; username: string; role_level: number; created_at: number };
@@ -195,6 +218,7 @@ export async function getOrCreateUser(username: string) {
         wager_total: 0,
         bets: 0,
         updated_at: now,
+        active: true,
       });
     }
     return user;
@@ -227,7 +251,12 @@ export async function getUserBySessionToken(token: string): Promise<AuthedUserWi
         JOIN users u ON u.id = s.user_id
         WHERE s.token = ${token}
       `) as any[];
-    return rows[0] ?? null;
+    const user = rows[0] ?? null;
+    if (user) {
+      const now = Date.now();
+      await sql`UPDATE users SET last_seen = ${now} WHERE id = ${user.id}`;
+    }
+    return user;
   }
 
   return withStore((s) => {
@@ -236,6 +265,230 @@ export async function getUserBySessionToken(token: string): Promise<AuthedUserWi
     const user = s.users.find((u) => u.id === sess.user_id);
     if (!user) return null;
     return { id: user.id, username: user.username, role_level: user.role_level ?? 0 };
+  });
+}
+
+export async function loginUsernameWithToken(input: {
+  username: string;
+  token: string;
+  fingerprint: string;
+  lockReleaseMs: number; // 24h
+  inactiveCutoffMs: number; // 30d
+}) {
+  const { username, token, fingerprint, lockReleaseMs, inactiveCutoffMs } = input;
+  const now = Date.now();
+  const sql = getSql();
+
+  if (sql) {
+    await ensureSchema();
+
+    // Mark inactive leaderboard rows (lazy maintenance)
+    await ensureLeaderboardInactivityCutoff(inactiveCutoffMs);
+
+    // Ensure user exists
+    await sql`
+      INSERT INTO users (username, role_level, created_at)
+      VALUES (${username}, ${username === MASTER_USERNAME ? 3 : 0}, ${now})
+      ON CONFLICT (username) DO NOTHING
+    `;
+    if (username === MASTER_USERNAME) {
+      await sql`UPDATE users SET role_level = 3 WHERE username = ${username}`;
+    }
+
+    const urows =
+      (await sql`
+        SELECT id, username, role_level, fingerprint, active_session_token, last_signout
+        FROM users WHERE username = ${username}
+      `) as any[];
+    const user = urows[0];
+    if (!user) throw new Error("User lookup failed");
+
+    // If username is currently active elsewhere, only allow replacing session if fingerprint matches.
+    if (user.active_session_token) {
+      if (user.fingerprint && user.fingerprint === fingerprint) {
+        await sql`DELETE FROM sessions WHERE token = ${user.active_session_token}`;
+        await sql`UPDATE users SET active_session_token = NULL WHERE id = ${user.id}`;
+      } else {
+        throw new Error("Username is currently in use.");
+      }
+    }
+
+    // If fingerprint mismatched, only allow takeover 24h after signout.
+    if (user.fingerprint && user.fingerprint !== fingerprint) {
+      const lastSignout = Number(user.last_signout ?? 0);
+      if (now - lastSignout < lockReleaseMs) {
+        throw new Error("Username is locked to another device. Try again later.");
+      }
+    }
+
+    await sql`
+      UPDATE users
+      SET fingerprint = ${fingerprint},
+          active_session_token = ${token},
+          last_seen = ${now}
+      WHERE id = ${user.id}
+    `;
+    await sql`INSERT INTO sessions (token, user_id, created_at) VALUES (${token}, ${user.id}, ${now})`;
+
+    // Ensure leaderboard row exists
+    await sql`
+      INSERT INTO leaderboard (user_id, profit_total, wager_total, bets, updated_at, active)
+      VALUES (${user.id}, 0, 0, 0, ${now}, TRUE)
+      ON CONFLICT (user_id) DO NOTHING
+    `;
+
+    const lrows =
+      (await sql`SELECT active, updated_at FROM leaderboard WHERE user_id = ${user.id}`) as any[];
+    const l = lrows[0];
+    const inactivePrompt = !!l && (l.active === false);
+
+    return {
+      user: { id: user.id, username: user.username, role_level: user.role_level as number },
+      inactivePrompt,
+    };
+  }
+
+  // File-store fallback (dev only)
+  await ensureLeaderboardInactivityCutoff(inactiveCutoffMs);
+  const u = await getOrCreateUser(username);
+  return withStore((s) => {
+    const user = s.users.find((x) => x.id === u.id)!;
+
+    const activeToken = (user as any).active_session_token as string | null | undefined;
+    if (activeToken) {
+      if ((user as any).fingerprint === fingerprint) {
+        s.sessions = s.sessions.filter((x) => x.token !== activeToken);
+        (user as any).active_session_token = null;
+      } else {
+        throw new Error("Username is currently in use.");
+      }
+    }
+
+    const storedFp = (user as any).fingerprint as string | undefined;
+    const lastSignout = Number((user as any).last_signout ?? 0);
+    if (storedFp && storedFp !== fingerprint && now - lastSignout < lockReleaseMs) {
+      throw new Error("Username is locked to another device. Try again later.");
+    }
+
+    (user as any).fingerprint = fingerprint;
+    (user as any).active_session_token = token;
+    (user as any).last_seen = now;
+
+    s.sessions.push({ token, user_id: user.id, created_at: now });
+    const l = s.leaderboard.find((x) => x.user_id === user.id) as any;
+    const inactivePrompt = !!l && l.active === false;
+    return {
+      user: { id: user.id, username: user.username, role_level: user.role_level ?? 0 },
+      inactivePrompt,
+    };
+  });
+}
+
+export async function signOutByToken(token: string) {
+  const sql = getSql();
+  const now = Date.now();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      SELECT user_id FROM sessions WHERE token = ${token}
+    `) as any[];
+    const userId = rows[0]?.user_id as number | undefined;
+    await sql`DELETE FROM sessions WHERE token = ${token}`;
+    if (userId) {
+      await sql`
+        UPDATE users
+        SET active_session_token = NULL,
+            last_signout = ${now}
+        WHERE id = ${userId} AND active_session_token = ${token}
+      `;
+    }
+    return;
+  }
+
+  return withStore((s) => {
+    const sessIdx = s.sessions.findIndex((x) => x.token === token);
+    const userId = sessIdx >= 0 ? s.sessions[sessIdx]!.user_id : null;
+    if (sessIdx >= 0) s.sessions.splice(sessIdx, 1);
+    if (userId != null) {
+      const u = s.users.find((x) => x.id === userId);
+      if (u && (u as any).active_session_token === token) (u as any).active_session_token = null;
+      (u as any).last_signout = now;
+    }
+  });
+}
+
+export async function ensureLeaderboardInactivityCutoff(cutoffMs: number) {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    await sql`
+      UPDATE leaderboard
+      SET active = FALSE
+      WHERE active = TRUE AND updated_at < ${cutoffMs}
+    `;
+    return;
+  }
+
+  return withStore((s) => {
+    for (const l of s.leaderboard) {
+      if (l.updated_at < cutoffMs) (l as any).active = false;
+    }
+  });
+}
+
+export async function getLeaderboardRowForUser(userId: number) {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      SELECT user_id, profit_total, wager_total, bets, updated_at, active
+      FROM leaderboard WHERE user_id = ${userId}
+    `) as any[];
+    return rows[0] ?? null;
+  }
+
+  return withStore((s) => s.leaderboard.find((l) => l.user_id === userId) ?? null);
+}
+
+export async function setLeaderboardActive(userId: number, active: boolean, reset: boolean) {
+  const sql = getSql();
+  const now = Date.now();
+  if (sql) {
+    await ensureSchema();
+    if (reset) {
+      await sql`
+        INSERT INTO leaderboard (user_id, profit_total, wager_total, bets, updated_at, active)
+        VALUES (${userId}, 0, 0, 0, ${now}, TRUE)
+        ON CONFLICT (user_id) DO UPDATE SET
+          profit_total = 0,
+          wager_total = 0,
+          bets = 0,
+          updated_at = ${now},
+          active = TRUE
+      `;
+      return;
+    }
+    await sql`
+      UPDATE leaderboard
+      SET active = ${active}, updated_at = ${now}
+      WHERE user_id = ${userId}
+    `;
+    return;
+  }
+
+  return withStore((s) => {
+    let l = s.leaderboard.find((x) => x.user_id === userId) as any;
+    if (!l) {
+      l = { user_id: userId, profit_total: 0, wager_total: 0, bets: 0, updated_at: now, active: true };
+      s.leaderboard.push(l);
+    }
+    if (reset) {
+      l.profit_total = 0;
+      l.wager_total = 0;
+      l.bets = 0;
+    }
+    l.active = active;
+    l.updated_at = now;
   });
 }
 
@@ -253,19 +506,30 @@ export async function recordLeaderboard(userId: number, profit: number, wager: n
         bets = leaderboard.bets + 1,
         updated_at = EXCLUDED.updated_at
     `;
+    await sql`UPDATE users SET last_seen = ${now} WHERE id = ${userId}`;
     return;
   }
 
   return withStore((s) => {
-    let row = s.leaderboard.find((l) => l.user_id === userId);
+    let row = s.leaderboard.find((l) => l.user_id === userId) as any;
     if (!row) {
-      row = { user_id: userId, profit_total: 0, wager_total: 0, bets: 0, updated_at: now };
-      s.leaderboard.push(row);
+      const created = {
+        user_id: userId,
+        profit_total: 0,
+        wager_total: 0,
+        bets: 0,
+        updated_at: now,
+        active: true,
+      } as any;
+      s.leaderboard.push(created);
+      row = created;
     }
     row.profit_total = Number(row.profit_total) + profit;
     row.wager_total = Number(row.wager_total) + wager;
     row.bets = Number(row.bets) + 1;
     row.updated_at = now;
+    const u: any = s.users.find((x) => x.id === userId);
+    if (u) u.last_seen = now;
   });
 }
 
@@ -273,6 +537,7 @@ export async function getLeaderboardRows(limit = 50) {
   const sql = getSql();
   if (sql) {
     await ensureSchema();
+    await ensureLeaderboardInactivityCutoff(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const rows =
       (await sql`
         SELECT u.username as username,
@@ -282,7 +547,7 @@ export async function getLeaderboardRows(limit = 50) {
                l.updated_at as updated_at
         FROM leaderboard l
         JOIN users u ON u.id = l.user_id
-        WHERE u.role_level = 0
+        WHERE u.role_level = 0 AND l.active = TRUE
         ORDER BY l.profit_total DESC
         LIMIT ${limit}
       `) as any[];
@@ -297,16 +562,17 @@ export async function getLeaderboardRows(limit = 50) {
         return {
           username: u?.username ?? "unknown",
           role_level: u?.role_level ?? 0,
+          active: (l as any).active !== false,
           profit_total: l.profit_total,
           wager_total: l.wager_total,
           bets: l.bets,
           updated_at: l.updated_at,
         };
       })
-      .filter((r) => (r.role_level ?? 0) === 0)
+      .filter((r) => (r.role_level ?? 0) === 0 && r.active)
       .sort((a, b) => b.profit_total - a.profit_total)
       .slice(0, limit)
-      .map(({ role_level: _rl, ...rest }) => rest);
+      .map(({ role_level: _rl, active: _a, ...rest }) => rest);
   });
 }
 
@@ -322,8 +588,8 @@ export async function setUserRoleByUsername(targetUsername: string, roleLevel: n
     const id = rows[0]?.id;
     if (id) {
       await sql`
-        INSERT INTO leaderboard (user_id, profit_total, wager_total, bets, updated_at)
-        VALUES (${id}, 0, 0, 0, ${now})
+        INSERT INTO leaderboard (user_id, profit_total, wager_total, bets, updated_at, active)
+        VALUES (${id}, 0, 0, 0, ${now}, TRUE)
         ON CONFLICT (user_id) DO NOTHING
       `;
     }
