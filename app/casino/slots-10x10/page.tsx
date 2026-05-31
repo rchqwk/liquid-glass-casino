@@ -198,6 +198,7 @@ export default function Slots10x10Page() {
             step={0.01}
             value={wager}
             onChange={(e) => setWager(Number(e.target.value))}
+            disabled={spinning || freeSpinsLeft > 0}
             className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
           />
 
