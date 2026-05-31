@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "../../lib/wallet";
 import { useAuth } from "../../lib/authClient";
 import { useGameConfig } from "../../lib/gameConfigClient";
@@ -68,12 +68,18 @@ export default function SlotsPage() {
   const cfg = useGameConfig();
   const [wager, setWager] = useState(5);
   const [spinning, setSpinning] = useState(false);
+  const [auto, setAuto] = useState(false);
+  const autoRef = useRef(false);
   const [last, setLast] = useState<{
     reels: [SymbolKey, SymbolKey, SymbolKey];
     profit: number;
     outcome: string;
     multiplier: number;
   } | null>(null);
+
+  useEffect(() => {
+    autoRef.current = auto;
+  }, [auto]);
 
   const weightedPick = (r01: number): SymbolKey => {
     const total = SYMBOLS.reduce((a, b) => a + b.w, 0);
@@ -130,6 +136,58 @@ export default function SlotsPage() {
     [],
   );
 
+  const spinOnce = () => {
+    if (spinning) return;
+    if (!Number.isFinite(wager) || wager <= 0) return;
+    if (balance < wager) {
+      setAuto(false);
+      return;
+    }
+
+    setSpinning(true);
+
+    // A little “spin” delay for animation feel
+    setTimeout(() => {
+      let reels: [SymbolKey, SymbolKey, SymbolKey] = ["🍒", "🍒", "🍒"];
+
+      const bet = placeBet({
+        game: "Slots",
+        wager,
+        resolve: (rng) => {
+          // Weighted reels using deterministic floats
+          const a = weightedPick(rng.float(0));
+          const b = weightedPick(rng.float(1));
+          const c = weightedPick(rng.float(2));
+          reels = [a, b, c];
+          const res = evaluate(reels);
+          return res;
+        },
+      });
+
+      setLast({
+        reels,
+        profit: bet.profit,
+        outcome: bet.outcome,
+        multiplier: bet.multiplier,
+      });
+      void reportResult({ game: "Slots", profit: bet.profit, wager });
+      setSpinning(false);
+
+      // Stop autoplay if we can’t keep betting.
+      if (autoRef.current && balance - wager < 0) setAuto(false);
+    }, 850);
+  };
+
+  useEffect(() => {
+    if (!auto) return;
+    if (spinning) return;
+    const id = window.setTimeout(() => {
+      if (autoRef.current) spinOnce();
+    }, 250);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto, spinning, wager, cfg.slotsPayoutScale, balance]);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="glass glass-shine rounded-3xl p-6">
@@ -158,44 +216,24 @@ export default function SlotsPage() {
             className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
           />
 
-          <button
-            className="mt-5 glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 transition hover:bg-white/10"
-            type="button"
-            onClick={() => {
-              if (spinning) return;
-              setSpinning(true);
-
-              // A little “spin” delay for animation feel
-              setTimeout(() => {
-                let reels: [SymbolKey, SymbolKey, SymbolKey] = ["🍒", "🍒", "🍒"];
-
-                const bet = placeBet({
-                  game: "Slots",
-                  wager,
-                  resolve: (rng) => {
-                    // Weighted reels using deterministic floats
-                    const a = weightedPick(rng.float(0));
-                    const b = weightedPick(rng.float(1));
-                    const c = weightedPick(rng.float(2));
-                    reels = [a, b, c];
-                    const res = evaluate(reels);
-                    return res;
-                  },
-                });
-
-                setLast({
-                  reels,
-                  profit: bet.profit,
-                  outcome: bet.outcome,
-                  multiplier: bet.multiplier,
-                });
-                void reportResult({ game: "Slots", profit: bet.profit, wager });
-                setSpinning(false);
-              }, 850);
-            }}
-          >
-            {spinning ? "Spinning…" : "Spin"}
-          </button>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 transition hover:bg-white/10 disabled:opacity-40"
+              type="button"
+              disabled={spinning || auto}
+              onClick={spinOnce}
+            >
+              {spinning ? "Spinning…" : "Spin"}
+            </button>
+            <button
+              className="rounded-2xl px-4 py-2 text-sm font-medium text-white/75 transition hover:text-white disabled:opacity-40"
+              type="button"
+              disabled={spinning && !auto}
+              onClick={() => setAuto((a) => !a)}
+            >
+              {auto ? "Stop autoplay" : "Autoplay"}
+            </button>
+          </div>
         </div>
 
         <div className="glass-soft glass-shine rounded-3xl p-5">

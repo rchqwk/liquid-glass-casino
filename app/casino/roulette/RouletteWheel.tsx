@@ -22,16 +22,19 @@ export function RouletteWheel(props: {
   spinning: boolean;
   wheelRotationDeg: number; // absolute rotation
   landedNumber: number | null;
+  size?: number;
+  showHeader?: boolean;
 }) {
   const { spinning, wheelRotationDeg, landedNumber } = props;
 
   const pockets = useMemo(() => EUROPEAN_ORDER, []);
-  const size = 320;
+  const size = props.size ?? 320;
+  const showHeader = props.showHeader ?? true;
   const cx = size / 2;
   const cy = size / 2;
-  const rOuter = 150;
-  const rInner = 108;
-  const rLabel = 126;
+  const rOuter = Math.round(size * 0.46875); // 150/320
+  const rInner = Math.round(size * 0.3375); // 108/320
+  const rLabel = Math.round(size * 0.39375); // 126/320
 
   const pocketAngle = 360 / pockets.length;
 
@@ -45,14 +48,20 @@ export function RouletteWheel(props: {
 
   return (
     <div className="glass glass-shine rounded-3xl p-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-white">Wheel</p>
-        <p className="text-xs text-white/55">
-          {spinning ? "Spinning…" : landedNumber != null ? `Landed: ${landedNumber}` : "—"}
-        </p>
-      </div>
+      {showHeader ? (
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-white">Wheel</p>
+          <p className="text-xs text-white/55">
+            {spinning
+              ? "Spinning…"
+              : landedNumber != null
+                ? `Landed: ${landedNumber}`
+                : "—"}
+          </p>
+        </div>
+      ) : null}
 
-      <div className="mt-3 flex items-center justify-center">
+      <div className={`${showHeader ? "mt-3" : ""} flex items-center justify-center`}>
         <div className="relative">
           {/* Ball */}
           <div
@@ -61,7 +70,10 @@ export function RouletteWheel(props: {
             } ${spinning ? "animate-[ballOrbit_0.9s_linear_infinite]" : "animate-[ballDrop_.28s_ease-out]"}`}
             style={
               spinning
-                ? {}
+                ? ({
+                    // used by the keyframes (see globals.css)
+                    ["--ball-orbit-r" as any]: `${rLabel + 18}px`,
+                  } as any)
                 : {
                     transform: `translate(-50%, -50%) rotate(${ballAngle}deg) translateY(-${rLabel + 18}px)`,
                   }

@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useAuth } from "../lib/authClient";
 
 const nav = [
   { href: "/casino", label: "Lobby" },
@@ -9,11 +12,13 @@ const nav = [
   { href: "/casino/poker", label: "Poker" },
   { href: "/casino/leaderboard", label: "Leaderboard" },
   { href: "/casino/profile", label: "Profile" },
-  { href: "/casino/admin", label: "Admin" },
   { href: "/casino/settings", label: "Settings" },
 ];
 
 export function Sidebar() {
+  const { user } = useAuth();
+  const canSeeAdmin = (user?.role_level ?? 0) >= 1;
+
   return (
     <aside className="hidden w-[260px] shrink-0 p-4 sm:block">
       <div className="glass glass-shine h-full rounded-3xl p-4">
@@ -32,6 +37,14 @@ export function Sidebar() {
               {item.label}
             </Link>
           ))}
+          {canSeeAdmin ? (
+            <Link
+              href="/casino/admin"
+              className="glass-soft glass-shine rounded-2xl px-3 py-2.5 text-sm text-white/80 transition hover:text-white hover:bg-white/10"
+            >
+              Admin
+            </Link>
+          ) : null}
         </nav>
 
         <div className="mt-6 rounded-2xl border border-white/10 p-3 text-xs text-white/55">

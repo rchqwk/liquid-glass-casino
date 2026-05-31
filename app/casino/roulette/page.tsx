@@ -160,11 +160,13 @@ export default function RoulettePage() {
                   </div>
 
                   {/* Wheel next to the spin button (desktop/tablet) */}
-                  <div className="hidden sm:block sm:shrink-0 sm:origin-top-right sm:scale-[0.72]">
+                  <div className="hidden sm:flex sm:shrink-0 sm:items-center sm:justify-center">
                     <RouletteWheel
                       spinning={spinning}
                       wheelRotationDeg={wheelRotationDeg}
                       landedNumber={landed}
+                      showHeader={false}
+                      size={220}
                     />
                   </div>
                 </div>
@@ -175,6 +177,8 @@ export default function RoulettePage() {
                     spinning={spinning}
                     wheelRotationDeg={wheelRotationDeg}
                     landedNumber={landed}
+                    showHeader={false}
+                    size={260}
                   />
                 </div>
               </div>
