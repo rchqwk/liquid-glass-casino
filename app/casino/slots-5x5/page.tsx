@@ -5,6 +5,7 @@ import { useWallet } from "../../lib/wallet";
 import { useAuth } from "../../lib/authClient";
 import { useGameConfig } from "../../lib/gameConfigClient";
 import { SCATTER, WILD, type SymbolId, spinSlots5x5, type WaysWinInfo } from "./engine";
+import { Slots5x5Sprite } from "./Sprite";
 
 function SymbolIcon({ id }: { id: SymbolId }) {
   const title =
@@ -17,7 +18,8 @@ function SymbolIcon({ id }: { id: SymbolId }) {
       className="drop-shadow-[0_10px_25px_rgba(0,0,0,.35)]"
       aria-label={title}
     >
-      <use href={`/slots5x5/symbols.svg#${id}`} />
+      {/* Inline sprite for Safari; xlinkHref for older Safari */}
+      <use href={`#${id}`} xlinkHref={`#${id}`} />
     </svg>
   );
 }
@@ -287,6 +289,7 @@ export default function Slots5x5Page() {
 
   return (
     <div className="flex flex-col gap-4">
+      <Slots5x5Sprite />
       <div className="glass glass-shine rounded-3xl p-6">
         <h2 className="text-xl font-semibold text-white">Slots (5×5 Deluxe)</h2>
         <p className="mt-2 text-sm leading-6 text-white/70">
