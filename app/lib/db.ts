@@ -37,6 +37,19 @@ type Store = {
     bets: number;
     updated_at: number;
   }>;
+  blackjack_tables?: Array<{
+    id: string;
+    public: boolean;
+    name: string;
+    state: any;
+    updated_at: number;
+    created_at: number;
+  }>;
+  blackjack_inventories?: Array<{
+    user_id: number;
+    inventory: any;
+    updated_at: number;
+  }>;
   config: Record<string, { value: string; updated_at: number }>;
   nextAnnouncementId?: number;
   announcements?: Array<{ id: number; ts: number; message: string }>;
@@ -62,6 +75,8 @@ function defaultStore(): Store {
     sessions: [],
     leaderboard: [],
     game_stats: [],
+    blackjack_tables: [],
+    blackjack_inventories: [],
     config: {},
     nextAnnouncementId: 1,
     announcements: [],
@@ -174,6 +189,25 @@ async function ensureSchema() {
       game_id TEXT PRIMARY KEY,
       wager_total DOUBLE PRECISION NOT NULL DEFAULT 0,
       bets INT NOT NULL DEFAULT 0,
+      updated_at BIGINT NOT NULL
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS blackjack_tables (
+      id TEXT PRIMARY KEY,
+      public BOOLEAN NOT NULL DEFAULT TRUE,
+      name TEXT NOT NULL,
+      state_json TEXT NOT NULL,
+      created_at BIGINT NOT NULL,
+      updated_at BIGINT NOT NULL
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS blackjack_inventories (
+      user_id INT PRIMARY KEY REFERENCES users(id),
+      inventory_json TEXT NOT NULL,
       updated_at BIGINT NOT NULL
     )
   `;
@@ -709,6 +743,158 @@ export async function getGameStats() {
     return rows as Array<{ game_id: string; wager_total: number; bets: number; updated_at: number }>;
   }
   return withStore((s) => (s.game_stats ?? []).slice());
+}
+
+export async function upsertBlackjackInventory(userId: number, inventory: any) {
+  const uid = Number(userId);
+  if (!Number.isFinite(uid) || uid <= 0) return;
+  const now = Date.now();
+  const sql = getSql();
+  const invJson = JSON.stringify(inventory ?? {});
+  if (sql) {
+    await ensureSchema();
+    await sql`
+      INSERT INTO blackjack_inventories (user_id, inventory_json, updated_at)
+      VALUES (${uid}, ${invJson}, ${now})
+      ON CONFLICT (user_id) DO UPDATE SET
+        inventory_json = EXCLUDED.inventory_json,
+        updated_at = EXCLUDED.updated_at
+    `;
+    return;
+  }
+  return withStore((s) => {
+    s.blackjack_inventories = s.blackjack_inventories ?? [];
+    let row = s.blackjack_inventories.find((r) => r.user_id === uid);
+    if (!row) {
+      row = { user_id: uid, inventory: {}, updated_at: now };
+      s.blackjack_inventories.push(row);
+    }
+    row.inventory = inventory ?? {};
+    row.updated_at = now;
+  });
+}
+
+export async function getBlackjackInventory(userId: number) {
+  const uid = Number(userId);
+  if (!Number.isFinite(uid) || uid <= 0) return null;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`SELECT inventory_json FROM blackjack_inventories WHERE user_id = ${uid}`) as any[];
+    const raw = rows[0]?.inventory_json;
+    if (!raw) return null;
+    try {
+      return JSON.parse(String(raw));
+    } catch {
+      return null;
+    }
+  }
+  return withStore((s) => {
+    const row = (s.blackjack_inventories ?? []).find((r) => r.user_id === uid);
+    return row?.inventory ?? null;
+  });
+}
+
+export async function upsertBlackjackTable(input: {
+  id: string;
+  public: boolean;
+  name: string;
+  state: any;
+  created_at: number;
+  updated_at: number;
+}) {
+  const id = String(input.id ?? "").slice(0, 48);
+  if (!id) return;
+  const now = Number(input.updated_at ?? Date.now());
+  const created = Number(input.created_at ?? now);
+  const name = String(input.name ?? "Table").slice(0, 48);
+  const pub = !!input.public;
+  const stateJson = JSON.stringify(input.state ?? {});
+
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    await sql`
+      INSERT INTO blackjack_tables (id, public, name, state_json, created_at, updated_at)
+      VALUES (${id}, ${pub}, ${name}, ${stateJson}, ${created}, ${now})
+      ON CONFLICT (id) DO UPDATE SET
+        public = EXCLUDED.public,
+        name = EXCLUDED.name,
+        state_json = EXCLUDED.state_json,
+        updated_at = EXCLUDED.updated_at
+    `;
+    return;
+  }
+  return withStore((s) => {
+    s.blackjack_tables = s.blackjack_tables ?? [];
+    let row = s.blackjack_tables.find((t) => t.id === id);
+    if (!row) {
+      row = { id, public: pub, name, state: input.state ?? {}, created_at: created, updated_at: now };
+      s.blackjack_tables.push(row);
+    }
+    row.public = pub;
+    row.name = name;
+    row.state = input.state ?? {};
+    row.updated_at = now;
+    row.created_at = row.created_at || created;
+  });
+}
+
+export async function getBlackjackTable(id: string) {
+  const tid = String(id ?? "").slice(0, 48);
+  if (!tid) return null;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows =
+      (await sql`SELECT id, public, name, state_json, created_at, updated_at FROM blackjack_tables WHERE id = ${tid}`) as any[];
+    const r = rows[0];
+    if (!r) return null;
+    let state: any = {};
+    try {
+      state = JSON.parse(String(r.state_json ?? "{}"));
+    } catch {
+      state = {};
+    }
+    return {
+      id: String(r.id),
+      public: !!r.public,
+      name: String(r.name),
+      state,
+      created_at: Number(r.created_at ?? Date.now()),
+      updated_at: Number(r.updated_at ?? Date.now()),
+    };
+  }
+  return withStore((s) => (s.blackjack_tables ?? []).find((t) => t.id === tid) ?? null);
+}
+
+export async function listBlackjackTables() {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows =
+      (await sql`SELECT id, public, name, created_at, updated_at FROM blackjack_tables ORDER BY updated_at DESC LIMIT 50`) as any[];
+    return rows.map((r) => ({
+      id: String(r.id),
+      public: !!r.public,
+      name: String(r.name),
+      created_at: Number(r.created_at ?? 0),
+      updated_at: Number(r.updated_at ?? 0),
+    }));
+  }
+  return withStore((s) =>
+    (s.blackjack_tables ?? [])
+      .slice()
+      .sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0))
+      .slice(0, 50)
+      .map((t) => ({
+        id: t.id,
+        public: !!t.public,
+        name: t.name,
+        created_at: t.created_at,
+        updated_at: t.updated_at,
+      })),
+  );
 }
 
 export async function getLeaderboardRows(limit = 50) {
