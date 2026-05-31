@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Liquid Glass Crypto Casino (Prototype)
+
+Play-money **casino prototype** with an Apple-like “liquid glass” UI, plus a
+simple “provably fair” style RNG (commit → reveal) implementation.
+
+**Included games**
+- Dice
+- Roulette (European 0–36)
+- Slots (simple 3-reel)
+- Blackjack (one-click auto-play)
+- Poker (placeholder)
+
+**Important**
+- This project does **not** handle real money or crypto deposits/payouts.
+- If you want a licensed real-money casino, you’ll need legal/compliance work
+  (jurisdiction, licensing, KYC/AML, responsible gambling, etc.) before any
+  production build.
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies (already installed if you generated this project here):
+
+```bash
+npm install
+```
+
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 with your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How the RNG works (demo)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- The app generates a **server seed**, then shows its SHA-256 hash (“commit”).
+- Outcomes are derived from:
 
-## Learn More
+```
+SHA256(serverSeed:clientSeed:nonce:index)
+```
 
-To learn more about Next.js, take a look at the following resources:
+This is a **prototype**: the server seed is stored locally in the browser, so it
+does not provide real trust guarantees. To make it meaningful in production you
+need a real backend that commits to the seed, uses it privately, and reveals it
+later.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Key routes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `/` landing
+- `/casino` lobby
+- `/casino/settings` client seed + server seed commit/reveal
+- `/casino/dice`, `/casino/roulette`, `/casino/slots`, `/casino/blackjack`
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Built with Next.js + Tailwind CSS.
