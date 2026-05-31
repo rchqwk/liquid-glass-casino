@@ -91,6 +91,15 @@ function saveState(state: WalletState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+function emitClientEvent(name: string, detail: any) {
+  try {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent(name, { detail }));
+  } catch {
+    // ignore
+  }
+}
+
 function freshState(): WalletState {
   const serverSeed = randomHex(32);
   const clientSeed = randomHex(16);
@@ -244,6 +253,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       },
 
       placeBet: ({ game, wager, resolve }) => {
+        emitClientEvent("lgc:betstart", { game, wager: clampMoney(wager), ts: Date.now() });
         if (!Number.isFinite(wager) || wager <= 0) {
           return { multiplier: 0, outcome: "Invalid wager", profit: 0, balanceAfter: state.balance };
         }
@@ -278,6 +288,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const payout = wager * multiplier;
         const nextBalance = clampMoney(current.balance - wager + payout);
         const profit = clampMoney(payout - wager);
+        const returnMult = wager > 0 ? (wager + profit) / wager : 0;
 
         setState((s) =>
           s
@@ -300,10 +311,29 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             : s,
         );
 
+        if (returnMult >= 20) {
+          emitClientEvent("lgc:bigwin", {
+            game,
+            wager: clampMoney(wager),
+            profit,
+            returnMult,
+            ts: Date.now(),
+          });
+        } else {
+          emitClientEvent("lgc:betsettled", {
+            game,
+            wager: clampMoney(wager),
+            profit,
+            returnMult,
+            ts: Date.now(),
+          });
+        }
+
         return { multiplier, outcome: res.outcome, profit, balanceAfter: nextBalance };
       },
 
       beginBet: ({ game, wager }) => {
+        emitClientEvent("lgc:betstart", { game, wager: clampMoney(wager), ts: Date.now() });
         if (!Number.isFinite(wager) || wager <= 0) return { error: "Invalid wager" };
         const current = state;
         if (current.balance < wager) return { error: "Insufficient balance" };
@@ -359,6 +389,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const payout = open.wager * m;
         const profit = clampMoney(payout - open.wager);
         const nextBalance = clampMoney(state.balance + payout);
+        const returnMult = open.wager > 0 ? (open.wager + profit) / open.wager : 0;
 
         setState((s) => {
           if (!s) return s;
@@ -381,6 +412,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             ].slice(0, 20),
           };
         });
+
+        if (returnMult >= 20) {
+          emitClientEvent("lgc:bigwin", {
+            game: open.game,
+            wager: clampMoney(open.wager),
+            profit,
+            returnMult,
+            ts: Date.now(),
+          });
+        } else {
+          emitClientEvent("lgc:betsettled", {
+            game: open.game,
+            wager: clampMoney(open.wager),
+            profit,
+            returnMult,
+            ts: Date.now(),
+          });
+        }
 
         return { profit, multiplier: m, outcome, balanceAfter: nextBalance };
       },

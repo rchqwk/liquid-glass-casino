@@ -161,3 +161,42 @@ body::before {
     opacity: 1;
   }
 }
+
+@keyframes bigWinPulse {
+  0% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(34, 211, 238, 0));
+  }
+  50% {
+    transform: scale(1.02);
+    filter: drop-shadow(0 10px 30px rgba(34, 211, 238, 0.22));
+  }
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(34, 211, 238, 0));
+  }
+}
+
+@keyframes bigWinGlow {
+  0% {
+    box-shadow: 0 0 0 rgba(99, 102, 241, 0.0), 0 0 0 rgba(16, 185, 129, 0.0);
+  }
+  50% {
+    box-shadow: 0 30px 90px rgba(99, 102, 241, 0.22), 0 10px 40px rgba(16, 185, 129, 0.18);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(99, 102, 241, 0.0), 0 0 0 rgba(16, 185, 129, 0.0);
+  }
+}
+
+.bigwin-banner {
+  animation: bigWinPulse 900ms ease-in-out infinite;
+}
+
+.bigwin-center {
+  animation: bigWinGlow 1200ms ease-in-out infinite;
+}
+
+.bigwin-title {
+  text-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
