@@ -36,7 +36,7 @@ function ReelColumn(props: {
   const { reelIndex, strip, stopAtIndex, spinning, stopRequested, turbo, onStopped } = props;
 
   const CELL_PX = 56; // matches h-14
-  const REPEAT = 6; // allow a few full rotations before stopping
+  const REPEAT = 4; // keep DOM light for mobile Safari
   const totalPx = strip.length * CELL_PX;
 
   const innerRef = useRef<HTMLDivElement | null>(null);
@@ -48,6 +48,13 @@ function ReelColumn(props: {
     const out: SymbolId[] = [];
     for (let i = 0; i < REPEAT; i += 1) out.push(...strip);
     return out;
+  }, [strip]);
+
+  // Ensure we render immediately (avoid brief blank frames on some browsers)
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    el.style.transform = `translateY(-${offsetRef.current}px)`;
   }, [strip]);
 
   // Spin loop (continuous motion)
@@ -162,8 +169,10 @@ export default function Slots5x5Page() {
 
   // Reel animation state (true reel-strip motion).
   const [spinId, setSpinId] = useState(0);
+  const STRIP_LEN = 24;
+  const TAIL_LEN = 8;
   const [reelStrip, setReelStrip] = useState<SymbolId[][]>(() =>
-    Array.from({ length: 5 }, () => Array.from({ length: 25 }, () => "cherry")),
+    Array.from({ length: 5 }, () => Array.from({ length: STRIP_LEN }, () => "cherry")),
   );
   const [stopAt, setStopAt] = useState<number[] | null>(null);
   const [stopRequested, setStopRequested] = useState(false);
@@ -225,7 +234,7 @@ export default function Slots5x5Page() {
       baseIndexRef.current = (baseIndexRef.current * 1664525 + 1013904223 + seed) >>> 0;
       return (baseIndexRef.current % 100000) / 100000;
     };
-    const strips = Array.from({ length: 5 }, () => buildRandomStrip(rng, 42));
+    const strips = Array.from({ length: 5 }, () => buildRandomStrip(rng, STRIP_LEN));
     setReelStrip(strips);
 
     const delay = turbo ? 600 : 1050;
@@ -269,12 +278,12 @@ export default function Slots5x5Page() {
         // Append the final 5-symbol window to each reel strip so we can stop on it.
         setReelStrip((prev) =>
           prev.map((s, i) => {
-            const head = s.slice(0, 42);
-            const tail = s.slice(0, 10);
+            const head = s.slice(0, STRIP_LEN);
+            const tail = s.slice(0, TAIL_LEN);
             return [...head, ...resGrid![i]!, ...tail];
           }),
         );
-        setStopAt([42, 42, 42, 42, 42]); // top index of final window within each reel strip
+        setStopAt([STRIP_LEN, STRIP_LEN, STRIP_LEN, STRIP_LEN, STRIP_LEN]); // top index of final window within each reel strip
         setStopRequested(true);
       }
 

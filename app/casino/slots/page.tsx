@@ -26,7 +26,7 @@ function ReelColumnEmoji(props: {
   const { reelIndex, strip, stopAtIndex, spinning, stopRequested, turbo, onStopped } = props;
 
   const CELL_PX = 56; // h-14
-  const REPEAT = 6;
+  const REPEAT = 4; // lighter DOM to avoid Safari blank frames
   const totalPx = strip.length * CELL_PX;
 
   const innerRef = useRef<HTMLDivElement | null>(null);
@@ -38,6 +38,12 @@ function ReelColumnEmoji(props: {
     const out: SymbolKey[] = [];
     for (let i = 0; i < REPEAT; i += 1) out.push(...strip);
     return out;
+  }, [strip]);
+
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    el.style.transform = `translateY(-${offsetRef.current}px)`;
   }, [strip]);
 
   // Continuous scrolling while spinning (until stopRequested)
@@ -151,7 +157,8 @@ export default function SlotsPage() {
   const MAX_HELD_REELS = 2;
 
   // True reel-strip animation state
-  const REEL_BASE_LEN = 42;
+  const REEL_BASE_LEN = 28;
+  const REEL_TAIL_LEN = 8;
   const [spinId, setSpinId] = useState(0);
   const [reelStrip, setReelStrip] = useState<SymbolKey[][]>(() =>
     Array.from({ length: 5 }, () => Array.from({ length: REEL_BASE_LEN }, () => "🍒")),
@@ -339,7 +346,7 @@ export default function SlotsPage() {
         setReelStrip((prev) =>
           prev.map((s, i) => {
             const head = s.slice(0, REEL_BASE_LEN);
-            const tail = s.slice(0, 10);
+            const tail = s.slice(0, REEL_TAIL_LEN);
             return [...head, ...grid![i]!, ...tail];
           }),
         );
