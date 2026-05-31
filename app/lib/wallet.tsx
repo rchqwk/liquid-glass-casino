@@ -20,6 +20,7 @@ type WalletState = {
   nonce: number;
   history: HistoryItem[];
   lastRefill5000At?: number;
+  lastRefill100At?: number;
   openBets?: Record<
     number,
     { game: string; wager: number; ts: number; serverSeed: string; clientSeed: string }
@@ -46,6 +47,7 @@ type WalletContextValue = {
   history: HistoryItem[];
   getRngForNonce: (nonce: number) => BetRng | null;
   refill5000AvailableAt: number; // epoch ms
+  refill100AvailableAt: number; // epoch ms
   deposit: (
     amount: number,
     opts?: { bypassCooldown?: boolean },
@@ -67,6 +69,7 @@ type WalletContextValue = {
 
 const STORAGE_KEY = "lgc.wallet.v1";
 const REFILL_5000_COOLDOWN_MS = 15 * 60 * 1000;
+const REFILL_100_COOLDOWN_MS = 60 * 1000;
 
 function clampMoney(n: number) {
   return Math.round(n * 100) / 100;
@@ -97,6 +100,7 @@ function freshState(): WalletState {
     nonce: 0,
     history: [],
     lastRefill5000At: 0,
+    lastRefill100At: 0,
     openBets: {},
   };
 }
@@ -126,6 +130,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         history: [],
         getRngForNonce: () => null,
         refill5000AvailableAt: 0,
+        refill100AvailableAt: 0,
         deposit: () => ({ ok: false, error: "Wallet not ready" }),
         setClientSeed: () => {},
         rotateServerSeed: () => ({ revealedServerSeed: "" }),
@@ -144,6 +149,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       history: state.history,
       refill5000AvailableAt:
         (state.lastRefill5000At ?? 0) + REFILL_5000_COOLDOWN_MS,
+      refill100AvailableAt:
+        (state.lastRefill100At ?? 0) + REFILL_100_COOLDOWN_MS,
       getRngForNonce: (betNonce) => {
         const open = state.openBets?.[betNonce];
         if (!open) return null;
@@ -173,10 +180,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
 
         const bypass = !!opts?.bypassCooldown;
+        const now = Date.now();
 
         if (amount === 5000 && !bypass) {
-          const now = Date.now();
           const nextAt = (state.lastRefill5000At ?? 0) + REFILL_5000_COOLDOWN_MS;
+          if (now < nextAt) {
+            return {
+              ok: false,
+              error: "Refill is on cooldown.",
+              nextAvailableAt: nextAt,
+            };
+          }
+        }
+
+        if (amount === 100 && !bypass) {
+          const nextAt = (state.lastRefill100At ?? 0) + REFILL_100_COOLDOWN_MS;
           if (now < nextAt) {
             return {
               ok: false,
@@ -188,12 +206,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         setState((s) => {
           if (!s) return s;
-          const now = Date.now();
           return {
             ...s,
             balance: clampMoney(s.balance + amount),
             lastRefill5000At:
               amount === 5000 && !bypass ? now : s.lastRefill5000At,
+            lastRefill100At:
+              amount === 100 && !bypass ? now : s.lastRefill100At,
           };
         });
         return { ok: true };

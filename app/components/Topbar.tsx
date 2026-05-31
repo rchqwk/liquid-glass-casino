@@ -6,7 +6,7 @@ import { useWallet } from "../lib/wallet";
 import { useAuth } from "../lib/authClient";
 
 export function Topbar() {
-  const { balance, deposit, reset, refill5000AvailableAt } = useWallet();
+  const { balance, deposit, reset, refill5000AvailableAt, refill100AvailableAt } = useWallet();
   const { user, loading } = useAuth();
   const role = user?.role_level ?? 0;
   const [msg, setMsg] = useState<string | null>(null);
@@ -19,6 +19,7 @@ export function Topbar() {
 
   const now = Date.now();
   const refillCooldownMs = Math.max(0, refill5000AvailableAt - now);
+  const refill100CooldownMs = Math.max(0, refill100AvailableAt - now);
   const refillLabel = useMemo(() => {
     if (role >= 1) return "+5000";
     if (refillCooldownMs <= 0) return "+5000";
@@ -27,6 +28,15 @@ export function Topbar() {
     const ss = String(s % 60).padStart(2, "0");
     return `+5000 (${mm}:${ss})`;
   }, [refillCooldownMs, role]);
+
+  const refill100Label = useMemo(() => {
+    if (role >= 1) return "+100";
+    if (refill100CooldownMs <= 0) return "+100";
+    const s = Math.ceil(refill100CooldownMs / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    return `+100 (${mm}:${ss})`;
+  }, [refill100CooldownMs, role]);
 
   return (
     <header className="sticky top-0 z-20 px-4 pt-4 sm:px-6">
@@ -63,11 +73,19 @@ export function Topbar() {
             className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
             onClick={() => {
               setMsg(null);
-              deposit(100);
+              const res = deposit(100, { bypassCooldown: role >= 1 });
+              if (!res.ok) {
+                setMsg(
+                  res.nextAvailableAt
+                    ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 1000)}s.`
+                    : res.error,
+                );
+              }
             }}
+            disabled={role < 1 && refill100CooldownMs > 0}
             type="button"
           >
-            +100
+            {refill100Label}
           </button>
           <button
             className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
