@@ -31,6 +31,8 @@ export default function Slots10x10Page() {
   const [steps, setSteps] = useState<CascadeStep[] | null>(null);
   const [stepIdx, setStepIdx] = useState(0);
   const [last, setLast] = useState<{ profit: number; returnMult: number; outcome: string } | null>(null);
+  const [lastScatterCount, setLastScatterCount] = useState(0);
+  const [animProfile, setAnimProfile] = useState<"normal" | "near" | "big">("normal");
 
   const defaultGrid: SymbolId[][] = useMemo(
     () =>
@@ -46,7 +48,9 @@ export default function Slots10x10Page() {
   useEffect(() => {
     if (!steps || steps.length === 0) return;
     setStepIdx(0);
-    const ms = turbo ? 220 : 320;
+    const msBase = turbo ? 220 : 320;
+    const ms =
+      animProfile === "big" ? msBase + (turbo ? 140 : 280) : animProfile === "near" ? msBase + (turbo ? 90 : 180) : msBase;
     const id = window.setInterval(() => {
       setStepIdx((i) => {
         const n = i + 1;
@@ -58,7 +62,7 @@ export default function Slots10x10Page() {
       });
     }, ms);
     return () => window.clearInterval(id);
-  }, [steps, turbo]);
+  }, [steps, turbo, animProfile]);
 
   useEffect(() => {
     if (!steps || steps.length === 0) return;
@@ -77,6 +81,10 @@ export default function Slots10x10Page() {
     const mode = freeSpinsLeft > 0 ? ("freespin" as const) : ("base" as const);
     const isFree = mode === "freespin";
 
+    let capturedScatter = 0;
+    let capturedWinMult = 0;
+    let capturedSteps: CascadeStep[] = [];
+
     const bet = placeBet({
       game: isFree ? "Slots 10x10 (Free Spin)" : "Slots 10x10",
       wager,
@@ -88,6 +96,9 @@ export default function Slots10x10Page() {
           minCluster: 6,
           featureTier,
         });
+        capturedScatter = res.scatterCount;
+        capturedWinMult = res.winMultiplier;
+        capturedSteps = res.steps;
 
         // Feature trigger based on scatters count (3–4 normal, 5+ super)
         if (!isFree) {
@@ -115,16 +126,39 @@ export default function Slots10x10Page() {
 
     const returnMult = wager > 0 ? (wager + bet.profit) / wager : 0;
     setLast({ profit: bet.profit, returnMult, outcome: bet.outcome });
+    setLastScatterCount(capturedScatter);
+
+    // Slow down cascades when it's exciting: big win or near miss.
+    const isBig = returnMult >= 10 || capturedWinMult >= 10 || (capturedSteps?.length ?? 0) >= 8;
+    const isNear =
+      !isFree && !isBig && (capturedScatter === 4 || capturedScatter === 2);
+    setAnimProfile(isBig ? "big" : isNear ? "near" : "normal");
+
     void reportResult({ game: "Slots 10x10", profit: bet.profit, wager, balance: bet.balanceAfter });
 
     window.setTimeout(() => setSpinning(false), turbo ? 520 : 900);
   };
 
+  const activeStep = useMemo(() => {
+    if (!steps || steps.length === 0) return null;
+    return steps[Math.min(stepIdx, steps.length - 1)]!;
+  }, [steps, stepIdx]);
+
+  const brokenSet = useMemo(() => {
+    const set = new Set<string>();
+    if (!activeStep) return set;
+    for (const c of activeStep.clusters ?? []) {
+      for (const cell of c.cells) set.add(`${cell.x},${cell.y}`);
+    }
+    return set;
+  }, [activeStep]);
+
+  const brokenCount = useMemo(() => brokenSet.size, [brokenSet]);
+
   const displayGrid: (SymbolId | null)[][] = useMemo(() => {
-    if (!steps || steps.length === 0) return viewGrid as any;
-    const step = steps[Math.min(stepIdx, steps.length - 1)]!;
-    return step.grid;
-  }, [steps, stepIdx, viewGrid]);
+    if (!activeStep) return viewGrid as any;
+    return activeStep.grid;
+  }, [activeStep, viewGrid]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -201,19 +235,50 @@ export default function Slots10x10Page() {
 
         <div className="glass-soft glass-shine rounded-3xl p-5">
           <p className="text-sm font-medium text-white">Board</p>
+          {steps && steps.length > 0 ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/65">
+              <span>
+                Cascade: <span className="font-mono text-white/80">{stepIdx + 1}</span>/
+                <span className="font-mono text-white/80">{steps.length}</span>
+              </span>
+              <span className="text-white/40">•</span>
+              <span>
+                Broken: <span className="font-mono text-white/80">{brokenCount}</span>
+              </span>
+              {animProfile !== "normal" ? (
+                <>
+                  <span className="text-white/40">•</span>
+                  <span className={animProfile === "big" ? "text-amber-200" : "text-white/70"}>
+                    {animProfile === "big" ? "BIG MOMENT" : "NEAR MISS"}
+                  </span>
+                </>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-2 text-xs text-white/55">
+              Last scatters: <span className="font-mono">{lastScatterCount}</span>
+            </div>
+          )}
           <div className="mt-3 grid grid-cols-10 gap-1">
             {Array.from({ length: 10 }, (_, y) =>
               Array.from({ length: 10 }, (_, x) => {
                 const v = displayGrid[x]![y] ?? null;
+                const broken = brokenSet.has(`${x},${y}`);
                 return (
                   <div
                     key={`${x}-${y}`}
-                    className={`glass-soft flex h-8 w-8 items-center justify-center rounded-xl ${
+                    className={`glass-soft relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl ${
                       v == null ? "opacity-30" : "opacity-100"
-                    } ${spinning ? "animate-[slotBlur_0.22s_linear_infinite]" : ""}`}
+                    } ${spinning ? "animate-[slotBlur_0.22s_linear_infinite]" : ""} ${
+                      broken ? "animate-[clusterShake_0.22s_linear_infinite]" : ""
+                    }`}
                     title={v ?? "empty"}
                   >
                     {v ? <SymbolIcon id={v} /> : null}
+                    {/* Break pop effect on broken cells */}
+                    {broken ? (
+                      <div className="pointer-events-none absolute inset-0 animate-[clusterPop_520ms_ease-out_1] rounded-xl bg-emerald-300/35" />
+                    ) : null}
                   </div>
                 );
               }),
@@ -227,4 +292,3 @@ export default function Slots10x10Page() {
     </div>
   );
 }
-
