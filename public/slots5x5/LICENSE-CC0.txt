@@ -1,0 +1,10 @@
+CC0 1.0 Universal
+
+The SVG icons in this folder (symbols.svg) were created specifically for this project
+and are dedicated to the public domain under the Creative Commons Zero (CC0) license.
+
+You can copy, modify, distribute and perform the work, even for commercial purposes,
+all without asking permission.
+
+Full legal text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+

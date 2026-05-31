@@ -8,6 +8,7 @@ const nav = [
   { href: "/casino/dice", label: "Dice" },
   { href: "/casino/roulette", label: "Roulette" },
   { href: "/casino/slots", label: "Slots" },
+  { href: "/casino/slots-5x5", label: "Slots 5×5" },
   { href: "/casino/blackjack", label: "Blackjack" },
   { href: "/casino/poker", label: "Poker" },
   { href: "/casino/leaderboard", label: "Leaderboard" },
