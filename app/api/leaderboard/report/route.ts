@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../lib/authServer";
-import { addAnnouncement, recordLeaderboard, updateBalanceAndCheckDoubled } from "../../../lib/db";
+import { addAnnouncement, recordGameStat, recordLeaderboard, updateBalanceAndCheckDoubled } from "../../../lib/db";
+
+function normalizeGameId(raw: string) {
+  const g = String(raw ?? "").toLowerCase();
+  if (g.includes("10x10")) return "slots-10x10";
+  if (g.includes("5x5")) return "slots-5x5";
+  if (g.includes("slots")) return "slots";
+  if (g.includes("blackjack")) return "blackjack";
+  if (g.includes("roulette")) return "roulette";
+  if (g.includes("dice")) return "dice";
+  if (g.includes("poker")) return "poker";
+  return g.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 48) || "unknown";
+}
 
 export async function POST(req: Request) {
   const user = await getAuthedUserAsync();
@@ -20,6 +32,7 @@ export async function POST(req: Request) {
   }
 
   await recordLeaderboard(user.id, profit, wager);
+  await recordGameStat(normalizeGameId(game), wager);
 
   // Broadcast big wins (return multiplier, including stake)
   if (wager > 0) {

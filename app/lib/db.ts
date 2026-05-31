@@ -31,6 +31,12 @@ type Store = {
     updated_at: number;
     active?: boolean;
   }>;
+  game_stats?: Array<{
+    game_id: string;
+    wager_total: number;
+    bets: number;
+    updated_at: number;
+  }>;
   config: Record<string, { value: string; updated_at: number }>;
   nextAnnouncementId?: number;
   announcements?: Array<{ id: number; ts: number; message: string }>;
@@ -55,6 +61,7 @@ function defaultStore(): Store {
     users: [],
     sessions: [],
     leaderboard: [],
+    game_stats: [],
     config: {},
     nextAnnouncementId: 1,
     announcements: [],
@@ -159,6 +166,15 @@ async function ensureSchema() {
       id SERIAL PRIMARY KEY,
       ts BIGINT NOT NULL,
       message TEXT NOT NULL
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS game_stats (
+      game_id TEXT PRIMARY KEY,
+      wager_total DOUBLE PRECISION NOT NULL DEFAULT 0,
+      bets INT NOT NULL DEFAULT 0,
+      updated_at BIGINT NOT NULL
     )
   `;
 
@@ -647,6 +663,52 @@ export async function getTotalWagered() {
     return Number(rows[0]?.total ?? 0);
   }
   return withStore((s) => s.leaderboard.reduce((a, b) => a + Number(b.wager_total ?? 0), 0));
+}
+
+export async function recordGameStat(gameId: string, wager: number) {
+  const gid = String(gameId ?? "").slice(0, 48);
+  const w = Number(wager ?? 0);
+  if (!gid || !Number.isFinite(w) || w < 0) return;
+  const sql = getSql();
+  const now = Date.now();
+  if (sql) {
+    await ensureSchema();
+    await sql`
+      INSERT INTO game_stats (game_id, wager_total, bets, updated_at)
+      VALUES (${gid}, ${w}, 1, ${now})
+      ON CONFLICT (game_id) DO UPDATE SET
+        wager_total = game_stats.wager_total + EXCLUDED.wager_total,
+        bets = game_stats.bets + 1,
+        updated_at = EXCLUDED.updated_at
+    `;
+    return;
+  }
+
+  return withStore((s) => {
+    s.game_stats = s.game_stats ?? [];
+    let row = s.game_stats.find((g) => g.game_id === gid);
+    if (!row) {
+      row = { game_id: gid, wager_total: 0, bets: 0, updated_at: now };
+      s.game_stats.push(row);
+    }
+    row.wager_total = Number(row.wager_total) + w;
+    row.bets = Number(row.bets) + 1;
+    row.updated_at = now;
+  });
+}
+
+export async function getGameStats() {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows =
+      (await sql`
+        SELECT game_id, wager_total, bets, updated_at
+        FROM game_stats
+      `) as any[];
+    return rows as Array<{ game_id: string; wager_total: number; bets: number; updated_at: number }>;
+  }
+  return withStore((s) => (s.game_stats ?? []).slice());
 }
 
 export async function getLeaderboardRows(limit = 50) {
