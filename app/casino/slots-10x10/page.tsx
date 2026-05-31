@@ -23,6 +23,7 @@ export default function Slots10x10Page() {
   const [wager, setWager] = useState(5);
   const [spinning, setSpinning] = useState(false);
   const [turbo, setTurbo] = useState(false);
+  const [luckySpin, setLuckySpin] = useState(false);
 
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0);
   const [featureTier, setFeatureTier] = useState<0 | 1 | 2>(0); // 0 base, 1 normal, 2 super
@@ -74,20 +75,20 @@ export default function Slots10x10Page() {
   const spinOnce = () => {
     if (spinning) return;
     if (!Number.isFinite(wager) || wager <= 0) return;
-    if (balance < wager) return;
-
-    setSpinning(true);
-
     const mode = freeSpinsLeft > 0 ? ("freespin" as const) : ("base" as const);
     const isFree = mode === "freespin";
+    const cost = wager * (luckySpin && !isFree ? 1.5 : 1);
+    if (balance < cost) return;
+
+    setSpinning(true);
 
     let capturedScatter = 0;
     let capturedWinMult = 0;
     let capturedSteps: CascadeStep[] = [];
 
     const bet = placeBet({
-      game: isFree ? "Slots 10x10 (Free Spin)" : "Slots 10x10",
-      wager,
+      game: isFree ? "Slots 10x10 (Free Spin)" : luckySpin ? "Slots 10x10 (Lucky)" : "Slots 10x10",
+      wager: cost,
       resolve: (rng) => {
         const res = spinCluster10x10({
           rngFloat: rng.float,
@@ -95,6 +96,10 @@ export default function Slots10x10Page() {
           payoutScale: cfg.slotsPayoutScale ?? 1,
           minCluster: 6,
           featureTier,
+          lucky:
+            luckySpin && !isFree
+              ? { scatterWeightMultiplier: 1.25, ensureMinScatters: 2, extraWildChance: 0.25 }
+              : undefined,
         });
         capturedScatter = res.scatterCount;
         capturedWinMult = res.winMultiplier;
@@ -124,7 +129,7 @@ export default function Slots10x10Page() {
       },
     });
 
-    const returnMult = wager > 0 ? (wager + bet.profit) / wager : 0;
+    const returnMult = cost > 0 ? (cost + bet.profit) / cost : 0;
     setLast({ profit: bet.profit, returnMult, outcome: bet.outcome });
     setLastScatterCount(capturedScatter);
 
@@ -134,7 +139,12 @@ export default function Slots10x10Page() {
       !isFree && !isBig && (capturedScatter === 4 || capturedScatter === 2);
     setAnimProfile(isBig ? "big" : isNear ? "near" : "normal");
 
-    void reportResult({ game: "Slots 10x10", profit: bet.profit, wager, balance: bet.balanceAfter });
+    void reportResult({
+      game: isFree ? "Slots 10x10" : luckySpin ? "Slots 10x10 (Lucky)" : "Slots 10x10",
+      profit: bet.profit,
+      wager: cost,
+      balance: bet.balanceAfter,
+    });
 
     window.setTimeout(() => setSpinning(false), turbo ? 520 : 900);
   };
@@ -196,6 +206,17 @@ export default function Slots10x10Page() {
               <input type="checkbox" checked={turbo} onChange={(e) => setTurbo(e.target.checked)} />
               Turbo
             </label>
+            <button
+              type="button"
+              className={`rounded-2xl px-3 py-2 text-xs font-medium transition ${
+                luckySpin ? "bg-amber-500/20 text-amber-100" : "bg-white/5 text-white/70 hover:bg-white/10"
+              }`}
+              onClick={() => setLuckySpin((v) => !v)}
+              disabled={spinning || freeSpinsLeft > 0}
+              title="Lucky Spin costs +50% bet and boosts scatters + adds a wild chance"
+            >
+              {luckySpin ? "Lucky Spin ON (+50%)" : "Lucky Spin"}
+            </button>
             {freeSpinsLeft > 0 ? (
               <span className="text-emerald-200">
                 Free spins: <span className="font-mono">{freeSpinsLeft}</span>{" "}
@@ -213,6 +234,33 @@ export default function Slots10x10Page() {
             className="mt-5 glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 transition hover:bg-white/10 disabled:opacity-40"
           >
             {spinning ? "Spinning…" : freeSpinsLeft > 0 ? "Spin (Free)" : "Spin"}
+          </button>
+
+          <button
+            type="button"
+            className="mt-2 glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
+            disabled={spinning || freeSpinsLeft > 0 || balance < wager * 100}
+            onClick={() => {
+              if (spinning) return;
+              if (balance < wager * 100) return;
+              const buy = placeBet({
+                game: "Slots 10x10 Buy Feature",
+                wager: wager * 100,
+                resolve: () => ({ multiplier: 0, outcome: "Bought Free Spins" }),
+              });
+              setLast({ profit: buy.profit, returnMult: 0, outcome: "Bought Free Spins (100× bet)" });
+              setFeatureTier(1);
+              setFreeSpinsLeft(8);
+              void reportResult({
+                game: "Slots 10x10 Buy Feature",
+                profit: buy.profit,
+                wager: wager * 100,
+                balance: buy.balanceAfter,
+              });
+            }}
+            title="Pay 100× bet to start Normal Free Spins"
+          >
+            Buy Free Spins (100×)
           </button>
 
           {last ? (

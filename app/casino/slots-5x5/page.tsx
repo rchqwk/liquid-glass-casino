@@ -160,6 +160,7 @@ export default function Slots5x5Page() {
   const [spinning, setSpinning] = useState(false);
   const [turbo, setTurbo] = useState(false);
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0);
+  const [luckySpin, setLuckySpin] = useState(false);
 
   const [grid, setGrid] = useState<SymbolId[][] | null>(null);
   const [waysWin, setWaysWin] = useState<WaysWinInfo | null>(null);
@@ -200,7 +201,7 @@ export default function Slots5x5Page() {
       ["star", 8],
       ["seven", 5],
       ["diamond", 1.6],
-      ["coin", 1.2],
+      ["coin", 1.6],
     ]);
     const total = ids.reduce((a, s) => a + (weights.get(s) ?? 1), 0);
     const pick = () => {
@@ -217,7 +218,8 @@ export default function Slots5x5Page() {
   const spin = () => {
     if (spinning) return;
     if (!Number.isFinite(wager) || wager <= 0) return;
-    if (balance < wager) return;
+    const cost = wager * (luckySpin && freeSpinsLeft <= 0 ? 1.5 : 1);
+    if (balance < cost) return;
 
     setSpinning(true);
     setWaysWin(null);
@@ -248,13 +250,17 @@ export default function Slots5x5Page() {
 
       const bet = placeBet({
         game: isFree ? "Slots 5x5 (Free Spin)" : "Slots 5x5",
-        wager,
+        wager: cost,
         resolve: (rng2) => {
           const res = spinSlots5x5({
             rngFloat: rng2.float,
             mode,
             payoutScale: cfg.slotsPayoutScale ?? 1,
             extraChanceProbability: 0.13,
+            lucky:
+              luckySpin && !isFree
+                ? { scatterWeightMultiplier: 1.25, ensureMinScatters: 2, extraWildChance: 0.25 }
+                : undefined,
           });
           resGrid = res.grid;
           resWays = res.waysBest;
@@ -289,7 +295,12 @@ export default function Slots5x5Page() {
 
       const returnMult = wager > 0 ? (wager + bet.profit) / wager : 0;
       setLast({ profit: bet.profit, outcome: bet.outcome, returnMult });
-      void reportResult({ game: "Slots 5x5", profit: bet.profit, wager, balance: bet.balanceAfter });
+      void reportResult({
+        game: luckySpin && !isFree ? "Slots 5x5 (Lucky)" : "Slots 5x5",
+        profit: bet.profit,
+        wager: cost,
+        balance: bet.balanceAfter,
+      });
     }, delay);
   };
 
@@ -324,6 +335,45 @@ export default function Slots5x5Page() {
             onChange={(e) => setWager(Number(e.target.value))}
             className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
           />
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={`rounded-2xl px-3 py-2 text-xs font-medium transition ${
+                luckySpin ? "bg-amber-500/20 text-amber-100" : "bg-white/5 text-white/70 hover:bg-white/10"
+              }`}
+              onClick={() => setLuckySpin((v) => !v)}
+              disabled={spinning || freeSpinsLeft > 0}
+              title="Lucky Spin costs +50% bet and boosts feature odds"
+            >
+              {luckySpin ? "Lucky Spin ON (+50%)" : "Lucky Spin"}
+            </button>
+            <button
+              type="button"
+              className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
+              disabled={spinning || freeSpinsLeft > 0 || balance < wager * 100}
+              onClick={() => {
+                if (spinning) return;
+                if (balance < wager * 100) return;
+                const buy = placeBet({
+                  game: "Slots 5x5 Buy Feature",
+                  wager: wager * 100,
+                  resolve: () => ({ multiplier: 0, outcome: "Bought Free Spins" }),
+                });
+                setLast({ profit: buy.profit, outcome: "Bought Free Spins (100× bet)", returnMult: 0 });
+                setFreeSpinsLeft(5);
+                void reportResult({
+                  game: "Slots 5x5 Buy Feature",
+                  profit: buy.profit,
+                  wager: wager * 100,
+                  balance: buy.balanceAfter,
+                });
+              }}
+              title="Pay 100× bet to start Free Spins"
+            >
+              Buy Free Spins (100×)
+            </button>
+          </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-white/70">
             <label className="flex cursor-pointer items-center gap-2">

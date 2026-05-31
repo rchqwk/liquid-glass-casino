@@ -41,7 +41,7 @@ const SYMBOLS: { s: SymbolId; w: number }[] = [
   { s: "star", w: 8 },
   { s: "seven", w: 5 },
   { s: "diamond", w: 1.6 }, // wild
-  { s: "coin", w: 1.2 }, // scatter
+  { s: "coin", w: 1.6 }, // scatter (keep same)
 ];
 
 // base multiplier per way for 3/4/5 in a row (left-to-right)
@@ -123,12 +123,45 @@ export function spinSlots5x5(input: {
   mode: SpinMode;
   payoutScale: number;
   extraChanceProbability: number;
+  lucky?: {
+    scatterWeightMultiplier: number; // e.g. 1.25
+    ensureMinScatters: number; // e.g. 2
+    extraWildChance: number; // e.g. 0.25
+  };
 }): SpinResult {
   const reels = 5;
   const rows = 5;
   const grid: SymbolId[][] = Array.from({ length: reels }, (_, x) =>
-    Array.from({ length: rows }, (_, y) => weightedPick(input.rngFloat(x * 16 + y))),
+    Array.from({ length: rows }, (_, y) => {
+      const picked = weightedPick(input.rngFloat(x * 16 + y));
+      const lucky = input.lucky;
+      if (lucky && input.mode === "base" && picked !== SCATTER) {
+        const boost = Math.max(0, lucky.scatterWeightMultiplier - 1);
+        if (boost > 0 && input.rngFloat(8000 + x * 16 + y) < boost * 0.06) return SCATTER;
+      }
+      return picked;
+    }),
   );
+
+  if (input.lucky && input.mode === "base") {
+    // ensure minimum scatters (near-miss juice)
+    let scatters = countScatters(grid);
+    let idx = 9000;
+    while (scatters < input.lucky.ensureMinScatters) {
+      const x = Math.floor(input.rngFloat(idx++) * reels);
+      const y = Math.floor(input.rngFloat(idx++) * rows);
+      if (grid[x]![y] !== SCATTER) {
+        grid[x]![y] = SCATTER;
+        scatters += 1;
+      }
+    }
+    // extra wild chance
+    if (input.rngFloat(9999) < input.lucky.extraWildChance) {
+      const x = Math.floor(input.rngFloat(10000) * reels);
+      const y = Math.floor(input.rngFloat(10001) * rows);
+      if (grid[x]![y] !== SCATTER) grid[x]![y] = WILD;
+    }
+  }
 
   const scatterCount = countScatters(grid);
   let triggeredFreeSpins = scatterCount >= 3;

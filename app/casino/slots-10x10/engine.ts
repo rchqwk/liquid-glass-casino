@@ -167,12 +167,45 @@ export function spinCluster10x10(input: {
   payoutScale: number;
   minCluster: number; // 6
   featureTier: 0 | 1 | 2; // affects multipliers
+  lucky?: {
+    scatterWeightMultiplier: number; // e.g. 1.25
+    ensureMinScatters: number; // e.g. 2
+    extraWildChance: number; // e.g. 0.25
+  };
 }): SpinResult {
   const w = 10;
   const h = 10;
   const start: SymbolId[][] = Array.from({ length: w }, (_, x) =>
-    Array.from({ length: h }, (_, y) => weightedPick(input.rngFloat(x * 32 + y))),
+    Array.from({ length: h }, (_, y) => {
+      const picked = weightedPick(input.rngFloat(x * 32 + y));
+      const lucky = input.lucky;
+      if (lucky && input.mode === "base" && picked !== SCATTER) {
+        const boost = Math.max(0, lucky.scatterWeightMultiplier - 1);
+        if (boost > 0 && input.rngFloat(8000 + x * 32 + y) < boost * 0.03) return SCATTER;
+      }
+      return picked;
+    }),
   );
+
+  if (input.lucky && input.mode === "base") {
+    // Ensure minimum scatters
+    let scat = countScatters(start);
+    let idx2 = 9000;
+    while (scat < input.lucky.ensureMinScatters) {
+      const x = Math.floor(input.rngFloat(idx2++) * w);
+      const y = Math.floor(input.rngFloat(idx2++) * h);
+      if (start[x]![y] !== SCATTER) {
+        start[x]![y] = SCATTER;
+        scat += 1;
+      }
+    }
+    // Extra wild chance
+    if (input.rngFloat(9999) < input.lucky.extraWildChance) {
+      const x = Math.floor(input.rngFloat(10000) * w);
+      const y = Math.floor(input.rngFloat(10001) * h);
+      if (start[x]![y] !== SCATTER) start[x]![y] = WILD;
+    }
+  }
 
   const scatterCount = countScatters(start);
 
