@@ -161,6 +161,7 @@ export default function Slots5x5Page() {
   const [turbo, setTurbo] = useState(false);
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0);
   const [luckySpin, setLuckySpin] = useState(false);
+  const [fsTier, setFsTier] = useState<"normal" | "super">("normal");
 
   const [grid, setGrid] = useState<SymbolId[][] | null>(null);
   const [waysWin, setWaysWin] = useState<WaysWinInfo | null>(null);
@@ -243,6 +244,7 @@ export default function Slots5x5Page() {
     window.setTimeout(() => {
       const mode = freeSpinsLeft > 0 ? ("freespin" as const) : ("base" as const);
       const isFree = mode === "freespin";
+      const tierScale = isFree && fsTier === "super" ? 1.8 : 1;
 
       let resGrid: SymbolId[][] | null = null;
       let resWays: WaysWinInfo | null = null;
@@ -255,8 +257,8 @@ export default function Slots5x5Page() {
           const res = spinSlots5x5({
             rngFloat: rng2.float,
             mode,
-            payoutScale: cfg.slotsPayoutScale ?? 1,
-            extraChanceProbability: 0.13,
+            payoutScale: (cfg.slotsPayoutScale ?? 1) * tierScale,
+            extraChanceProbability: isFree && fsTier === "super" ? 0.18 : 0.13,
             lucky:
               luckySpin && !isFree
                 ? { scatterWeightMultiplier: 1.25, ensureMinScatters: 2, extraWildChance: 0.25 }
@@ -278,7 +280,10 @@ export default function Slots5x5Page() {
       if (resGrid) {
         setGrid(resGrid);
         setWaysWin(resWays);
-        if (resTriggeredFS && freeSpinsLeft <= 0) setFreeSpinsLeft(5);
+        if (resTriggeredFS && freeSpinsLeft <= 0) {
+          setFsTier("normal");
+          setFreeSpinsLeft(5);
+        }
         else if (freeSpinsLeft > 0) setFreeSpinsLeft((n) => Math.max(0, n - 1));
 
         // Append the final 5-symbol window to each reel strip so we can stop on it.
@@ -293,7 +298,7 @@ export default function Slots5x5Page() {
         setStopRequested(true);
       }
 
-      const returnMult = wager > 0 ? (wager + bet.profit) / wager : 0;
+      const returnMult = cost > 0 ? (cost + bet.profit) / cost : 0;
       setLast({ profit: bet.profit, outcome: bet.outcome, returnMult });
       void reportResult({
         game: luckySpin && !isFree ? "Slots 5x5 (Lucky)" : "Slots 5x5",
@@ -362,6 +367,7 @@ export default function Slots5x5Page() {
                   resolve: () => ({ multiplier: 0, outcome: "Bought Free Spins" }),
                 });
                 setLast({ profit: buy.profit, outcome: "Bought Free Spins (100× bet)", returnMult: 0 });
+                setFsTier("normal");
                 setFreeSpinsLeft(5);
                 void reportResult({
                   game: "Slots 5x5 Buy Feature",
@@ -373,6 +379,35 @@ export default function Slots5x5Page() {
               title="Pay 100× bet to start Free Spins"
             >
               Buy Free Spins (100×)
+            </button>
+
+            <button
+              type="button"
+              className="glass-soft rounded-2xl bg-indigo-500/15 px-3 py-2 text-xs font-medium text-indigo-100 transition hover:bg-indigo-500/20 disabled:opacity-40"
+              disabled={spinning || freeSpinsLeft > 0 || balance < wager * 200}
+              onClick={() => {
+                if (spinning) return;
+                if (balance < wager * 200) return;
+                const buy = placeBet({
+                  game: "Slots 5x5 Buy Bonus",
+                  wager: wager * 200,
+                  resolve: () => ({ multiplier: 0, outcome: "Bought SUPER Free Spins" }),
+                });
+                setLast({ profit: buy.profit, outcome: "Bought SUPER Free Spins (200× bet)", returnMult: 0 });
+                setFsTier("super");
+                setFreeSpinsLeft(12);
+                // SUPER free spins ignores Lucky (since it has its own math).
+                setLuckySpin(false);
+                void reportResult({
+                  game: "Slots 5x5 Buy Bonus",
+                  profit: buy.profit,
+                  wager: wager * 200,
+                  balance: buy.balanceAfter,
+                });
+              }}
+              title="Pay 200× bet to start SUPER Free Spins"
+            >
+              Buy Bonus (200×)
             </button>
           </div>
 

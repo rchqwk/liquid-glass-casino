@@ -322,6 +322,7 @@ export function spinSlots243Ways(input: {
     ensureMinScatters: number; // e.g. 2
     extraWildChance: number; // e.g. 0.25
   };
+  forceHoldSpin?: boolean;
 }): SpinResult {
   const reels = 5;
   const rows = 3;
@@ -386,12 +387,30 @@ export function spinSlots243Ways(input: {
   ].filter(Boolean);
 
   // Hold & Spin bonus trigger (base game only): 3+ bonus coins anywhere.
-  const bonusCoins = countBonusCoins(baseGrid);
-  const triggeredHoldSpin = input.mode === "base" && bonusCoins >= 3;
+  let bonusCoins = countBonusCoins(baseGrid);
+  let triggeredHoldSpin = input.mode === "base" && bonusCoins >= 3;
+  if (input.forceHoldSpin && input.mode === "base") {
+    triggeredHoldSpin = true;
+  }
   let holdSpin: SpinResult["holdSpin"] | undefined;
   if (triggeredHoldSpin) {
+    let bonusBase = baseGrid;
+    if (input.forceHoldSpin && bonusCoins < 3) {
+      // Seed at least 3 coins so the bought bonus feels immediate.
+      bonusBase = baseGrid.map((c) => [...c]);
+      let seeded = bonusCoins;
+      let idx = 5000;
+      while (seeded < 3) {
+        const x = Math.floor(input.rngFloat(idx++) * reels);
+        const y = Math.floor(input.rngFloat(idx++) * rows);
+        if (bonusBase[x]![y] !== BONUS) {
+          bonusBase[x]![y] = BONUS;
+          seeded += 1;
+        }
+      }
+    }
     holdSpin = simulateHoldSpin({
-      baseGrid,
+      baseGrid: bonusBase,
       rngFloat: input.rngFloat,
       payoutScale: input.payoutScale,
     });

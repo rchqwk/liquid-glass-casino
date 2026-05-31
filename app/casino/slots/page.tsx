@@ -526,6 +526,41 @@ export default function SlotsPage() {
             >
               Buy Free Spins (100×)
             </button>
+
+            <button
+              type="button"
+              className="glass-soft rounded-2xl bg-indigo-500/15 px-3 py-2 text-xs font-medium text-indigo-100 transition hover:bg-indigo-500/20 disabled:opacity-40"
+              disabled={spinning || freeSpinsLeft > 0 || holdSpinSteps != null || balance < wager * 150}
+              onClick={() => {
+                if (spinning) return;
+                if (balance < wager * 150) return;
+                // Buy bonus: pay 150× bet to start Hold&Spin immediately.
+                const buy = placeBet({
+                  game: "Slots Buy Bonus",
+                  wager: wager * 150,
+                  resolve: (rng) => {
+                    const spinRes = spinSlots243Ways({
+                      rngFloat: rng.float,
+                      mode: "base",
+                      payoutScale: cfg.slotsPayoutScale ?? 1,
+                      extraChanceProbability: payInfo.extraChanceProbability,
+                      forceHoldSpin: true,
+                    });
+                    return { multiplier: spinRes.winMultiplier, outcome: "Bought Hold&Spin" };
+                  },
+                });
+                setLast({ profit: buy.profit, outcome: "Bought Hold&Spin (150× bet)", multiplier: buy.multiplier });
+                void reportResult({
+                  game: "Slots Buy Bonus",
+                  profit: buy.profit,
+                  wager: wager * 150,
+                  balance: buy.balanceAfter,
+                });
+              }}
+              title="Pay 150× bet to start Hold&Spin bonus"
+            >
+              Buy Bonus (150×)
+            </button>
           </div>
 
           {/* Cabinet-style options */}

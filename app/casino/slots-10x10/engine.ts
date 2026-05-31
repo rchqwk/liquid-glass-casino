@@ -24,8 +24,12 @@ export type Cluster = {
 };
 
 export type CascadeStep = {
+  phase: "break" | "drop";
   grid: (SymbolId | null)[][]; // [x][y], with null meaning empty after break (before drop)
   clusters: Cluster[];
+  // For phase==="drop": initial Y offset (in cells) for each cell before easing to 0.
+  // Negative means starting above, positive means starting below (rare).
+  dropOffsets?: number[][]; // [x][y]
 };
 
 export type SpinResult = {
@@ -143,22 +147,43 @@ function applyBreak(grid: SymbolId[][], clusters: Cluster[]) {
   return g;
 }
 
-function dropAndRefill(input: { grid: (SymbolId | null)[][]; rngFloat: (i: number) => number; startIndex: number }) {
+function dropAndRefill(input: {
+  grid: (SymbolId | null)[][];
+  rngFloat: (i: number) => number;
+  startIndex: number;
+}) {
   const w = input.grid.length;
   const h = input.grid[0]?.length ?? 0;
   const out: SymbolId[][] = Array.from({ length: w }, () => Array.from({ length: h }, () => "cherry"));
+  const offsets: number[][] = Array.from({ length: w }, () => Array.from({ length: h }, () => 0));
   let idx = input.startIndex;
 
   for (let x = 0; x < w; x++) {
     const col = input.grid[x]!;
-    const kept = col.filter((v) => v != null) as SymbolId[];
+    const keptWithY = col
+      .map((v, y) => ({ v, y }))
+      .filter((it) => it.v != null) as Array<{ v: SymbolId; y: number }>;
+    const kept = keptWithY.map((k) => k.v);
     const missing = h - kept.length;
     const refill: SymbolId[] = Array.from({ length: missing }, () => weightedPick(input.rngFloat(idx++)));
     const next = [...refill, ...kept];
-    for (let y = 0; y < h; y++) out[x]![y] = next[y]!;
+
+    // Offsets (in cells): where the symbol came from relative to where it ends up.
+    // Refilled symbols start above the top.
+    for (let y = 0; y < h; y++) {
+      out[x]![y] = next[y]!;
+      if (y < missing) {
+        const oldY = y - missing; // negative
+        offsets[x]![y] = oldY - y;
+      } else {
+        const keptIdx = y - missing;
+        const oldY = keptWithY[keptIdx]?.y ?? y;
+        offsets[x]![y] = oldY - y;
+      }
+    }
   }
 
-  return { grid: out, nextIndex: idx };
+  return { grid: out, nextIndex: idx, offsets };
 }
 
 export function spinCluster10x10(input: {
@@ -221,13 +246,14 @@ export function spinCluster10x10(input: {
     const clusters = findClusters(cur, input.minCluster);
     if (!clusters.length) break;
     const broken = applyBreak(cur, clusters);
-    steps.push({ grid: broken, clusters });
+    steps.push({ phase: "break", grid: broken, clusters });
 
     const chainMult = 1 + chain * 0.15; // increasing chain excitement
     total += clusters.reduce((a, c) => a + c.pay, 0) * chainMult;
 
     const dropped = dropAndRefill({ grid: broken, rngFloat: input.rngFloat, startIndex: idx });
     idx = dropped.nextIndex;
+    steps.push({ phase: "drop", grid: dropped.grid as any, clusters: [], dropOffsets: dropped.offsets });
     cur = dropped.grid;
   }
 

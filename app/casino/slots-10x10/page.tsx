@@ -157,6 +157,7 @@ export default function Slots10x10Page() {
   const brokenSet = useMemo(() => {
     const set = new Set<string>();
     if (!activeStep) return set;
+    if (activeStep.phase !== "break") return set;
     for (const c of activeStep.clusters ?? []) {
       for (const cell of c.cells) set.add(`${cell.x},${cell.y}`);
     }
@@ -169,6 +170,11 @@ export default function Slots10x10Page() {
     if (!activeStep) return viewGrid as any;
     return activeStep.grid;
   }, [activeStep, viewGrid]);
+
+  const dropOffsets = useMemo(() => {
+    if (!activeStep || activeStep.phase !== "drop") return null;
+    return activeStep.dropOffsets ?? null;
+  }, [activeStep]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -264,6 +270,33 @@ export default function Slots10x10Page() {
             Buy Free Spins (100×)
           </button>
 
+          <button
+            type="button"
+            className="mt-2 glass-soft rounded-2xl bg-indigo-500/15 px-4 py-2 text-sm font-medium text-indigo-100 transition hover:bg-indigo-500/20 disabled:opacity-40"
+            disabled={spinning || freeSpinsLeft > 0 || balance < wager * 250}
+            onClick={() => {
+              if (spinning) return;
+              if (balance < wager * 250) return;
+              const buy = placeBet({
+                game: "Slots 10x10 Buy Bonus",
+                wager: wager * 250,
+                resolve: () => ({ multiplier: 0, outcome: "Bought SUPER Free Spins" }),
+              });
+              setLast({ profit: buy.profit, returnMult: 0, outcome: "Bought SUPER Free Spins (250× bet)" });
+              setFeatureTier(2);
+              setFreeSpinsLeft(15);
+              void reportResult({
+                game: "Slots 10x10 Buy Bonus",
+                profit: buy.profit,
+                wager: wager * 250,
+                balance: buy.balanceAfter,
+              });
+            }}
+            title="Pay 250× bet to start SUPER Free Spins"
+          >
+            Buy Bonus (250×)
+          </button>
+
           {last ? (
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
               <p className="text-sm text-white/80">{last.outcome}</p>
@@ -313,6 +346,7 @@ export default function Slots10x10Page() {
               Array.from({ length: 10 }, (_, x) => {
                 const v = displayGrid[x]![y] ?? null;
                 const broken = brokenSet.has(`${x},${y}`);
+                const dy = dropOffsets?.[x]?.[y] ?? 0;
                 return (
                   <div
                     key={`${x}-${y}`}
@@ -323,7 +357,20 @@ export default function Slots10x10Page() {
                     }`}
                     title={v ?? "empty"}
                   >
-                    {v ? <SymbolIcon id={v} /> : null}
+                    {v ? (
+                      <div
+                        style={
+                          dropOffsets
+                            ? ({
+                                ["--dy" as any]: dy,
+                                animation: "dropIn 520ms cubic-bezier(.15,.9,.2,1) 1",
+                              } as any)
+                            : undefined
+                        }
+                      >
+                        <SymbolIcon id={v} />
+                      </div>
+                    ) : null}
                     {/* Break pop effect on broken cells */}
                     {broken ? (
                       <div className="pointer-events-none absolute inset-0 animate-[clusterPop_520ms_ease-out_1] rounded-xl bg-emerald-300/35" />
