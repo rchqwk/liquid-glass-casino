@@ -83,16 +83,24 @@ function defaultStore(): Store {
   };
 }
 
+// In some serverless environments, the filesystem may be read-only.
+// Keep an in-memory copy as a fallback so sequential requests still see the same state.
+let inMemoryStore: Store | null = null;
+
 function loadStore(): Store {
+  if (inMemoryStore) return inMemoryStore;
   try {
     const raw = fs.readFileSync(STORE_PATH, "utf8");
-    return JSON.parse(raw) as Store;
+    inMemoryStore = JSON.parse(raw) as Store;
+    return inMemoryStore;
   } catch {
-    return defaultStore();
+    inMemoryStore = defaultStore();
+    return inMemoryStore;
   }
 }
 
 function saveStore(store: Store) {
+  inMemoryStore = store;
   try {
     fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
   } catch {
