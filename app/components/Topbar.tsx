@@ -84,8 +84,20 @@ export function Topbar() {
     <header className="sticky top-0 z-20 px-4 pt-4 sm:px-6">
       <div className="glass glass-shine flex items-center justify-between gap-3 rounded-3xl px-4 py-3">
         <div className="flex items-center gap-3">
-          <Link href="/casino" className="text-sm font-semibold text-white">
-            Casino
+          <Link
+            href="/casino"
+            className="glass-soft inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/10"
+            title="Home"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Home
           </Link>
           <span className="hidden text-xs text-white/55 sm:inline">
             Play-money prototype

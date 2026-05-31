@@ -639,6 +639,16 @@ export async function recordLeaderboard(userId: number, profit: number, wager: n
   });
 }
 
+export async function getTotalWagered() {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`SELECT COALESCE(SUM(wager_total), 0) AS total FROM leaderboard`) as any[];
+    return Number(rows[0]?.total ?? 0);
+  }
+  return withStore((s) => s.leaderboard.reduce((a, b) => a + Number(b.wager_total ?? 0), 0));
+}
+
 export async function getLeaderboardRows(limit = 50) {
   const sql = getSql();
   if (sql) {
