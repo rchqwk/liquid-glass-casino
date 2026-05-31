@@ -101,30 +101,38 @@ async function ensureSchema() {
   const sql = getSql();
   if (!sql) return;
   if (schemaReady) return;
+  // Neon serverless does not allow multiple SQL commands in one prepared statement.
+  // Keep each CREATE TABLE in its own statement.
   await sql`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
       role_level INT NOT NULL DEFAULT 0,
       created_at BIGINT NOT NULL
-    );
+    )
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
       user_id INT NOT NULL REFERENCES users(id),
       created_at BIGINT NOT NULL
-    );
+    )
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS leaderboard (
       user_id INT PRIMARY KEY REFERENCES users(id),
       profit_total DOUBLE PRECISION NOT NULL DEFAULT 0,
       wager_total DOUBLE PRECISION NOT NULL DEFAULT 0,
       bets INT NOT NULL DEFAULT 0,
       updated_at BIGINT NOT NULL
-    );
+    )
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS config (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at BIGINT NOT NULL
-    );
+    )
   `;
   schemaReady = true;
 }
