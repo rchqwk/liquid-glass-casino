@@ -277,6 +277,39 @@ function simulateHoldSpin(input: {
   return { steps, payoutMultiplier };
 }
 
+function withLuckyModifiers(input: {
+  grid: SymbolKey[][];
+  rngFloat: (i: number) => number;
+  ensureMinScatters: number;
+  extraWildChance: number; // 0..1
+}) {
+  const { grid, rngFloat } = input;
+  const reels = grid.length;
+  const rows = grid[0]?.length ?? 0;
+
+  // Ensure at least N scatters
+  let scatters = 0;
+  for (let x = 0; x < reels; x++) for (let y = 0; y < rows; y++) if (grid[x]![y] === SCATTER) scatters += 1;
+  let idx = 3000;
+  while (scatters < input.ensureMinScatters) {
+    const x = Math.floor(rngFloat(idx++) * reels);
+    const y = Math.floor(rngFloat(idx++) * rows);
+    if (grid[x]![y] !== SCATTER) {
+      grid[x]![y] = SCATTER;
+      scatters += 1;
+    }
+  }
+
+  // Extra wild modifier: chance to turn a random non-scatter into wild
+  if (rngFloat(3999) < input.extraWildChance) {
+    const x = Math.floor(rngFloat(4000) * reels);
+    const y = Math.floor(rngFloat(4001) * rows);
+    if (grid[x]![y] !== SCATTER) grid[x]![y] = WILD;
+  }
+
+  return grid;
+}
+
 export function spinSlots243Ways(input: {
   rngFloat: (i: number) => number;
   mode: SpinMode;
@@ -284,6 +317,11 @@ export function spinSlots243Ways(input: {
   extraChanceProbability: number; // 0..1
   heldColumns?: Array<SymbolKey[] | null>; // length 5
   nudge?: Array<number | null>; // length 5, rotate held column before spin
+  lucky?: {
+    scatterWeightMultiplier: number; // e.g. 1.25
+    ensureMinScatters: number; // e.g. 2
+    extraWildChance: number; // e.g. 0.25
+  };
 }): SpinResult {
   const reels = 5;
   const rows = 3;
@@ -295,8 +333,27 @@ export function spinSlots243Ways(input: {
     if (held && held.length === rows) {
       return rotateColumn(held, nud);
     }
-    return Array.from({ length: rows }, (_, y) => weightedPick(input.rngFloat(x * 10 + y)));
+    return Array.from({ length: rows }, (_, y) => {
+      // Lucky spin: slightly boost scatter frequency by rerolling into scatter sometimes.
+      const picked = weightedPick(input.rngFloat(x * 10 + y));
+      const lucky = input.lucky;
+      if (lucky && picked !== SCATTER) {
+        // probabilistic upgrade: scatterWeightMultiplier-1 portion
+        const boost = Math.max(0, lucky.scatterWeightMultiplier - 1);
+        if (boost > 0 && input.rngFloat(8000 + x * 10 + y) < boost * 0.08) return SCATTER;
+      }
+      return picked;
+    });
   });
+
+  if (input.lucky && input.mode === "base") {
+    withLuckyModifiers({
+      grid: baseGrid,
+      rngFloat: input.rngFloat,
+      ensureMinScatters: input.lucky.ensureMinScatters,
+      extraWildChance: input.lucky.extraWildChance,
+    });
+  }
 
   const initialScatter = countScatters(baseGrid);
   let extraChanceTriggered = false;

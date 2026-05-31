@@ -168,6 +168,7 @@ export default function SlotsPage() {
   const [holdSpinSteps, setHoldSpinSteps] = useState<SymbolKey[][][] | null>(null);
   const [holdSpinStepIdx, setHoldSpinStepIdx] = useState(0);
   const [lastWaysWin, setLastWaysWin] = useState<WaysWinInfo | null>(null);
+  const [luckySpin, setLuckySpin] = useState(false);
 
   const [last, setLast] = useState<{
     profit: number;
@@ -290,7 +291,7 @@ export default function SlotsPage() {
 
       const bet = placeBet({
         game: isFree ? "Slots (Free Spin)" : "Slots",
-        wager,
+        wager: wager * (luckySpin && !isFree ? 1.5 : 1),
         resolve: (rng) => {
           const heldColumns =
             !isFree && lastGrid
@@ -303,6 +304,10 @@ export default function SlotsPage() {
             extraChanceProbability: payInfo.extraChanceProbability,
             heldColumns,
             nudge,
+            lucky:
+              luckySpin && !isFree
+                ? { scatterWeightMultiplier: 1.25, ensureMinScatters: 2, extraWildChance: 0.25 }
+                : undefined,
           });
           grid = spinRes.grid;
           triggeredFreeSpins = spinRes.triggeredFreeSpins;
@@ -322,7 +327,12 @@ export default function SlotsPage() {
       setLastWasFreeSpin(isFree);
       setHoldSpinSteps(hsSteps);
       setLastWaysWin(grid ? analyzeWaysWin(grid) : null);
-      void reportResult({ game: "Slots", profit: bet.profit, wager, balance: bet.balanceAfter });
+      void reportResult({
+        game: luckySpin && !isFree ? "Slots (Lucky)" : "Slots",
+        profit: bet.profit,
+        wager: wager * (luckySpin && !isFree ? 1.5 : 1),
+        balance: bet.balanceAfter,
+      });
 
       // Tell reels to stop on the final window
       if (!hsSteps && grid) {
@@ -465,6 +475,50 @@ export default function SlotsPage() {
             onChange={(e) => setWager(Number(e.target.value))}
             className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
           />
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={`rounded-2xl px-3 py-2 text-xs font-medium transition ${
+                luckySpin ? "bg-amber-500/20 text-amber-100" : "bg-white/5 text-white/70 hover:bg-white/10"
+              }`}
+              onClick={() => setLuckySpin((v) => !v)}
+              disabled={spinning || freeSpinsLeft > 0}
+              title="Lucky Spin costs +50% bet and boosts feature odds"
+            >
+              {luckySpin ? "Lucky Spin ON (+50%)" : "Lucky Spin"}
+            </button>
+            <button
+              type="button"
+              className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
+              disabled={spinning || freeSpinsLeft > 0 || balance < wager * 100}
+              onClick={() => {
+                if (spinning) return;
+                if (balance < wager * 100) return;
+                // Buy feature: pay 100× bet to instantly start free spins.
+                const buy = placeBet({
+                  game: "Slots Buy Feature",
+                  wager: wager * 100,
+                  resolve: () => ({ multiplier: 0, outcome: "Bought Free Spins" }),
+                });
+                setLast({
+                  profit: buy.profit,
+                  outcome: "Bought Free Spins (100× bet)",
+                  multiplier: buy.multiplier,
+                });
+                setFreeSpinsLeft(5);
+                void reportResult({
+                  game: "Slots Buy Feature",
+                  profit: buy.profit,
+                  wager: wager * 100,
+                  balance: buy.balanceAfter,
+                });
+              }}
+              title="Pay 100× bet to start Free Spins"
+            >
+              Buy Free Spins (100×)
+            </button>
+          </div>
 
           {/* Cabinet-style options */}
           <button

@@ -9,6 +9,7 @@ const nav = [
   { href: "/casino/roulette", label: "Roulette" },
   { href: "/casino/slots", label: "Slots" },
   { href: "/casino/slots-5x5", label: "Slots 5×5" },
+  { href: "/casino/slots-10x10", label: "Slots 10×10" },
   { href: "/casino/blackjack", label: "Blackjack" },
   { href: "/casino/poker", label: "Poker" },
   { href: "/casino/leaderboard", label: "Leaderboard" },

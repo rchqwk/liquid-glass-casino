@@ -1,0 +1,230 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useWallet } from "../../lib/wallet";
+import { useAuth } from "../../lib/authClient";
+import { useGameConfig } from "../../lib/gameConfigClient";
+import { SCATTER, WILD, type SymbolId, spinCluster10x10, type CascadeStep } from "./engine";
+import { Slots5x5Sprite } from "../slots-5x5/Sprite";
+
+function SymbolIcon({ id }: { id: SymbolId }) {
+  return (
+    <svg width="24" height="24" viewBox="0 0 64 64" className="pointer-events-none">
+      <use href={`#${id}`} xlinkHref={`#${id}`} />
+    </svg>
+  );
+}
+
+export default function Slots10x10Page() {
+  const { placeBet, balance } = useWallet();
+  const { reportResult } = useAuth();
+  const cfg = useGameConfig();
+
+  const [wager, setWager] = useState(5);
+  const [spinning, setSpinning] = useState(false);
+  const [turbo, setTurbo] = useState(false);
+
+  const [freeSpinsLeft, setFreeSpinsLeft] = useState(0);
+  const [featureTier, setFeatureTier] = useState<0 | 1 | 2>(0); // 0 base, 1 normal, 2 super
+
+  const [grid, setGrid] = useState<SymbolId[][] | null>(null); // [x][y]
+  const [steps, setSteps] = useState<CascadeStep[] | null>(null);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [last, setLast] = useState<{ profit: number; returnMult: number; outcome: string } | null>(null);
+
+  const defaultGrid: SymbolId[][] = useMemo(
+    () =>
+      Array.from({ length: 10 }, (_, x) =>
+        Array.from({ length: 10 }, (_, y) => ((x + y) % 2 === 0 ? "cherry" : "lemon")),
+      ),
+    [],
+  );
+
+  const viewGrid = grid ?? defaultGrid;
+
+  // animate cascade steps
+  useEffect(() => {
+    if (!steps || steps.length === 0) return;
+    setStepIdx(0);
+    const ms = turbo ? 220 : 320;
+    const id = window.setInterval(() => {
+      setStepIdx((i) => {
+        const n = i + 1;
+        if (n >= steps.length) {
+          window.clearInterval(id);
+          return i;
+        }
+        return n;
+      });
+    }, ms);
+    return () => window.clearInterval(id);
+  }, [steps, turbo]);
+
+  useEffect(() => {
+    if (!steps || steps.length === 0) return;
+    if (stepIdx < steps.length - 1) return;
+    const id = window.setTimeout(() => setSteps(null), 900);
+    return () => window.clearTimeout(id);
+  }, [steps, stepIdx]);
+
+  const spinOnce = () => {
+    if (spinning) return;
+    if (!Number.isFinite(wager) || wager <= 0) return;
+    if (balance < wager) return;
+
+    setSpinning(true);
+
+    const mode = freeSpinsLeft > 0 ? ("freespin" as const) : ("base" as const);
+    const isFree = mode === "freespin";
+
+    const bet = placeBet({
+      game: isFree ? "Slots 10x10 (Free Spin)" : "Slots 10x10",
+      wager,
+      resolve: (rng) => {
+        const res = spinCluster10x10({
+          rngFloat: rng.float,
+          mode,
+          payoutScale: cfg.slotsPayoutScale ?? 1,
+          minCluster: 6,
+          featureTier,
+        });
+
+        // Feature trigger based on scatters count (3–4 normal, 5+ super)
+        if (!isFree) {
+          if (res.scatterCount >= 5) {
+            setFeatureTier(2);
+            setFreeSpinsLeft(15);
+          } else if (res.scatterCount >= 3) {
+            setFeatureTier(1);
+            setFreeSpinsLeft(8);
+          }
+        } else {
+          setFreeSpinsLeft((n) => Math.max(0, n - 1));
+          if (freeSpinsLeft - 1 <= 0) setFeatureTier(0);
+        }
+
+        setGrid(res.finalGrid);
+        setSteps(res.steps);
+
+        const multiplier = (isFree ? 1 : 0) + res.winMultiplier; // refund stake in free spins
+        const outcome =
+          res.winMultiplier > 0 ? `WIN +${res.winMultiplier.toFixed(2)}x` : "LOSE";
+        return { multiplier, outcome };
+      },
+    });
+
+    const returnMult = wager > 0 ? (wager + bet.profit) / wager : 0;
+    setLast({ profit: bet.profit, returnMult, outcome: bet.outcome });
+    void reportResult({ game: "Slots 10x10", profit: bet.profit, wager, balance: bet.balanceAfter });
+
+    window.setTimeout(() => setSpinning(false), turbo ? 520 : 900);
+  };
+
+  const displayGrid: (SymbolId | null)[][] = useMemo(() => {
+    if (!steps || steps.length === 0) return viewGrid as any;
+    const step = steps[Math.min(stepIdx, steps.length - 1)]!;
+    return step.grid;
+  }, [steps, stepIdx, viewGrid]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Slots5x5Sprite />
+
+      <div className="glass glass-shine rounded-3xl p-6">
+        <h2 className="text-xl font-semibold text-white">Slots (10×10 Cascading)</h2>
+        <p className="mt-2 text-sm leading-6 text-white/70">
+          Cluster pays: any group of <span className="font-mono text-white/80">6+</span> breaks, pays,
+          then symbols fall and can chain.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
+        <div className="glass-soft glass-shine rounded-3xl p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-white">Controls</p>
+            <p className="text-xs text-white/60">
+              Balance: <span className="font-mono">{balance.toFixed(2)}</span> ⓒ
+            </p>
+          </div>
+
+          <label className="mt-4 block text-xs text-white/60">Wager per spin (ⓒ)</label>
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={wager}
+            onChange={(e) => setWager(Number(e.target.value))}
+            className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+          />
+
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-white/70">
+            <label className="flex cursor-pointer items-center gap-2">
+              <input type="checkbox" checked={turbo} onChange={(e) => setTurbo(e.target.checked)} />
+              Turbo
+            </label>
+            {freeSpinsLeft > 0 ? (
+              <span className="text-emerald-200">
+                Free spins: <span className="font-mono">{freeSpinsLeft}</span>{" "}
+                {featureTier === 2 ? "(SUPER)" : featureTier === 1 ? "(NORMAL)" : ""}
+              </span>
+            ) : (
+              <span className="text-white/50">Scatters: 3–4 normal, 5+ super</span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={spinOnce}
+            disabled={spinning}
+            className="mt-5 glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 transition hover:bg-white/10 disabled:opacity-40"
+          >
+            {spinning ? "Spinning…" : freeSpinsLeft > 0 ? "Spin (Free)" : "Spin"}
+          </button>
+
+          {last ? (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
+              <p className="text-sm text-white/80">{last.outcome}</p>
+              <p className="mt-1 text-xs text-white/60">
+                Return: <span className="font-mono">{last.returnMult.toFixed(2)}x</span> • Profit{" "}
+                <span className={`font-mono ${last.profit >= 0 ? "text-emerald-200" : "text-rose-200"}`}>
+                  {last.profit >= 0 ? "+" : ""}
+                  {last.profit.toFixed(2)}
+                </span>
+              </p>
+            </div>
+          ) : null}
+
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-[11px] leading-5 text-white/55">
+            Base spins have lower return; big payouts come from chaining in Free Spins.
+          </div>
+        </div>
+
+        <div className="glass-soft glass-shine rounded-3xl p-5">
+          <p className="text-sm font-medium text-white">Board</p>
+          <div className="mt-3 grid grid-cols-10 gap-1">
+            {Array.from({ length: 10 }, (_, y) =>
+              Array.from({ length: 10 }, (_, x) => {
+                const v = displayGrid[x]![y] ?? null;
+                return (
+                  <div
+                    key={`${x}-${y}`}
+                    className={`glass-soft flex h-8 w-8 items-center justify-center rounded-xl ${
+                      v == null ? "opacity-30" : "opacity-100"
+                    } ${spinning ? "animate-[slotBlur_0.22s_linear_infinite]" : ""}`}
+                    title={v ?? "empty"}
+                  >
+                    {v ? <SymbolIcon id={v} /> : null}
+                  </div>
+                );
+              }),
+            )}
+          </div>
+          <p className="mt-3 text-xs text-white/55">
+            Wild: <span className="font-mono">{WILD}</span> • Scatter: <span className="font-mono">{SCATTER}</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
