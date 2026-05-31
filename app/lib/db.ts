@@ -24,7 +24,18 @@ type Store = {
   config: Record<string, { value: string; updated_at: number }>;
 };
 
-const STORE_PATH = path.join(process.cwd(), "data.json");
+const STORE_PATH = (() => {
+  // In serverless (Vercel) the project directory is read-only; only /tmp is writable.
+  // This fallback store is NOT durable across deploys/instances, but prevents crashes
+  // when DATABASE_URL isn't configured yet.
+  const hasDb =
+    !!process.env.DATABASE_URL ||
+    !!process.env.POSTGRES_URL ||
+    !!process.env.NEON_DATABASE_URL;
+  if (hasDb) return path.join(process.cwd(), "data.json");
+  if (process.env.VERCEL) return path.join("/tmp", "lgc-data.json");
+  return path.join(process.cwd(), "data.json");
+})();
 
 function defaultStore(): Store {
   return { nextUserId: 1, users: [], sessions: [], leaderboard: [], config: {} };
@@ -40,7 +51,11 @@ function loadStore(): Store {
 }
 
 function saveStore(store: Store) {
-  fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
+  try {
+    fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
+  } catch {
+    // If the filesystem is read-only, skip persistence (serverless fallback).
+  }
 }
 
 // Simple in-process mutex for dev / single-instance usage.
