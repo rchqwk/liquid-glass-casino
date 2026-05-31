@@ -1,24 +1,42 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../lib/authServer";
-import { recordLeaderboard } from "../../../lib/db";
+import { addAnnouncement, recordLeaderboard, updateBalanceAndCheckDoubled } from "../../../lib/db";
 
 export async function POST(req: Request) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as
-    | { profit?: number; wager?: number; game?: string }
+    | { profit?: number; wager?: number; game?: string; balance?: number }
     | null;
 
   const profit = Number(body?.profit ?? 0);
   const wager = Number(body?.wager ?? 0);
   const game = String(body?.game ?? "").slice(0, 32);
+  const balance = Number(body?.balance);
 
   if (!Number.isFinite(profit) || !Number.isFinite(wager) || wager < 0) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
   await recordLeaderboard(user.id, profit, wager);
+
+  // Broadcast big wins (return multiplier, including stake)
+  if (wager > 0) {
+    const returnMult = (wager + profit) / wager;
+    if (Number.isFinite(returnMult) && returnMult >= 10) {
+      const rounded = returnMult >= 100 ? Math.round(returnMult) : Math.round(returnMult * 10) / 10;
+      await addAnnouncement(`${user.username} has just won ${rounded}x their bet`);
+    }
+  }
+
+  // Broadcast "doubled balance in last 10 mins" if client sent balanceAfter.
+  if (Number.isFinite(balance)) {
+    const doubled = await updateBalanceAndCheckDoubled(user.id, balance);
+    if (doubled) {
+      await addAnnouncement(`${user.username} has doubled their balance in the last 10 mins`);
+    }
+  }
 
   return NextResponse.json({ ok: true, game });
 }

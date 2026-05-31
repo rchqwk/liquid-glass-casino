@@ -139,6 +139,7 @@ export default function RoulettePage() {
                               game: "Roulette",
                               profit: settled.profit,
                               wager: totalStake,
+                              balance: settled.balanceAfter,
                             });
                           } else {
                             setLastOutcome(settled.error);

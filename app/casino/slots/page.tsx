@@ -40,7 +40,7 @@ export default function SlotsPage() {
   const payInfo = useMemo(
     () => ({
       ways: 243,
-      extraChanceProbability: 0.12,
+      extraChanceProbability: 0.156, // +30% vs 0.12
     }),
     [],
   );
@@ -99,7 +99,7 @@ export default function SlotsPage() {
       });
       setLastGrid(grid);
       setLastWasFreeSpin(isFree);
-      void reportResult({ game: "Slots", profit: bet.profit, wager });
+      void reportResult({ game: "Slots", profit: bet.profit, wager, balance: bet.balanceAfter });
 
       // Free spins bookkeeping
       if (triggeredFreeSpins && freeSpinsLeft <= 0) {
@@ -243,7 +243,12 @@ export default function SlotsPage() {
                       outcome: bet.outcome,
                       multiplier: bet.multiplier,
                     });
-                    void reportResult({ game: "Slots Gamble", profit: bet.profit, wager: amount });
+                    void reportResult({
+                      game: "Slots Gamble",
+                      profit: bet.profit,
+                      wager: amount,
+                      balance: bet.balanceAfter,
+                    });
                     if (bet.profit > 0) setPendingGamble(bet.profit);
                   }}
                 >

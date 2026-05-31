@@ -32,6 +32,8 @@ type Store = {
     active?: boolean;
   }>;
   config: Record<string, { value: string; updated_at: number }>;
+  nextAnnouncementId?: number;
+  announcements?: Array<{ id: number; ts: number; message: string }>;
 };
 
 const STORE_PATH = (() => {
@@ -48,7 +50,15 @@ const STORE_PATH = (() => {
 })();
 
 function defaultStore(): Store {
-  return { nextUserId: 1, users: [], sessions: [], leaderboard: [], config: {} };
+  return {
+    nextUserId: 1,
+    users: [],
+    sessions: [],
+    leaderboard: [],
+    config: {},
+    nextAnnouncementId: 1,
+    announcements: [],
+  };
 }
 
 function loadStore(): Store {
@@ -144,15 +154,111 @@ async function ensureSchema() {
       updated_at BIGINT NOT NULL
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS announcements (
+      id SERIAL PRIMARY KEY,
+      ts BIGINT NOT NULL,
+      message TEXT NOT NULL
+    )
+  `;
 
   // Migrations / new columns
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS fingerprint TEXT`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS active_session_token TEXT`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen BIGINT NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_signout BIGINT NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_baseline DOUBLE PRECISION NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_baseline_ts BIGINT NOT NULL DEFAULT 0`;
 
   await sql`ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`;
   schemaReady = true;
+}
+
+export async function addAnnouncement(message: string) {
+  const msg = String(message ?? "").slice(0, 200);
+  if (!msg) return;
+  const sql = getSql();
+  const now = Date.now();
+  if (sql) {
+    await ensureSchema();
+    await sql`INSERT INTO announcements (ts, message) VALUES (${now}, ${msg})`;
+    // cleanup old (24h)
+    await sql`DELETE FROM announcements WHERE ts < ${now - 24 * 60 * 60 * 1000}`;
+    return;
+  }
+
+  return withStore((s) => {
+    const id = s.nextAnnouncementId ?? 1;
+    s.nextAnnouncementId = id + 1;
+    s.announcements = s.announcements ?? [];
+    s.announcements.push({ id, ts: now, message: msg });
+    s.announcements = s.announcements.filter((a) => a.ts >= now - 24 * 60 * 60 * 1000).slice(-50);
+  });
+}
+
+export async function getAnnouncements(afterId = 0, limit = 20) {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      SELECT id, ts, message
+      FROM announcements
+      WHERE id > ${afterId}
+      ORDER BY id ASC
+      LIMIT ${limit}
+    `) as any[];
+    return rows as Array<{ id: number; ts: string | number; message: string }>;
+  }
+
+  return withStore((s) => {
+    const list = (s.announcements ?? []).filter((a) => a.id > afterId);
+    return list.slice(-limit);
+  });
+}
+
+export async function updateBalanceAndCheckDoubled(userId: number, balance: number) {
+  const b = Number(balance);
+  if (!Number.isFinite(b) || b < 0) return false;
+  const sql = getSql();
+  const now = Date.now();
+  const windowMs = 10 * 60 * 1000;
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      SELECT balance_baseline, balance_baseline_ts
+      FROM users
+      WHERE id = ${userId}
+    `) as any[];
+    const base = Number(rows[0]?.balance_baseline ?? 0);
+    const baseTs = Number(rows[0]?.balance_baseline_ts ?? 0);
+    if (!baseTs || now - baseTs > windowMs || base <= 0) {
+      await sql`UPDATE users SET balance_baseline = ${b}, balance_baseline_ts = ${now} WHERE id = ${userId}`;
+      return false;
+    }
+    if (b >= base * 2) {
+      await sql`UPDATE users SET balance_baseline = ${b}, balance_baseline_ts = ${now} WHERE id = ${userId}`;
+      return true;
+    }
+    return false;
+  }
+
+  return withStore((s) => {
+    const u: any = s.users.find((x) => x.id === userId);
+    if (!u) return false;
+    const base = Number(u.balance_baseline ?? 0);
+    const baseTs = Number(u.balance_baseline_ts ?? 0);
+    if (!baseTs || now - baseTs > windowMs || base <= 0) {
+      u.balance_baseline = b;
+      u.balance_baseline_ts = now;
+      return false;
+    }
+    if (b >= base * 2) {
+      u.balance_baseline = b;
+      u.balance_baseline_ts = now;
+      return true;
+    }
+    return false;
+  });
 }
 
 

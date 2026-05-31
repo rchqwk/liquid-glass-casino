@@ -168,7 +168,12 @@ export default function BlackjackPage() {
       return;
     }
     setSettlement({ profit: res.profit, outcome: res.outcome, multiplier: res.multiplier });
-    void reportResult({ game: "Blackjack", profit: res.profit, wager });
+    void reportResult({
+      game: "Blackjack",
+      profit: res.profit,
+      wager,
+      balance: res.balanceAfter,
+    });
     setPhase("done");
     setMessage("Hand complete.");
     setBetNonce(null);

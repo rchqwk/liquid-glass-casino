@@ -44,7 +44,7 @@ const SYMBOLS: { s: SymbolKey; w: number }[] = [
   // special symbols (reduced frequency)
   { s: "💎", w: 2 },
   { s: "👑", w: 4 },
-  { s: "🪙", w: 1 },
+  { s: "🪙", w: 1.3 },
   { s: "7", w: 2 },
 ];
 

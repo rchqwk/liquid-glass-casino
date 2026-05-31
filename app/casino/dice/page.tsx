@@ -107,7 +107,12 @@ export default function DicePage() {
                   multiplier: bet.multiplier,
                   outcome: bet.outcome,
                 });
-                void reportResult({ game: "Dice", profit: bet.profit, wager });
+                void reportResult({
+                  game: "Dice",
+                  profit: bet.profit,
+                  wager,
+                  balance: bet.balanceAfter,
+                });
                 setRolling(false);
               }, 650);
             }}

@@ -54,7 +54,7 @@ type WalletContextValue = {
   ) => { ok: true } | { ok: false; error: string; nextAvailableAt?: number };
   setClientSeed: (seed: string) => void;
   rotateServerSeed: () => { revealedServerSeed: string };
-  placeBet: (input: PlaceBetInput) => { multiplier: number; outcome: string; profit: number };
+  placeBet: (input: PlaceBetInput) => { multiplier: number; outcome: string; profit: number; balanceAfter: number };
   beginBet: (input: {
     game: string;
     wager: number;
@@ -63,7 +63,9 @@ type WalletContextValue = {
     nonce: number;
     multiplier: number;
     outcome: string;
-  }) => { profit: number; multiplier: number; outcome: string } | { error: string };
+  }) =>
+    | { profit: number; multiplier: number; outcome: string; balanceAfter: number }
+    | { error: string };
   reset: () => void;
 };
 
@@ -134,7 +136,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         deposit: () => ({ ok: false, error: "Wallet not ready" }),
         setClientSeed: () => {},
         rotateServerSeed: () => ({ revealedServerSeed: "" }),
-        placeBet: () => ({ multiplier: 0, outcome: "", profit: 0 }),
+        placeBet: () => ({ multiplier: 0, outcome: "", profit: 0, balanceAfter: 0 }),
         beginBet: () => ({ error: "Wallet not ready" }),
         settleBet: () => ({ error: "Wallet not ready" }),
         reset: () => {},
@@ -243,12 +245,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
       placeBet: ({ game, wager, resolve }) => {
         if (!Number.isFinite(wager) || wager <= 0) {
-          return { multiplier: 0, outcome: "Invalid wager", profit: 0 };
+          return { multiplier: 0, outcome: "Invalid wager", profit: 0, balanceAfter: state.balance };
         }
 
         const current = state;
         if (current.balance < wager) {
-          return { multiplier: 0, outcome: "Insufficient balance", profit: 0 };
+          return { multiplier: 0, outcome: "Insufficient balance", profit: 0, balanceAfter: current.balance };
         }
 
         const betNonce = current.nonce;
@@ -298,7 +300,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             : s,
         );
 
-        return { multiplier, outcome: res.outcome, profit };
+        return { multiplier, outcome: res.outcome, profit, balanceAfter: nextBalance };
       },
 
       beginBet: ({ game, wager }) => {
@@ -356,6 +358,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const m = Math.max(0, Number(multiplier) || 0);
         const payout = open.wager * m;
         const profit = clampMoney(payout - open.wager);
+        const nextBalance = clampMoney(state.balance + payout);
 
         setState((s) => {
           if (!s) return s;
@@ -379,7 +382,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           };
         });
 
-        return { profit, multiplier: m, outcome };
+        return { profit, multiplier: m, outcome, balanceAfter: nextBalance };
       },
 
       reset: () => {

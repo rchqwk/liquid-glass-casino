@@ -10,12 +10,53 @@ export function Topbar() {
   const { user, loading } = useAuth();
   const role = user?.role_level ?? 0;
   const [msg, setMsg] = useState<string | null>(null);
+  const [broadcast, setBroadcast] = useState<string | null>(null);
+  const [afterId, setAfterId] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem("lgc.ann.afterId");
+      return raw ? Number(raw) || 0 : 0;
+    } catch {
+      return 0;
+    }
+  });
   const [, forceTick] = useState(0);
 
   useEffect(() => {
     const id = window.setInterval(() => forceTick((x) => (x + 1) % 1000000), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/announcements?after=${afterId}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { announcements?: Array<{ id: number; message: string }> };
+        const list = data.announcements ?? [];
+        if (cancelled || list.length === 0) return;
+        const last = list[list.length - 1]!;
+        setAfterId(last.id);
+        try {
+          localStorage.setItem("lgc.ann.afterId", String(last.id));
+        } catch {
+          // ignore
+        }
+        setBroadcast(last.message);
+        window.setTimeout(() => {
+          if (!cancelled) setBroadcast(null);
+        }, 4500);
+      } catch {
+        // ignore
+      }
+    };
+    const id = window.setInterval(tick, 5000);
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [afterId]);
 
   const now = Date.now();
   const refillCooldownMs = Math.max(0, refill5000AvailableAt - now);
@@ -129,6 +170,13 @@ export function Topbar() {
       </div>
       {msg ? (
         <div className="px-1 pt-2 text-xs text-white/60">{msg}</div>
+      ) : null}
+      {broadcast ? (
+        <div className="px-1 pt-2">
+          <div className="glass-soft glass-shine rounded-2xl border border-white/10 px-3 py-2 text-xs text-white/80">
+            {broadcast}
+          </div>
+        </div>
       ) : null}
     </header>
   );
