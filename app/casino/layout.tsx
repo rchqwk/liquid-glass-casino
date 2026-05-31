@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Sidebar } from "../components/Sidebar";
 import { Topbar } from "../components/Topbar";
+import { SignInGate } from "../components/SignInGate";
 
 export default function CasinoLayout({ children }: { children: ReactNode }) {
   return (
@@ -10,10 +11,11 @@ export default function CasinoLayout({ children }: { children: ReactNode }) {
       <div className="flex min-h-[100dvh] flex-1 flex-col">
         <Topbar />
         <main className="flex-1 p-4 sm:p-6">
-          <div className="mx-auto w-full max-w-5xl">{children}</div>
+          <div className="mx-auto w-full max-w-5xl">
+            <SignInGate>{children}</SignInGate>
+          </div>
         </main>
       </div>
     </div>
   );
 }
-
