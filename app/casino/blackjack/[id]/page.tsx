@@ -102,6 +102,7 @@ export default function BlackjackTablePage({ params }: { params: { id: string } 
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [reportedKey, setReportedKey] = useState<string | null>(null);
+  const [targetUserId, setTargetUserId] = useState<number | null>(null);
 
   useEffect(() => {
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
@@ -146,6 +147,7 @@ export default function BlackjackTablePage({ params }: { params: { id: string } 
   }, [state]);
 
   const canUseDealerSpecial = state?.phase === "dealer_window";
+  const canUseAnytimeSpecial = state?.phase === "player_turns" || state?.phase === "dealer";
 
   // Report wager/profit for stats once per round (so Games gallery updates per-game totals).
   useEffect(() => {
@@ -292,23 +294,57 @@ export default function BlackjackTablePage({ params }: { params: { id: string } 
 
                 <div className="mt-5">
                   <p className="text-xs font-medium text-white/70">Specials</p>
+                  <label className="mt-2 block text-[11px] text-white/55">Target (for rare “target” cards)</label>
+                  <select
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/85 outline-none focus:border-white/20"
+                    value={targetUserId ?? ""}
+                    onChange={(e) => setTargetUserId(e.target.value ? Number(e.target.value) : null)}
+                    disabled={!canUseAnytimeSpecial}
+                  >
+                    <option value="">(auto)</option>
+                    {state.seats
+                      .filter(Boolean)
+                      .map((p) => p!)
+                      .map((p) => (
+                        <option key={p.userId} value={p.userId}>
+                          {p.username}
+                        </option>
+                      ))}
+                  </select>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     {Object.entries(state.meInventory ?? {}).map(([k, v]) => (
+                      (() => {
+                        const isDealerCard = k.includes("DEALER");
+                        const isTargetCard = k.includes("TARGET");
+                        const needsOwnTurn = !isDealerCard && !isTargetCard;
+                        const enabled =
+                          v > 0 &&
+                          (isDealerCard ? !!canUseDealerSpecial : isTargetCard ? !!canUseAnytimeSpecial : !!isMyTurn);
+                        return (
                       <button
                         key={k}
                         type="button"
                         className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
-                        disabled={
-                          v <= 0 ||
-                          (k.includes("DEALER") ? !canUseDealerSpecial : !isMyTurn)
+                        disabled={!enabled}
+                        onClick={() =>
+                          post("action", {
+                            type: "special",
+                            specialId: k,
+                            targetUserId: isTargetCard ? targetUserId : null,
+                          })
                         }
-                        onClick={() => post("action", { type: "special", specialId: k })}
                         title="Use special"
                       >
                         <div className="font-semibold text-white">{k}</div>
                         <div className="mt-1 text-white/60">x{v}</div>
                       </button>
+                        );
+                      })()
                     ))}
+                  </div>
+                  <div className="mt-2 text-[11px] text-white/50">
+                    Common cards usually work only on your turn. Rare “TARGET” cards can be played any time before the dealer stands.
+                    Stacking is allowed.
                   </div>
                 </div>
 

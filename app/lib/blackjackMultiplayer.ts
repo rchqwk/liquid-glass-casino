@@ -18,7 +18,9 @@ export type SpecialId =
   | "SWAP_ONE"
   | "DOUBLE_PAYOUT"
   | "ADD2_DEALER"
-  | "DEALER_SECOND_CHANCE";
+  | "DEALER_SECOND_CHANCE"
+  | "ADD2_TARGET"
+  | "FORCE_HIT_TARGET";
 
 export type SpecialRarity = "common" | "rare";
 export type SpecialTiming = "own_turn" | "dealer_window" | "anytime";
@@ -80,6 +82,22 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
     rarity: "rare",
     timing: "dealer_window",
     target: "dealer",
+  },
+  ADD2_TARGET: {
+    id: "ADD2_TARGET",
+    name: "+2 (Target)",
+    desc: "Add +2 to any player's hand total. Rare. Can be used even when it's not your turn (before dealer stands).",
+    rarity: "rare",
+    timing: "anytime",
+    target: "any",
+  },
+  FORCE_HIT_TARGET: {
+    id: "FORCE_HIT_TARGET",
+    name: "Force Hit",
+    desc: "Force any player to draw 1 card immediately. Rare. Can be used even when it's not your turn (before dealer stands).",
+    rarity: "rare",
+    timing: "anytime",
+    target: "any",
   },
 };
 
@@ -189,6 +207,8 @@ export function defaultInventory(): Inventory {
     SWAP_ONE: 0,
     ADD2_DEALER: 0,
     DEALER_SECOND_CHANCE: 0,
+    ADD2_TARGET: 0,
+    FORCE_HIT_TARGET: 0,
   };
 }
 
@@ -491,9 +511,28 @@ export function applySpecial(
   if (actor.usedThisRound?.[input.id]) return { state: s, error: "Already used this round." };
 
   const isOwnTurn = s.phase === "player_turns" && currentTurnSeatIndex(s) != null && s.seats[currentTurnSeatIndex(s)!]?.userId === userId;
+  const isBeforeDealerStands = s.phase === "player_turns" || s.phase === "dealer";
 
   if (def.timing === "own_turn" && !isOwnTurn) return { state: s, error: "Only usable on your turn." };
   if (def.timing === "dealer_window" && s.phase !== "dealer_window") return { state: s, error: "Only usable after dealer stands." };
+  if (def.timing === "anytime" && !isBeforeDealerStands) return { state: s, error: "Only usable before dealer stands." };
+
+  // Resolve target
+  let targetSeat: PlayerSeat | null = null;
+  let targetSeatIdx: number | null = null;
+  if (def.target === "self") {
+    targetSeat = actor;
+    targetSeatIdx = seatIdx;
+  } else if (def.target === "dealer") {
+    targetSeat = null;
+    targetSeatIdx = null;
+  } else {
+    const tuid = Number(input.targetUserId ?? userId);
+    const idx = s.seats.findIndex((p) => p?.userId === tuid);
+    if (idx < 0) return { state: s, error: "Target not seated." };
+    targetSeat = s.seats[idx]!;
+    targetSeatIdx = idx;
+  }
 
   // Apply effects
   if (input.id === "ADD2_SELF") {
@@ -532,6 +571,40 @@ export function applySpecial(
     s.dealer.bonusPoints += 2;
   } else if (input.id === "DEALER_SECOND_CHANCE") {
     s.dealer.secondChanceArmed = true;
+  } else if (input.id === "ADD2_TARGET") {
+    if (!targetSeat) return { state: s, error: "Missing target." };
+    targetSeat.bonusPoints += 2;
+    const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
+    if (t > 21) {
+      targetSeat.busted = true;
+      targetSeat.turnEnded = true;
+      targetSeat.stood = true;
+      // If the targeted player was the current turn, advance.
+      if (s.phase === "player_turns" && targetSeatIdx != null && currentTurnSeatIndex(s) === targetSeatIdx) {
+        actor.usedThisRound[input.id] = true;
+        actor.inventory[input.id] = Math.max(0, (actor.inventory[input.id] ?? 0) - 1);
+        actor.lastSeenAt = now;
+        return { state: advanceTurn(s, now) };
+      }
+    }
+  } else if (input.id === "FORCE_HIT_TARGET") {
+    if (!targetSeat) return { state: s, error: "Missing target." };
+    // Only makes sense while players are still acting; we allow during dealer too, but it will just add to a (likely ended) hand.
+    const c = drawFromShoe(s);
+    if (c == null) return { state: s, error: "Shoe empty." };
+    targetSeat.cards.push(c);
+    const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
+    if (t > 21) {
+      targetSeat.busted = true;
+      targetSeat.turnEnded = true;
+      targetSeat.stood = true;
+      if (s.phase === "player_turns" && targetSeatIdx != null && currentTurnSeatIndex(s) === targetSeatIdx) {
+        actor.usedThisRound[input.id] = true;
+        actor.inventory[input.id] = Math.max(0, (actor.inventory[input.id] ?? 0) - 1);
+        actor.lastSeenAt = now;
+        return { state: advanceTurn(s, now) };
+      }
+    }
   }
 
   actor.usedThisRound[input.id] = true;
