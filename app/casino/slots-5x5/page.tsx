@@ -193,14 +193,14 @@ export default function Slots5x5Page() {
   const buildRandomStrip = (rng: () => number, len: number): SymbolId[] => {
     const ids: SymbolId[] = ["cherry", "lemon", "bar", "bell", "star", "seven", "diamond", "coin"];
     const weights = new Map<SymbolId, number>([
-      ["cherry", 26],
-      ["lemon", 26],
-      ["bar", 22],
-      ["bell", 14],
-      ["star", 10],
-      ["seven", 6],
-      ["diamond", 2],
-      ["coin", 1.6],
+      ["cherry", 39],
+      ["lemon", 39],
+      ["bar", 33],
+      ["bell", 12],
+      ["star", 8],
+      ["seven", 5],
+      ["diamond", 1.6],
+      ["coin", 1.2],
     ]);
     const total = ids.reduce((a, s) => a + (weights.get(s) ?? 1), 0);
     const pick = () => {

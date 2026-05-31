@@ -32,14 +32,16 @@ export type SpinResult = {
 };
 
 const SYMBOLS: { s: SymbolId; w: number }[] = [
-  { s: "cherry", w: 26 },
-  { s: "lemon", w: 26 },
-  { s: "bar", w: 22 },
-  { s: "bell", w: 14 },
-  { s: "star", w: 10 },
-  { s: "seven", w: 6 },
-  { s: "diamond", w: 2 }, // wild
-  { s: "coin", w: 1.6 }, // scatter
+  // ~50% more "cheap" symbols (cherry/lemon/bar) to reduce win volatility.
+  { s: "cherry", w: 39 },
+  { s: "lemon", w: 39 },
+  { s: "bar", w: 33 },
+  // slightly reduce premium/specials
+  { s: "bell", w: 12 },
+  { s: "star", w: 8 },
+  { s: "seven", w: 5 },
+  { s: "diamond", w: 1.6 }, // wild
+  { s: "coin", w: 1.2 }, // scatter
 ];
 
 // base multiplier per way for 3/4/5 in a row (left-to-right)
@@ -141,4 +143,3 @@ export function spinSlots5x5(input: {
 
   return { grid, scatterCount, winMultiplier, triggeredFreeSpins, waysBest: best };
 }
-
