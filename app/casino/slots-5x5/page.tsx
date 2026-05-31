@@ -77,7 +77,7 @@ function ReelColumn(props: {
       if (offsetRef.current > max) offsetRef.current -= totalPx * 2;
       if (offsetRef.current < min) offsetRef.current += totalPx * 2;
 
-      el.style.transform = `translateY(-${offsetRef.current}px)`;
+      el.style.transform = `translate3d(0, -${offsetRef.current}px, 0)`;
       rafRef.current = window.requestAnimationFrame(tick);
     };
 
@@ -98,19 +98,22 @@ function ReelColumn(props: {
     if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
 
-    const cur = offsetRef.current;
-    const curMod = ((cur % totalPx) + totalPx) % totalPx;
+    // Normalize current position into a safe range (avoids overshooting the rendered strip and going blank)
+    const curRaw = offsetRef.current;
+    const curMod = ((curRaw % totalPx) + totalPx) % totalPx;
+    const cur = totalPx + curMod; // [1x..2x) totalPx
     const targetMod = stopAtIndex * CELL_PX;
     const delta = (targetMod - curMod + totalPx) % totalPx;
 
     // extra full rotations for realism (more on non-turbo) + per-reel stagger
-    const extraRot = turbo ? 2 : 4;
-    const target = cur + delta + totalPx * extraRot + reelIndex * CELL_PX * 2;
+    // Keep this small so we never scroll beyond the rendered content.
+    const extraRot = turbo ? 1 : 2;
+    const target = cur + delta + totalPx * extraRot;
     offsetRef.current = target;
 
     const duration = (turbo ? 650 : 1200) + reelIndex * (turbo ? 110 : 170);
     el.style.transition = `transform ${duration}ms cubic-bezier(.12,.86,.2,1)`;
-    el.style.transform = `translateY(-${target}px)`;
+    el.style.transform = `translate3d(0, -${target}px, 0)`;
 
     const finish = () => {
       if (stoppedRef.current) return;

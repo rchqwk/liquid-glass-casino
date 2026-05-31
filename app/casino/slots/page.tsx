@@ -43,7 +43,7 @@ function ReelColumnEmoji(props: {
   useEffect(() => {
     const el = innerRef.current;
     if (!el) return;
-    el.style.transform = `translateY(-${offsetRef.current}px)`;
+    el.style.transform = `translate3d(0, -${offsetRef.current}px, 0)`;
   }, [strip]);
 
   // Continuous scrolling while spinning (until stopRequested)
@@ -62,7 +62,7 @@ function ReelColumnEmoji(props: {
       const min = totalPx * 2;
       if (offsetRef.current > max) offsetRef.current -= totalPx * 2;
       if (offsetRef.current < min) offsetRef.current += totalPx * 2;
-      el.style.transform = `translateY(-${offsetRef.current}px)`;
+      el.style.transform = `translate3d(0, -${offsetRef.current}px, 0)`;
       rafRef.current = window.requestAnimationFrame(tick);
     };
 
@@ -83,18 +83,20 @@ function ReelColumnEmoji(props: {
     if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
 
-    const cur = offsetRef.current;
-    const curMod = ((cur % totalPx) + totalPx) % totalPx;
+    // Normalize current position into a safe range (prevents scrolling past the rendered strip)
+    const curRaw = offsetRef.current;
+    const curMod = ((curRaw % totalPx) + totalPx) % totalPx;
+    const cur = totalPx + curMod;
     const targetMod = stopAtIndex * CELL_PX;
     const delta = (targetMod - curMod + totalPx) % totalPx;
 
-    const extraRot = turbo ? 2 : 4;
-    const target = cur + delta + totalPx * extraRot + reelIndex * CELL_PX;
+    const extraRot = turbo ? 1 : 2;
+    const target = cur + delta + totalPx * extraRot;
     offsetRef.current = target;
 
     const duration = (turbo ? 520 : 980) + reelIndex * (turbo ? 90 : 130);
     el.style.transition = `transform ${duration}ms cubic-bezier(.12,.86,.2,1)`;
-    el.style.transform = `translateY(-${target}px)`;
+    el.style.transform = `translate3d(0, -${target}px, 0)`;
 
     const finish = () => {
       if (stoppedRef.current) return;
