@@ -19,6 +19,7 @@ type WalletState = {
   clientSeed: string;
   nonce: number;
   history: HistoryItem[];
+  lastRefill5000At?: number;
   openBets?: Record<
     number,
     { game: string; wager: number; ts: number; serverSeed: string; clientSeed: string }
@@ -44,7 +45,11 @@ type WalletContextValue = {
   nonce: number;
   history: HistoryItem[];
   getRngForNonce: (nonce: number) => BetRng | null;
-  deposit: (amount: number) => void;
+  refill5000AvailableAt: number; // epoch ms
+  deposit: (
+    amount: number,
+    opts?: { bypassCooldown?: boolean },
+  ) => { ok: true } | { ok: false; error: string; nextAvailableAt?: number };
   setClientSeed: (seed: string) => void;
   rotateServerSeed: () => { revealedServerSeed: string };
   placeBet: (input: PlaceBetInput) => { multiplier: number; outcome: string; profit: number };
@@ -61,6 +66,7 @@ type WalletContextValue = {
 };
 
 const STORAGE_KEY = "lgc.wallet.v1";
+const REFILL_5000_COOLDOWN_MS = 15 * 60 * 1000;
 
 function clampMoney(n: number) {
   return Math.round(n * 100) / 100;
@@ -90,6 +96,7 @@ function freshState(): WalletState {
     clientSeed,
     nonce: 0,
     history: [],
+    lastRefill5000At: 0,
     openBets: {},
   };
 }
@@ -118,7 +125,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         nonce: 0,
         history: [],
         getRngForNonce: () => null,
-        deposit: () => {},
+        refill5000AvailableAt: 0,
+        deposit: () => ({ ok: false, error: "Wallet not ready" }),
         setClientSeed: () => {},
         rotateServerSeed: () => ({ revealedServerSeed: "" }),
         placeBet: () => ({ multiplier: 0, outcome: "", profit: 0 }),
@@ -134,6 +142,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       clientSeed: state.clientSeed,
       nonce: state.nonce,
       history: state.history,
+      refill5000AvailableAt:
+        (state.lastRefill5000At ?? 0) + REFILL_5000_COOLDOWN_MS,
       getRngForNonce: (betNonce) => {
         const open = state.openBets?.[betNonce];
         if (!open) return null;
@@ -157,11 +167,36 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         };
       },
 
-      deposit: (amount) => {
-        if (!Number.isFinite(amount) || amount <= 0) return;
-        setState((s) =>
-          s ? { ...s, balance: clampMoney(s.balance + amount) } : s,
-        );
+      deposit: (amount, opts) => {
+        if (!Number.isFinite(amount) || amount <= 0) {
+          return { ok: false, error: "Invalid amount" };
+        }
+
+        const bypass = !!opts?.bypassCooldown;
+
+        if (amount === 5000 && !bypass) {
+          const now = Date.now();
+          const nextAt = (state.lastRefill5000At ?? 0) + REFILL_5000_COOLDOWN_MS;
+          if (now < nextAt) {
+            return {
+              ok: false,
+              error: "Refill is on cooldown.",
+              nextAvailableAt: nextAt,
+            };
+          }
+        }
+
+        setState((s) => {
+          if (!s) return s;
+          const now = Date.now();
+          return {
+            ...s,
+            balance: clampMoney(s.balance + amount),
+            lastRefill5000At:
+              amount === 5000 && !bypass ? now : s.lastRefill5000At,
+          };
+        });
+        return { ok: true };
       },
 
       setClientSeed: (seed) => {

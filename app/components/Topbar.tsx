@@ -1,12 +1,32 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "../lib/wallet";
 import { useAuth } from "../lib/authClient";
 
 export function Topbar() {
-  const { balance, deposit, reset } = useWallet();
+  const { balance, deposit, reset, refill5000AvailableAt } = useWallet();
   const { user, loading } = useAuth();
+  const role = user?.role_level ?? 0;
+  const [msg, setMsg] = useState<string | null>(null);
+  const [, forceTick] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => forceTick((x) => (x + 1) % 1000000), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const now = Date.now();
+  const refillCooldownMs = Math.max(0, refill5000AvailableAt - now);
+  const refillLabel = useMemo(() => {
+    if (role >= 1) return "+5000";
+    if (refillCooldownMs <= 0) return "+5000";
+    const s = Math.ceil(refillCooldownMs / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    return `+5000 (${mm}:${ss})`;
+  }, [refillCooldownMs, role]);
 
   return (
     <header className="sticky top-0 z-20 px-4 pt-4 sm:px-6">
@@ -41,10 +61,32 @@ export function Topbar() {
           </div>
           <button
             className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
-            onClick={() => deposit(100)}
+            onClick={() => {
+              setMsg(null);
+              deposit(100);
+            }}
             type="button"
           >
             +100
+          </button>
+          <button
+            className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
+            onClick={() => {
+              setMsg(null);
+              const res = deposit(5000, { bypassCooldown: role >= 1 });
+              if (!res.ok) {
+                setMsg(
+                  res.nextAvailableAt
+                    ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 60000)} min.`
+                    : res.error,
+                );
+              }
+            }}
+            disabled={role < 1 && refillCooldownMs > 0}
+            type="button"
+            title={role < 1 ? "Standard users: one +5000 refill every 15 minutes" : "Admin: unlimited refills"}
+          >
+            {refillLabel}
           </button>
           <button
             className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
@@ -56,6 +98,9 @@ export function Topbar() {
           </button>
         </div>
       </div>
+      {msg ? (
+        <div className="px-1 pt-2 text-xs text-white/60">{msg}</div>
+      ) : null}
     </header>
   );
 }
