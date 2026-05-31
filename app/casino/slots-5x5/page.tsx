@@ -22,6 +22,126 @@ function SymbolIcon({ id }: { id: SymbolId }) {
   );
 }
 
+function ReelColumn(props: {
+  reelIndex: number;
+  strip: SymbolId[];
+  stopAtIndex: number | null;
+  spinning: boolean;
+  stopRequested: boolean;
+  turbo: boolean;
+  onStopped: () => void;
+}) {
+  const { reelIndex, strip, stopAtIndex, spinning, stopRequested, turbo, onStopped } = props;
+
+  const CELL_PX = 56; // matches h-14
+  const REPEAT = 6; // allow a few full rotations before stopping
+  const totalPx = strip.length * CELL_PX;
+
+  const innerRef = useRef<HTMLDivElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const offsetRef = useRef<number>(totalPx * 2); // start in the middle block
+  const stoppedRef = useRef(false);
+
+  const repeated = useMemo(() => {
+    const out: SymbolId[] = [];
+    for (let i = 0; i < REPEAT; i += 1) out.push(...strip);
+    return out;
+  }, [strip]);
+
+  // Spin loop (continuous motion)
+  useEffect(() => {
+    if (!spinning || stopRequested) return;
+    const el = innerRef.current;
+    if (!el) return;
+
+    stoppedRef.current = false;
+    el.style.transition = "none";
+
+    // px per frame (roughly); faster on turbo
+    const speed = turbo ? 42 : 24;
+
+    const tick = () => {
+      offsetRef.current += speed;
+      // keep offset within a safe middle range so we can still "coast" to the stop target
+      const max = totalPx * 4;
+      const min = totalPx * 2;
+      if (offsetRef.current > max) offsetRef.current -= totalPx * 2;
+      if (offsetRef.current < min) offsetRef.current += totalPx * 2;
+
+      el.style.transform = `translateY(-${offsetRef.current}px)`;
+      rafRef.current = window.requestAnimationFrame(tick);
+    };
+
+    rafRef.current = window.requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [spinning, stopRequested, turbo, totalPx]);
+
+  // Stop animation (inertia + stagger)
+  useEffect(() => {
+    if (!spinning || !stopRequested) return;
+    if (stopAtIndex == null) return;
+    const el = innerRef.current;
+    if (!el) return;
+
+    if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+
+    const cur = offsetRef.current;
+    const curMod = ((cur % totalPx) + totalPx) % totalPx;
+    const targetMod = stopAtIndex * CELL_PX;
+    const delta = (targetMod - curMod + totalPx) % totalPx;
+
+    // extra full rotations for realism (more on non-turbo) + per-reel stagger
+    const extraRot = turbo ? 2 : 4;
+    const target = cur + delta + totalPx * extraRot + reelIndex * CELL_PX * 2;
+    offsetRef.current = target;
+
+    const duration = (turbo ? 650 : 1200) + reelIndex * (turbo ? 110 : 170);
+    el.style.transition = `transform ${duration}ms cubic-bezier(.12,.86,.2,1)`;
+    el.style.transform = `translateY(-${target}px)`;
+
+    const finish = () => {
+      if (stoppedRef.current) return;
+      stoppedRef.current = true;
+      el.style.transition = "none";
+      onStopped();
+    };
+    const timeout = window.setTimeout(finish, duration + 80);
+    const onEnd = (e: TransitionEvent) => {
+      if (e.propertyName !== "transform") return;
+      window.clearTimeout(timeout);
+      el.removeEventListener("transitionend", onEnd);
+      finish();
+    };
+    el.addEventListener("transitionend", onEnd);
+
+    return () => {
+      window.clearTimeout(timeout);
+      el.removeEventListener("transitionend", onEnd);
+    };
+  }, [spinning, stopRequested, stopAtIndex, turbo, reelIndex, totalPx]);
+
+  return (
+    <div className="relative h-[280px] w-14 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+      <div ref={innerRef} className="will-change-transform">
+        {repeated.map((sym, idx) => (
+          <div
+            key={idx}
+            className="flex h-14 w-14 items-center justify-center border-b border-white/5"
+          >
+            <SymbolIcon id={sym} />
+          </div>
+        ))}
+      </div>
+      {/* subtle vignette / glass */}
+      <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_0_1px_rgba(255,255,255,.06),inset_0_20px_40px_rgba(0,0,0,.35),inset_0_-20px_40px_rgba(0,0,0,.35)]" />
+    </div>
+  );
+}
+
 export default function Slots5x5Page() {
   const { placeBet, balance } = useWallet();
   const { reportResult } = useAuth();
@@ -38,11 +158,14 @@ export default function Slots5x5Page() {
     null,
   );
 
-  // Animation state (more "cabinet like"): each reel has its own strip and stop delay.
+  // Reel animation state (true reel-strip motion).
+  const [spinId, setSpinId] = useState(0);
   const [reelStrip, setReelStrip] = useState<SymbolId[][]>(() =>
     Array.from({ length: 5 }, () => Array.from({ length: 25 }, () => "cherry")),
   );
-  const [reelStopIndex, setReelStopIndex] = useState<number[]>([0, 0, 0, 0, 0]);
+  const [stopAt, setStopAt] = useState<number[] | null>(null);
+  const [stopRequested, setStopRequested] = useState(false);
+  const stoppedCountRef = useRef(0);
   const baseIndexRef = useRef(0);
 
   const defaultGrid: SymbolId[][] = useMemo(
@@ -56,9 +179,7 @@ export default function Slots5x5Page() {
     [],
   );
 
-  const visibleGrid = grid ?? defaultGrid;
-
-  const buildRandomStrip = (rng: () => number): SymbolId[] => {
+  const buildRandomStrip = (rng: () => number, len: number): SymbolId[] => {
     const ids: SymbolId[] = ["cherry", "lemon", "bar", "bell", "star", "seven", "diamond", "coin"];
     const weights = new Map<SymbolId, number>([
       ["cherry", 26],
@@ -79,7 +200,7 @@ export default function Slots5x5Page() {
       }
       return "cherry";
     };
-    return Array.from({ length: 30 }, pick);
+    return Array.from({ length: len }, pick);
   };
 
   const spin = () => {
@@ -89,6 +210,10 @@ export default function Slots5x5Page() {
 
     setSpinning(true);
     setWaysWin(null);
+    setStopRequested(false);
+    setStopAt(null);
+    setSpinId((x) => x + 1);
+    stoppedCountRef.current = 0;
 
     // Create a new spinning strip for each reel (client-side animation).
     const seed = Date.now() + Math.floor(Math.random() * 999999);
@@ -98,15 +223,17 @@ export default function Slots5x5Page() {
       baseIndexRef.current = (baseIndexRef.current * 1664525 + 1013904223 + seed) >>> 0;
       return (baseIndexRef.current % 100000) / 100000;
     };
-    const strips = Array.from({ length: 5 }, () => buildRandomStrip(rng));
+    const strips = Array.from({ length: 5 }, () => buildRandomStrip(rng, 42));
     setReelStrip(strips);
-    // spin further each reel and stagger stops
-    setReelStopIndex([14, 16, 18, 20, 22]);
 
-    const delay = turbo ? 650 : 1250;
+    const delay = turbo ? 600 : 1050;
     window.setTimeout(() => {
       const mode = freeSpinsLeft > 0 ? ("freespin" as const) : ("base" as const);
       const isFree = mode === "freespin";
+
+      let resGrid: SymbolId[][] | null = null;
+      let resWays: WaysWinInfo | null = null;
+      let resTriggeredFS = false;
 
       const bet = placeBet({
         game: isFree ? "Slots 5x5 (Free Spin)" : "Slots 5x5",
@@ -118,10 +245,9 @@ export default function Slots5x5Page() {
             payoutScale: cfg.slotsPayoutScale ?? 1,
             extraChanceProbability: 0.13,
           });
-          setGrid(res.grid);
-          setWaysWin(res.waysBest);
-          if (res.triggeredFreeSpins && freeSpinsLeft <= 0) setFreeSpinsLeft(5);
-          else if (freeSpinsLeft > 0) setFreeSpinsLeft((n) => Math.max(0, n - 1));
+          resGrid = res.grid;
+          resWays = res.waysBest;
+          resTriggeredFS = res.triggeredFreeSpins;
           const multiplier = (isFree ? 1 : 0) + res.winMultiplier;
           const outcome = res.triggeredFreeSpins
             ? "FREE SPINS!"
@@ -132,11 +258,27 @@ export default function Slots5x5Page() {
         },
       });
 
+      if (resGrid) {
+        setGrid(resGrid);
+        setWaysWin(resWays);
+        if (resTriggeredFS && freeSpinsLeft <= 0) setFreeSpinsLeft(5);
+        else if (freeSpinsLeft > 0) setFreeSpinsLeft((n) => Math.max(0, n - 1));
+
+        // Append the final 5-symbol window to each reel strip so we can stop on it.
+        setReelStrip((prev) =>
+          prev.map((s, i) => {
+            const head = s.slice(0, 42);
+            const tail = s.slice(0, 10);
+            return [...head, ...resGrid![i]!, ...tail];
+          }),
+        );
+        setStopAt([42, 42, 42, 42, 42]); // top index of final window within each reel strip
+        setStopRequested(true);
+      }
+
       const returnMult = wager > 0 ? (wager + bet.profit) / wager : 0;
       setLast({ profit: bet.profit, outcome: bet.outcome, returnMult });
       void reportResult({ game: "Slots 5x5", profit: bet.profit, wager, balance: bet.balanceAfter });
-
-      setSpinning(false);
     }, delay);
   };
 
@@ -222,33 +364,24 @@ export default function Slots5x5Page() {
           </div>
 
           <div className="mt-2 grid grid-cols-5 gap-2">
-            {Array.from({ length: 5 }, (_, reel) => {
-              const stop = reelStopIndex[reel] ?? 0;
-              const strip = reelStrip[reel] ?? [];
-              // show a 5-high window from the strip; during spin we just advance the start index.
-              const windowSyms = strip.slice(stop, stop + 5);
-
-              return (
-                <div key={reel} className="rounded-2xl border border-white/10 bg-white/5 p-2">
-                  <div className="flex flex-col gap-2">
-                    {Array.from({ length: 5 }, (_, row) => {
-                      const sym = spinning ? (windowSyms[row] ?? "cherry") : (visibleGrid[reel]?.[row] ?? "cherry");
-                      const highlight = !!waysWin?.matched?.[reel]?.[row];
-                      return (
-                        <div
-                          key={row}
-                          className={`glass-soft flex h-14 w-14 items-center justify-center rounded-2xl ${
-                            spinning ? "animate-[slotBlur_0.22s_linear_infinite]" : ""
-                          } ${!spinning && highlight ? "ring-2 ring-emerald-300/70" : ""}`}
-                        >
-                          <SymbolIcon id={sym} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+            {Array.from({ length: 5 }, (_, reel) => (
+              <ReelColumn
+                key={`${spinId}-${reel}`}
+                reelIndex={reel}
+                strip={reelStrip[reel] ?? ["cherry"]}
+                stopAtIndex={stopAt ? stopAt[reel] ?? null : null}
+                spinning={spinning}
+                stopRequested={stopRequested}
+                turbo={turbo}
+                onStopped={() => {
+                  stoppedCountRef.current += 1;
+                  if (stoppedCountRef.current >= 5) {
+                    setSpinning(false);
+                    setStopRequested(false);
+                  }
+                }}
+              />
+            ))}
           </div>
 
           {waysWin && waysWin.pay > 0 ? (
@@ -268,4 +401,3 @@ export default function Slots5x5Page() {
     </div>
   );
 }
-
