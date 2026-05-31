@@ -20,12 +20,23 @@ export default function SlotsPage() {
   const [wager, setWager] = useState(5);
   const [spinning, setSpinning] = useState(false);
   const [auto, setAuto] = useState(false);
+  const [autoRemaining, setAutoRemaining] = useState<number>(0); // -1 = infinite
   const autoRef = useRef(false);
+  const [turbo, setTurbo] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
+  const [stopOnWin, setStopOnWin] = useState(true);
+  const [stopOnFeature, setStopOnFeature] = useState(true);
+  const [autoPreset, setAutoPreset] = useState<0 | 10 | 25 | 50 | -1>(25);
+
+  const [holdMask, setHoldMask] = useState<boolean[]>([false, false, false, false, false]);
+  const [nudge, setNudge] = useState<number[]>([0, 0, 0, 0, 0]); // -1/0/+1, applied to held reels
 
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0);
   const [pendingGamble, setPendingGamble] = useState<number | null>(null);
   const [lastGrid, setLastGrid] = useState<SymbolKey[][] | null>(null);
   const [lastWasFreeSpin, setLastWasFreeSpin] = useState(false);
+  const [holdSpinSteps, setHoldSpinSteps] = useState<SymbolKey[][][] | null>(null);
+  const [holdSpinStepIdx, setHoldSpinStepIdx] = useState(0);
 
   const [last, setLast] = useState<{
     profit: number;
@@ -36,6 +47,30 @@ export default function SlotsPage() {
   useEffect(() => {
     autoRef.current = auto;
   }, [auto]);
+
+  // Play Hold&Spin animation frames if present
+  useEffect(() => {
+    if (!holdSpinSteps || holdSpinSteps.length === 0) return;
+    setHoldSpinStepIdx(0);
+    const id = window.setInterval(() => {
+      setHoldSpinStepIdx((i) => {
+        const next = i + 1;
+        if (next >= holdSpinSteps.length) {
+          window.clearInterval(id);
+          return i;
+        }
+        return next;
+      });
+    }, turbo ? 220 : 320);
+    return () => window.clearInterval(id);
+  }, [holdSpinSteps, turbo]);
+
+  useEffect(() => {
+    if (!holdSpinSteps || holdSpinSteps.length === 0) return;
+    if (holdSpinStepIdx < holdSpinSteps.length - 1) return;
+    const id = window.setTimeout(() => setHoldSpinSteps(null), 1200);
+    return () => window.clearTimeout(id);
+  }, [holdSpinStepIdx, holdSpinSteps]);
 
   const payInfo = useMemo(
     () => ({
@@ -67,6 +102,7 @@ export default function SlotsPage() {
     // In this prototype, "free spins" still use the same wager, but we refund the stake via +1x base multiplier.
     if (balance < wager) {
       setAuto(false);
+      setAutoRemaining(0);
       return;
     }
 
@@ -74,19 +110,29 @@ export default function SlotsPage() {
     window.setTimeout(() => {
       let grid: SymbolKey[][] | null = null;
       let triggeredFreeSpins = false;
+      let triggeredHoldSpin = false;
+      let hsSteps: SymbolKey[][][] | null = null;
 
       const bet = placeBet({
         game: isFree ? "Slots (Free Spin)" : "Slots",
         wager,
         resolve: (rng) => {
+          const heldColumns =
+            !isFree && lastGrid
+              ? lastGrid.map((col, i) => (holdMask[i] ? col : null))
+              : [null, null, null, null, null];
           const spinRes = spinSlots243Ways({
             rngFloat: rng.float,
             mode,
             payoutScale: cfg.slotsPayoutScale ?? 1,
             extraChanceProbability: payInfo.extraChanceProbability,
+            heldColumns,
+            nudge,
           });
           grid = spinRes.grid;
           triggeredFreeSpins = spinRes.triggeredFreeSpins;
+          triggeredHoldSpin = spinRes.triggeredHoldSpin;
+          hsSteps = spinRes.holdSpin?.steps ?? null;
           const multiplier = (isFree ? 1 : 0) + spinRes.winMultiplier;
           return { multiplier, outcome: spinRes.outcome };
         },
@@ -99,6 +145,7 @@ export default function SlotsPage() {
       });
       setLastGrid(grid);
       setLastWasFreeSpin(isFree);
+      setHoldSpinSteps(hsSteps);
       void reportResult({ game: "Slots", profit: bet.profit, wager, balance: bet.balanceAfter });
 
       // Free spins bookkeeping
@@ -108,15 +155,38 @@ export default function SlotsPage() {
         setFreeSpinsLeft((n) => Math.max(0, n - 1));
       }
 
+      // If a feature triggers, clear holds/nudges (cabinet-style)
+      if (triggeredFreeSpins || triggeredHoldSpin) {
+        setHoldMask([false, false, false, false, false]);
+        setNudge([0, 0, 0, 0, 0]);
+      } else {
+        // nudges are single-use
+        setNudge([0, 0, 0, 0, 0]);
+      }
+
       // Gamble offer only after a paid win (and only when not autoplaying).
-      if (!autoRef.current && !isFree && bet.profit > 0) {
+      if (!autoRef.current && !isFree && bet.profit > 0 && !triggeredHoldSpin) {
         setPendingGamble(bet.profit);
       } else {
         setPendingGamble(null);
       }
 
+      // Autoplay stop conditions / countdown
+      if (autoRef.current) {
+        const shouldStop =
+          (stopOnWin && bet.profit > 0) ||
+          (stopOnFeature && (triggeredFreeSpins || triggeredHoldSpin));
+        if (shouldStop) {
+          setAuto(false);
+          setAutoRemaining(0);
+        } else if (autoRemaining > 0) {
+          setAutoRemaining((n) => Math.max(0, n - 1));
+          if (autoRemaining - 1 <= 0) setAuto(false);
+        }
+      }
+
       setSpinning(false);
-    }, 850);
+    }, turbo ? 350 : 850);
   };
 
   useEffect(() => {
@@ -127,12 +197,16 @@ export default function SlotsPage() {
       setPendingGamble(null);
       return;
     }
+    if (autoRemaining === 0) {
+      setAuto(false);
+      return;
+    }
     const id = window.setTimeout(() => {
       if (autoRef.current) doSpin();
     }, 250);
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auto, spinning, wager, cfg.slotsPayoutScale, balance, pendingGamble, freeSpinsLeft]);
+  }, [auto, spinning, wager, cfg.slotsPayoutScale, balance, pendingGamble, freeSpinsLeft, autoRemaining]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -174,6 +248,16 @@ export default function SlotsPage() {
                 Free spins left: <span className="font-mono">{freeSpinsLeft}</span>
               </div>
             ) : null}
+            {auto ? (
+              <div className="mt-2 text-white/60">
+                Autoplay:{" "}
+                <span className="font-mono text-white/80">
+                  {autoRemaining < 0 ? "∞" : autoRemaining}
+                </span>{" "}
+                spins left
+                {turbo ? <span className="ml-2 text-xs text-white/45">(Turbo)</span> : null}
+              </div>
+            ) : null}
           </div>
 
           <label className="mt-4 block text-xs text-white/60">Wager per spin (ⓒ)</label>
@@ -185,6 +269,136 @@ export default function SlotsPage() {
             onChange={(e) => setWager(Number(e.target.value))}
             className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
           />
+
+          {/* Cabinet-style options */}
+          <button
+            type="button"
+            className="mt-4 text-xs text-white/65 underline decoration-white/20 underline-offset-4 hover:text-white"
+            onClick={() => setShowOptions((v) => !v)}
+          >
+            {showOptions ? "Hide options" : "Options"}
+          </button>
+          {showOptions ? (
+            <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={turbo}
+                    onChange={(e) => setTurbo(e.target.checked)}
+                  />
+                  Turbo
+                </label>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={stopOnWin}
+                    onChange={(e) => setStopOnWin(e.target.checked)}
+                  />
+                  Stop on win
+                </label>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={stopOnFeature}
+                    onChange={(e) => setStopOnFeature(e.target.checked)}
+                  />
+                  Stop on feature
+                </label>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-white/55">Autoplay preset:</span>
+                <select
+                  className="rounded-xl border border-white/10 bg-white/5 px-2 py-1 text-xs text-white"
+                  value={autoPreset}
+                  onChange={(e) => setAutoPreset(Number(e.target.value) as any)}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={-1}>∞</option>
+                </select>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Hold & Nudge (only in base game, after at least one spin) */}
+          {!spinning && freeSpinsLeft <= 0 && lastGrid ? (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
+              <p className="text-xs font-medium text-white/70">Hold reels</p>
+              <div className="mt-2 grid grid-cols-5 gap-2">
+                {holdMask.map((h, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`rounded-2xl px-2 py-2 text-xs font-medium transition ${
+                      h ? "bg-emerald-500/20 text-emerald-100" : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                    onClick={() =>
+                      setHoldMask((m) => {
+                        const next = [...m];
+                        next[i] = !next[i];
+                        return next;
+                      })
+                    }
+                    title="Hold this reel for the next spin"
+                  >
+                    Hold {i + 1}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] leading-5 text-white/55">
+                Optional nudge (applies to held reels on the next spin).
+              </p>
+              <div className="mt-2 grid grid-cols-5 gap-2">
+                {holdMask.map((h, i) => (
+                  <div key={i} className="flex items-center justify-center gap-1">
+                    <button
+                      type="button"
+                      disabled={!h}
+                      className="rounded-xl bg-white/5 px-2 py-1 text-xs text-white/75 disabled:opacity-30"
+                      onClick={() =>
+                        setNudge((n) => {
+                          const next = [...n];
+                          next[i] = -1;
+                          return next;
+                        })
+                      }
+                      title="Nudge up"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!h}
+                      className="rounded-xl bg-white/5 px-2 py-1 text-xs text-white/75 disabled:opacity-30"
+                      onClick={() =>
+                        setNudge((n) => {
+                          const next = [...n];
+                          next[i] = 1;
+                          return next;
+                        })
+                      }
+                      title="Nudge down"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="mt-3 text-xs text-white/60 underline decoration-white/20 underline-offset-4 hover:text-white"
+                onClick={() => {
+                  setHoldMask([false, false, false, false, false]);
+                  setNudge([0, 0, 0, 0, 0]);
+                }}
+              >
+                Clear holds
+              </button>
+            </div>
+          ) : null}
 
           <div className="mt-5 flex flex-wrap gap-2">
             <button
@@ -199,7 +413,17 @@ export default function SlotsPage() {
               className="rounded-2xl px-4 py-2 text-sm font-medium text-white/75 transition hover:text-white disabled:opacity-40"
               type="button"
               disabled={spinning && !auto}
-              onClick={() => setAuto((a) => !a)}
+              onClick={() => {
+                setAuto((a) => {
+                  const next = !a;
+                  if (next) {
+                    setAutoRemaining(autoPreset);
+                  } else {
+                    setAutoRemaining(0);
+                  }
+                  return next;
+                });
+              }}
             >
               {auto ? "Stop autoplay" : "Autoplay"}
             </button>
@@ -265,9 +489,19 @@ export default function SlotsPage() {
         <div className="glass-soft glass-shine rounded-3xl p-5">
           <p className="text-sm font-medium text-white">Result</p>
 
+          {holdSpinSteps ? (
+            <p className="mt-2 text-xs text-white/60">
+              Hold &amp; Spin bonus… <span className="font-mono">{holdSpinStepIdx + 1}</span>/
+              <span className="font-mono">{holdSpinSteps.length}</span>
+            </p>
+          ) : null}
+
           <div className="mt-3 flex items-center justify-center">
             <div className="grid grid-cols-5 gap-2">
-              {(lastGrid ?? defaultGrid).map((col, x) => (
+              {((holdSpinSteps ? holdSpinSteps[Math.min(holdSpinStepIdx, holdSpinSteps.length - 1)] : null) ??
+                lastGrid ??
+                defaultGrid
+              ).map((col, x) => (
                 <div key={x} className="flex flex-col gap-2">
                   {col.map((s, y) => (
                     <div
@@ -275,7 +509,15 @@ export default function SlotsPage() {
                       className={`glass-soft flex h-14 w-14 items-center justify-center rounded-3xl text-2xl ${
                         spinning ? "animate-[slotBlur_0.25s_linear_infinite]" : ""
                       }`}
-                      title={s === WILD ? "Wild" : s === SCATTER ? "Scatter" : ""}
+                      title={
+                        s === WILD
+                          ? "Wild"
+                          : s === SCATTER
+                            ? "Scatter"
+                            : s === "💰"
+                              ? "Hold & Spin Coin"
+                              : ""
+                      }
                     >
                       {s}
                     </div>
@@ -315,6 +557,10 @@ export default function SlotsPage() {
               <li>
                 Extra Chance: when you land exactly 2 scatters, it may upgrade into free spins.
               </li>
+              <li>
+                <span className="font-medium text-white/70">💰</span> ×3 triggers Hold &amp; Spin (coins lock with respins).
+              </li>
+              <li>Hold reels + optional nudge available between base-game spins.</li>
               <li>Gamble: after a paid win you can double-or-nothing (50/50).</li>
             </ul>
           </div>
