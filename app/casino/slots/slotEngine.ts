@@ -22,6 +22,14 @@ export const BONUS: SymbolKey = "💰";
 
 export type SpinMode = "base" | "freespin";
 
+export type WaysWinInfo = {
+  symbol: Exclude<SymbolKey, typeof SCATTER | typeof BONUS>;
+  len: number; // 3..5
+  ways: number; // product of matches per reel
+  pay: number; // multiplier contribution for this win
+  matched: boolean[][]; // [reel][row] true if cell participates (symbol or wild) for reels within len
+};
+
 export type SpinResult = {
   grid: SymbolKey[][]; // [reel][row]
   scatterCount: number;
@@ -157,6 +165,48 @@ function waysPayout(grid: SymbolKey[][]) {
 
   const detail = wins.length ? `WIN ${wins.slice(0, 3).join(", ")}${wins.length > 3 ? "…" : ""}` : "LOSE";
   return { winMultiplier: total, detail };
+}
+
+export function analyzeWaysWin(grid: SymbolKey[][]): WaysWinInfo | null {
+  const reels = grid.length;
+  const rows = grid[0]?.length ?? 0;
+  if (reels < 3 || rows < 1) return null;
+
+  const symbols = Object.keys(PAY_WAYS) as Array<Exclude<SymbolKey, typeof SCATTER | typeof BONUS>>;
+  let best: WaysWinInfo | null = null;
+
+  for (const sym of symbols) {
+    const counts: number[] = [];
+    for (let x = 0; x < reels; x++) {
+      let c = 0;
+      for (let y = 0; y < rows; y++) {
+        const v = grid[x]![y]!;
+        if (v === sym || v === WILD) c += 1;
+      }
+      counts.push(c);
+    }
+    let len = 0;
+    for (let x = 0; x < counts.length; x++) {
+      if (counts[x]! <= 0) break;
+      len += 1;
+    }
+    if (len < 3) continue;
+    const ways = counts.slice(0, len).reduce((a, b) => a * b, 1);
+    const pay = PAY_WAYS[sym][len - 3] * ways;
+    if (pay <= 0) continue;
+
+    const matched: boolean[][] = Array.from({ length: reels }, (_, x) =>
+      Array.from({ length: rows }, (_, y) => {
+        if (x >= len) return false;
+        const v = grid[x]![y]!;
+        return v === sym || v === WILD;
+      }),
+    );
+
+    if (!best || pay > best.pay) best = { symbol: sym, len, ways, pay, matched };
+  }
+
+  return best;
 }
 
 function rotateColumn(col: SymbolKey[], delta: number) {

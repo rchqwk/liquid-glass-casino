@@ -9,6 +9,8 @@ import {
   WILD,
   type SymbolKey,
   type SpinMode,
+  type WaysWinInfo,
+  analyzeWaysWin,
   spinSlots243Ways,
 } from "./slotEngine";
 
@@ -38,6 +40,7 @@ export default function SlotsPage() {
   const [lastWasFreeSpin, setLastWasFreeSpin] = useState(false);
   const [holdSpinSteps, setHoldSpinSteps] = useState<SymbolKey[][][] | null>(null);
   const [holdSpinStepIdx, setHoldSpinStepIdx] = useState(0);
+  const [lastWaysWin, setLastWaysWin] = useState<WaysWinInfo | null>(null);
 
   const [last, setLast] = useState<{
     profit: number;
@@ -147,6 +150,7 @@ export default function SlotsPage() {
       setLastGrid(grid);
       setLastWasFreeSpin(isFree);
       setHoldSpinSteps(hsSteps);
+      setLastWaysWin(grid ? analyzeWaysWin(grid) : null);
       void reportResult({ game: "Slots", profit: bet.profit, wager, balance: bet.balanceAfter });
 
       // Free spins bookkeeping
@@ -335,81 +339,7 @@ export default function SlotsPage() {
           ) : null}
 
           {/* Hold & Nudge (only in base game, after at least one spin) */}
-          {!spinning && freeSpinsLeft <= 0 && lastGrid ? (
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
-              <p className="text-xs font-medium text-white/70">Hold reels</p>
-              <div className="mt-2 grid grid-cols-5 gap-2">
-                {holdMask.map((h, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    className={`rounded-2xl px-2 py-2 text-xs font-medium transition ${
-                      h ? "bg-emerald-500/20 text-emerald-100" : "bg-white/5 text-white/70 hover:bg-white/10"
-                    }`}
-                    onClick={() =>
-                      setHoldMask((m) => {
-                        const next = [...m];
-                        next[i] = !next[i];
-                        return next;
-                      })
-                    }
-                    title="Hold this reel for the next spin"
-                  >
-                    Hold {i + 1}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-[11px] leading-5 text-white/55">
-                Optional nudge (applies to held reels on the next spin).
-              </p>
-              <div className="mt-2 grid grid-cols-5 gap-2">
-                {holdMask.map((h, i) => (
-                  <div key={i} className="flex items-center justify-center gap-1">
-                    <button
-                      type="button"
-                      disabled={!h}
-                      className="rounded-xl bg-white/5 px-2 py-1 text-xs text-white/75 disabled:opacity-30"
-                      onClick={() =>
-                        setNudge((n) => {
-                          const next = [...n];
-                          next[i] = -1;
-                          return next;
-                        })
-                      }
-                      title="Nudge up"
-                    >
-                      ▲
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!h}
-                      className="rounded-xl bg-white/5 px-2 py-1 text-xs text-white/75 disabled:opacity-30"
-                      onClick={() =>
-                        setNudge((n) => {
-                          const next = [...n];
-                          next[i] = 1;
-                          return next;
-                        })
-                      }
-                      title="Nudge down"
-                    >
-                      ▼
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="mt-3 text-xs text-white/60 underline decoration-white/20 underline-offset-4 hover:text-white"
-                onClick={() => {
-                  setHoldMask([false, false, false, false, false]);
-                  setNudge([0, 0, 0, 0, 0]);
-                }}
-              >
-                Clear holds
-              </button>
-            </div>
-          ) : null}
+          {/* Hold controls moved under reels (Result panel) */}
 
           <div className="mt-5 flex flex-wrap gap-2">
             <button
@@ -500,6 +430,14 @@ export default function SlotsPage() {
         <div className="glass-soft glass-shine rounded-3xl p-5">
           <p className="text-sm font-medium text-white">Result</p>
 
+          {lastWaysWin && lastWaysWin.pay > 0 ? (
+            <div className="mt-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+              Ways win: <span className="text-base">{lastWaysWin.symbol}</span>{" "}
+              <span className="font-mono">{lastWaysWin.len}</span> reels •{" "}
+              <span className="font-mono">{lastWaysWin.ways}</span> ways
+            </div>
+          ) : null}
+
           {holdSpinSteps ? (
             <p className="mt-2 text-xs text-white/60">
               Hold &amp; Spin bonus… <span className="font-mono">{holdSpinStepIdx + 1}</span>/
@@ -508,7 +446,24 @@ export default function SlotsPage() {
           ) : null}
 
           <div className="mt-3 flex items-center justify-center">
-            <div className="grid grid-cols-5 gap-2">
+            <div className="relative">
+              {/* Visual marker above reels to show which reels are part of the current ways win */}
+              <div className="mb-2 grid grid-cols-5 gap-2">
+                {Array.from({ length: 5 }, (_, i) => {
+                  const active = !!lastWaysWin && lastWaysWin.pay > 0 && i < lastWaysWin.len;
+                  return (
+                    <div
+                      key={i}
+                      className={`h-2 rounded-full ${
+                        active ? "bg-emerald-400/70" : "bg-white/10"
+                      }`}
+                      title={active ? "This reel contributes to the winning ways" : ""}
+                    />
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-5 gap-2">
               {((holdSpinSteps ? holdSpinSteps[Math.min(holdSpinStepIdx, holdSpinSteps.length - 1)] : null) ??
                 lastGrid ??
                 defaultGrid
@@ -519,6 +474,10 @@ export default function SlotsPage() {
                       key={`${x}-${y}`}
                       className={`glass-soft flex h-14 w-14 items-center justify-center rounded-3xl text-2xl ${
                         spinning ? "animate-[slotBlur_0.25s_linear_infinite]" : ""
+                      } ${
+                        !holdSpinSteps && lastWaysWin?.matched?.[x]?.[y]
+                          ? "ring-2 ring-emerald-300/70"
+                          : ""
                       }`}
                       title={
                         s === WILD
@@ -536,7 +495,83 @@ export default function SlotsPage() {
                 </div>
               ))}
             </div>
+            </div>
           </div>
+
+          {/* Hold reels directly below the reels (base game only) */}
+          {!spinning && freeSpinsLeft <= 0 && lastGrid ? (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
+              <p className="text-xs font-medium text-white/70">Hold reels (next spin)</p>
+              <div className="mt-2 grid grid-cols-5 gap-2">
+                {holdMask.map((h, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`rounded-2xl px-2 py-2 text-xs font-medium transition ${
+                      h ? "bg-emerald-500/20 text-emerald-100" : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                    onClick={() =>
+                      setHoldMask((m) => {
+                        const next = [...m];
+                        next[i] = !next[i];
+                        return next;
+                      })
+                    }
+                  >
+                    {h ? "HELD" : "HOLD"}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-3 grid grid-cols-5 gap-2">
+                {holdMask.map((h, i) => (
+                  <div key={i} className="flex items-center justify-center gap-1">
+                    <button
+                      type="button"
+                      disabled={!h}
+                      className="rounded-xl bg-white/5 px-2 py-1 text-xs text-white/75 disabled:opacity-30"
+                      onClick={() =>
+                        setNudge((n) => {
+                          const next = [...n];
+                          next[i] = -1;
+                          return next;
+                        })
+                      }
+                      title="Nudge up"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!h}
+                      className="rounded-xl bg-white/5 px-2 py-1 text-xs text-white/75 disabled:opacity-30"
+                      onClick={() =>
+                        setNudge((n) => {
+                          const next = [...n];
+                          next[i] = 1;
+                          return next;
+                        })
+                      }
+                      title="Nudge down"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                className="mt-3 text-xs text-white/60 underline decoration-white/20 underline-offset-4 hover:text-white"
+                onClick={() => {
+                  setHoldMask([false, false, false, false, false]);
+                  setNudge([0, 0, 0, 0, 0]);
+                }}
+              >
+                Clear holds
+              </button>
+            </div>
+          ) : null}
 
           {!last ? (
             <p className="mt-4 text-sm text-white/60">Spin to play.</p>
