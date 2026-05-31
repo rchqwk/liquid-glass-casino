@@ -14,6 +14,121 @@ import {
   spinSlots243Ways,
 } from "./slotEngine";
 
+function ReelColumnEmoji(props: {
+  reelIndex: number;
+  strip: SymbolKey[];
+  stopAtIndex: number | null;
+  spinning: boolean;
+  stopRequested: boolean;
+  turbo: boolean;
+  onStopped: () => void;
+}) {
+  const { reelIndex, strip, stopAtIndex, spinning, stopRequested, turbo, onStopped } = props;
+
+  const CELL_PX = 56; // h-14
+  const REPEAT = 6;
+  const totalPx = strip.length * CELL_PX;
+
+  const innerRef = useRef<HTMLDivElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const offsetRef = useRef<number>(totalPx * 2);
+  const stoppedRef = useRef(false);
+
+  const repeated = useMemo(() => {
+    const out: SymbolKey[] = [];
+    for (let i = 0; i < REPEAT; i += 1) out.push(...strip);
+    return out;
+  }, [strip]);
+
+  // Continuous scrolling while spinning (until stopRequested)
+  useEffect(() => {
+    if (!spinning || stopRequested) return;
+    const el = innerRef.current;
+    if (!el) return;
+
+    stoppedRef.current = false;
+    el.style.transition = "none";
+    const speed = turbo ? 42 : 24;
+
+    const tick = () => {
+      offsetRef.current += speed;
+      const max = totalPx * 4;
+      const min = totalPx * 2;
+      if (offsetRef.current > max) offsetRef.current -= totalPx * 2;
+      if (offsetRef.current < min) offsetRef.current += totalPx * 2;
+      el.style.transform = `translateY(-${offsetRef.current}px)`;
+      rafRef.current = window.requestAnimationFrame(tick);
+    };
+
+    rafRef.current = window.requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [spinning, stopRequested, turbo, totalPx]);
+
+  // Ease-out to a precise stop position once stopRequested
+  useEffect(() => {
+    if (!spinning || !stopRequested) return;
+    if (stopAtIndex == null) return;
+    const el = innerRef.current;
+    if (!el) return;
+
+    if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+
+    const cur = offsetRef.current;
+    const curMod = ((cur % totalPx) + totalPx) % totalPx;
+    const targetMod = stopAtIndex * CELL_PX;
+    const delta = (targetMod - curMod + totalPx) % totalPx;
+
+    const extraRot = turbo ? 2 : 4;
+    const target = cur + delta + totalPx * extraRot + reelIndex * CELL_PX;
+    offsetRef.current = target;
+
+    const duration = (turbo ? 520 : 980) + reelIndex * (turbo ? 90 : 130);
+    el.style.transition = `transform ${duration}ms cubic-bezier(.12,.86,.2,1)`;
+    el.style.transform = `translateY(-${target}px)`;
+
+    const finish = () => {
+      if (stoppedRef.current) return;
+      stoppedRef.current = true;
+      el.style.transition = "none";
+      onStopped();
+    };
+
+    const timeout = window.setTimeout(finish, duration + 80);
+    const onEnd = (e: TransitionEvent) => {
+      if (e.propertyName !== "transform") return;
+      window.clearTimeout(timeout);
+      el.removeEventListener("transitionend", onEnd);
+      finish();
+    };
+    el.addEventListener("transitionend", onEnd);
+
+    return () => {
+      window.clearTimeout(timeout);
+      el.removeEventListener("transitionend", onEnd);
+    };
+  }, [spinning, stopRequested, stopAtIndex, turbo, reelIndex, totalPx, onStopped]);
+
+  return (
+    <div className="relative h-[168px] w-14 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+      <div ref={innerRef} className="will-change-transform">
+        {repeated.map((sym, idx) => (
+          <div
+            key={idx}
+            className="flex h-14 w-14 items-center justify-center border-b border-white/5 text-2xl"
+          >
+            {sym}
+          </div>
+        ))}
+      </div>
+      <div className="pointer-events-none absolute inset-0 rounded-3xl shadow-[inset_0_0_0_1px_rgba(255,255,255,.06),inset_0_16px_28px_rgba(0,0,0,.35),inset_0_-16px_28px_rgba(0,0,0,.35)]" />
+    </div>
+  );
+}
+
 export default function SlotsPage() {
   const { placeBet, balance } = useWallet();
   const { reportResult } = useAuth();
@@ -34,6 +149,17 @@ export default function SlotsPage() {
   const [holdMask, setHoldMask] = useState<boolean[]>([false, false, false, false, false]);
   const [nudge, setNudge] = useState<number[]>([0, 0, 0, 0, 0]); // -1/0/+1, applied to held reels
   const MAX_HELD_REELS = 2;
+
+  // True reel-strip animation state
+  const REEL_BASE_LEN = 42;
+  const [spinId, setSpinId] = useState(0);
+  const [reelStrip, setReelStrip] = useState<SymbolKey[][]>(() =>
+    Array.from({ length: 5 }, () => Array.from({ length: REEL_BASE_LEN }, () => "🍒")),
+  );
+  const [stopAt, setStopAt] = useState<number[] | null>(null);
+  const [stopRequested, setStopRequested] = useState(false);
+  const stoppedCountRef = useRef(0);
+  const baseIndexRef = useRef(0);
 
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0);
   const [pendingGamble, setPendingGamble] = useState<number | null>(null);
@@ -96,6 +222,36 @@ export default function SlotsPage() {
     [],
   );
 
+  const buildRandomStrip = useMemo(() => {
+    const ids: SymbolKey[] = ["🍒", "🍋", "🍇", "🍉", "🍬", "🥨", "🍀", "⭐", "🔔", "💎", "👑", "7", "🪙", "💰"];
+    const weights = new Map<SymbolKey, number>([
+      ["🍒", 22],
+      ["🍋", 22],
+      ["🍇", 18],
+      ["🍉", 16],
+      ["🍬", 24],
+      ["🥨", 24],
+      ["🍀", 20],
+      ["⭐", 10],
+      ["🔔", 8],
+      ["💎", 2],
+      ["👑", 4],
+      ["7", 2],
+      ["🪙", 1.3],
+      ["💰", 0.8],
+    ]);
+    const total = ids.reduce((a, s) => a + (weights.get(s) ?? 1), 0);
+    const pick = (r01: number) => {
+      let x = r01 * total;
+      for (const s of ids) {
+        x -= weights.get(s) ?? 1;
+        if (x <= 0) return s;
+      }
+      return "🍒";
+    };
+    return (rng: () => number, len: number) => Array.from({ length: len }, () => pick(rng()));
+  }, []);
+
   const doSpin = () => {
     if (spinning) return;
     if (!Number.isFinite(wager) || wager <= 0) return;
@@ -112,6 +268,20 @@ export default function SlotsPage() {
     }
 
     setSpinning(true);
+    setLastWaysWin(null);
+    setStopRequested(false);
+    setStopAt(null);
+    setSpinId((x) => x + 1);
+    stoppedCountRef.current = 0;
+
+    // Start reel motion immediately (client-side animation only).
+    const seed = Date.now() + Math.floor(Math.random() * 999999);
+    const rng = () => {
+      baseIndexRef.current = (baseIndexRef.current * 1664525 + 1013904223 + seed) >>> 0;
+      return (baseIndexRef.current % 100000) / 100000;
+    };
+    setReelStrip(Array.from({ length: 5 }, () => buildRandomStrip(rng, REEL_BASE_LEN)));
+
     window.setTimeout(() => {
       let grid: SymbolKey[][] | null = null;
       let triggeredFreeSpins = false;
@@ -154,6 +324,23 @@ export default function SlotsPage() {
       setLastWaysWin(grid ? analyzeWaysWin(grid) : null);
       void reportResult({ game: "Slots", profit: bet.profit, wager, balance: bet.balanceAfter });
 
+      // Tell reels to stop on the final window
+      if (!hsSteps && grid) {
+        setReelStrip((prev) =>
+          prev.map((s, i) => {
+            const head = s.slice(0, REEL_BASE_LEN);
+            const tail = s.slice(0, 10);
+            return [...head, ...grid![i]!, ...tail];
+          }),
+        );
+        setStopAt([REEL_BASE_LEN, REEL_BASE_LEN, REEL_BASE_LEN, REEL_BASE_LEN, REEL_BASE_LEN]);
+        setStopRequested(true);
+      } else {
+        // If a hold&spin bonus is running, don't keep reels spinning.
+        setSpinning(false);
+        setStopRequested(false);
+      }
+
       // Free spins bookkeeping
       if (triggeredFreeSpins && freeSpinsLeft <= 0) {
         setFreeSpinsLeft(5);
@@ -195,7 +382,6 @@ export default function SlotsPage() {
         }
       }
 
-      setSpinning(false);
     }, turbo ? 350 : 850);
   };
 
@@ -453,7 +639,8 @@ export default function SlotsPage() {
               {/* Visual marker above reels to show which reels are part of the current ways win */}
               <div className="mb-2 grid grid-cols-5 gap-2">
                 {Array.from({ length: 5 }, (_, i) => {
-                  const active = !!lastWaysWin && lastWaysWin.pay > 0 && i < lastWaysWin.len;
+                  const active =
+                    !spinning && !!lastWaysWin && lastWaysWin.pay > 0 && i < lastWaysWin.len;
                   return (
                     <div
                       key={i}
@@ -466,38 +653,80 @@ export default function SlotsPage() {
                 })}
               </div>
 
-              <div className="grid grid-cols-5 gap-2">
-              {((holdSpinSteps ? holdSpinSteps[Math.min(holdSpinStepIdx, holdSpinSteps.length - 1)] : null) ??
-                lastGrid ??
-                defaultGrid
-              ).map((col, x) => (
-                <div key={x} className="flex flex-col gap-2">
-                  {col.map((s, y) => (
-                    <div
-                      key={`${x}-${y}`}
-                      className={`glass-soft flex h-14 w-14 items-center justify-center rounded-3xl text-2xl ${
-                        spinning ? "animate-[slotBlur_0.25s_linear_infinite]" : ""
-                      } ${
-                        !holdSpinSteps && lastWaysWin?.matched?.[x]?.[y]
-                          ? "ring-2 ring-emerald-300/70"
-                          : ""
-                      }`}
-                      title={
-                        s === WILD
-                          ? "Wild"
-                          : s === SCATTER
-                            ? "Scatter"
-                            : s === "💰"
-                              ? "Hold & Spin Coin"
-                              : ""
-                      }
-                    >
-                      {s}
+              {holdSpinSteps ? (
+                <div className="grid grid-cols-5 gap-2">
+                  {holdSpinSteps[Math.min(holdSpinStepIdx, holdSpinSteps.length - 1)]!.map(
+                    (col, x) => (
+                      <div key={x} className="flex flex-col gap-2">
+                        {col.map((s, y) => (
+                          <div
+                            key={`${x}-${y}`}
+                            className="glass-soft flex h-14 w-14 items-center justify-center rounded-3xl text-2xl"
+                            title={
+                              s === WILD
+                                ? "Wild"
+                                : s === SCATTER
+                                  ? "Scatter"
+                                  : s === "💰"
+                                    ? "Hold & Spin Coin"
+                                    : ""
+                            }
+                          >
+                            {s}
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                  )}
+                </div>
+              ) : spinning ? (
+                <div className="grid grid-cols-5 gap-2">
+                  {Array.from({ length: 5 }, (_, reel) => (
+                    <ReelColumnEmoji
+                      key={`${spinId}-${reel}`}
+                      reelIndex={reel}
+                      strip={reelStrip[reel] ?? ["🍒"]}
+                      stopAtIndex={stopAt ? stopAt[reel] ?? null : null}
+                      spinning={spinning}
+                      stopRequested={stopRequested}
+                      turbo={turbo}
+                      onStopped={() => {
+                        stoppedCountRef.current += 1;
+                        if (stoppedCountRef.current >= 5) {
+                          setSpinning(false);
+                          setStopRequested(false);
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-5 gap-2">
+                  {(lastGrid ?? defaultGrid).map((col, x) => (
+                    <div key={x} className="flex flex-col gap-2">
+                      {col.map((s, y) => (
+                        <div
+                          key={`${x}-${y}`}
+                          className={`glass-soft flex h-14 w-14 items-center justify-center rounded-3xl text-2xl ${
+                            lastWaysWin?.matched?.[x]?.[y] ? "ring-2 ring-emerald-300/70" : ""
+                          }`}
+                          title={
+                            s === WILD
+                              ? "Wild"
+                              : s === SCATTER
+                                ? "Scatter"
+                                : s === "💰"
+                                  ? "Hold & Spin Coin"
+                                  : ""
+                          }
+                        >
+                          {s}
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
-              ))}
-            </div>
+              )}
             </div>
           </div>
 
