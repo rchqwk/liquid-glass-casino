@@ -25,6 +25,7 @@ export default function SlotsPage() {
   const [turbo, setTurbo] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
   const [stopOnWin, setStopOnWin] = useState(true);
+  const [stopOnWinOver5x, setStopOnWinOver5x] = useState(false);
   const [stopOnFeature, setStopOnFeature] = useState(true);
   const [autoPreset, setAutoPreset] = useState<0 | 10 | 25 | 50 | -1>(25);
 
@@ -173,8 +174,10 @@ export default function SlotsPage() {
 
       // Autoplay stop conditions / countdown
       if (autoRef.current) {
+        const returnMult = wager > 0 ? (wager + bet.profit) / wager : 0;
         const shouldStop =
           (stopOnWin && bet.profit > 0) ||
+          (stopOnWinOver5x && returnMult >= 5) ||
           (stopOnFeature && (triggeredFreeSpins || triggeredHoldSpin));
         if (shouldStop) {
           setAuto(false);
@@ -296,6 +299,14 @@ export default function SlotsPage() {
                     onChange={(e) => setStopOnWin(e.target.checked)}
                   />
                   Stop on win
+                </label>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={stopOnWinOver5x}
+                    onChange={(e) => setStopOnWinOver5x(e.target.checked)}
+                  />
+                  Stop on win ≥ 5x
                 </label>
                 <label className="flex cursor-pointer items-center gap-2">
                   <input
