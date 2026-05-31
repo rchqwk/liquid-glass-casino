@@ -50,8 +50,8 @@ export default function SlotsPage() {
       ["🍒", "⭐", "🍋"],
       ["🍉", "🍇", "⭐"],
       ["🔔", "🍒", "🍋"],
-      ["💎", "🍇", "🪙"],
-      ["7", "🍒", "👑"],
+      ["💎", "🥨", "🪙"],
+      ["7", "🍀", "👑"],
     ],
     [],
   );
@@ -103,7 +103,7 @@ export default function SlotsPage() {
 
       // Free spins bookkeeping
       if (triggeredFreeSpins && freeSpinsLeft <= 0) {
-        setFreeSpinsLeft(10);
+        setFreeSpinsLeft(5);
       } else if (freeSpinsLeft > 0) {
         setFreeSpinsLeft((n) => Math.max(0, n - 1));
       }
@@ -305,7 +305,7 @@ export default function SlotsPage() {
                 <span className="font-medium text-white/70">{WILD}</span> is wild (substitutes) and expands reels in free spins.
               </li>
               <li>
-                <span className="font-medium text-white/70">{SCATTER}</span> ×3 triggers 10 free spins.
+                <span className="font-medium text-white/70">{SCATTER}</span> ×3 triggers 5 free spins.
               </li>
               <li>
                 Extra Chance: when you land exactly 2 scatters, it may upgrade into free spins.

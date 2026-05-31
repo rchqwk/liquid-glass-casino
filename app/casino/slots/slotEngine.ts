@@ -5,6 +5,9 @@ export type SymbolKey =
   | "🍋"
   | "🍇"
   | "🍉"
+  | "🍬" // filler (cheap)
+  | "🥨" // filler (cheap)
+  | "🍀" // filler (cheap)
   | "⭐"
   | "🔔"
   | "💎" // wild
@@ -32,11 +35,16 @@ const SYMBOLS: { s: SymbolKey; w: number }[] = [
   { s: "🍋", w: 22 },
   { s: "🍇", w: 18 },
   { s: "🍉", w: 16 },
+  // cheap fillers (more common)
+  { s: "🍬", w: 24 },
+  { s: "🥨", w: 24 },
+  { s: "🍀", w: 20 },
   { s: "⭐", w: 10 },
   { s: "🔔", w: 8 },
-  { s: "💎", w: 5 },
+  // special symbols (reduced frequency)
+  { s: "💎", w: 2 },
   { s: "👑", w: 4 },
-  { s: "🪙", w: 3 },
+  { s: "🪙", w: 1 },
   { s: "7", w: 2 },
 ];
 
@@ -46,6 +54,10 @@ const PAY_WAYS: Record<Exclude<SymbolKey, typeof SCATTER>, [number, number, numb
   "🍋": [0.3, 1.0, 3.0],
   "🍇": [0.4, 1.4, 4.0],
   "🍉": [0.5, 1.8, 5.0],
+  // cheap fillers pay very small
+  "🍬": [0.15, 0.5, 1.6],
+  "🥨": [0.15, 0.5, 1.6],
+  "🍀": [0.2, 0.7, 2.2],
   "⭐": [0.7, 2.5, 7.0],
   "🔔": [1.0, 3.5, 10.0],
   "💎": [1.4, 5.0, 14.0], // wilds
@@ -182,4 +194,3 @@ export function spinSlots243Ways(input: {
     expandedWildReels: expanded.expandedWildReels,
   };
 }
-
