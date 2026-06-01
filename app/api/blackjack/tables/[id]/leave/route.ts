@@ -15,6 +15,7 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
 
   const now = Date.now();
   const state = tickTable(t.state, now);
+  state.lastActivityAt = now;
 
   // remove from spectators
   state.spectators = state.spectators.filter((u) => u !== user.id);

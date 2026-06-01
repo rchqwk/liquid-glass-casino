@@ -130,6 +130,8 @@ export type TableState = {
   name: string;
   createdAt: number;
   updatedAt: number;
+  // Updated only on player activity (join/leave/bet/actions), NOT on passive polling ticks.
+  lastActivityAt: number;
 
   phase: Phase;
   round: number;
@@ -225,6 +227,7 @@ export function newTableState(input: { id: string; name: string; public: boolean
     name: input.name,
     createdAt: input.now,
     updatedAt: input.now,
+    lastActivityAt: input.now,
     phase: "betting",
     round: 1,
     bettingEndsAt: input.now + 30_000,
@@ -438,6 +441,7 @@ export function applyBet(state: TableState, userId: number, amount: number, now:
   p.bet = Math.round(a * 100) / 100;
   p.skipThisRound = false;
   p.lastSeenAt = now;
+  s.lastActivityAt = now;
   return { state: { ...s, updatedAt: now } };
 }
 
@@ -450,6 +454,7 @@ export function applySkip(state: TableState, userId: number, now: number): { sta
   p.bet = 0;
   p.skipThisRound = true;
   p.lastSeenAt = now;
+  s.lastActivityAt = now;
   return { state: { ...s, updatedAt: now } };
 }
 
@@ -470,6 +475,7 @@ export function applyPlayerAction(
   if (action.type === "hit") {
     const c = drawFromShoe(s);
     if (c != null) p.cards.push(c);
+    s.lastActivityAt = now;
     const t = handTotal(p.cards, p.bonusPoints).total;
     if (t > 21) {
       p.busted = true;
@@ -489,6 +495,7 @@ export function applyPlayerAction(
   if (action.type === "stand") {
     p.turnEnded = true;
     p.stood = true;
+    s.lastActivityAt = now;
     return { state: advanceTurn(s, now) };
   }
 
@@ -610,6 +617,7 @@ export function applySpecial(
   actor.usedThisRound[input.id] = true;
   actor.inventory[input.id] = Math.max(0, (actor.inventory[input.id] ?? 0) - 1);
   actor.lastSeenAt = now;
+  s.lastActivityAt = now;
 
   return { state: { ...s, updatedAt: now } };
 }

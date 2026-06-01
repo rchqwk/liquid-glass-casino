@@ -35,6 +35,22 @@ export async function GET() {
     const t = await getBlackjackTable(m.id);
     if (!t) continue;
     const state = tickTable(t.state, now);
+
+    // Close rooms after 5 minutes of inactivity (no players + no spectators).
+    const empty = state.seats.filter(Boolean).length === 0 && (state.spectators?.length ?? 0) === 0;
+    const lastAct = Number(state.lastActivityAt ?? t.updated_at ?? t.created_at ?? 0);
+    if (empty && lastAct > 0 && now - lastAct > 5 * 60 * 1000) {
+      // Soft-delete by making it non-public and skipping it; a later cleanup can hard-delete.
+      await upsertBlackjackTable({
+        id: t.id,
+        public: false,
+        name: t.name,
+        state,
+        created_at: t.created_at,
+        updated_at: state.updatedAt,
+      });
+      continue;
+    }
     // persist tick updates lazily
     if (state.updatedAt !== t.updated_at) {
       await upsertBlackjackTable({

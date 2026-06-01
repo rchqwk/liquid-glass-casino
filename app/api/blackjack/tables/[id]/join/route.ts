@@ -17,6 +17,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const now = Date.now();
   const state = tickTable(t.state, now);
+  state.lastActivityAt = now;
 
   // Already seated?
   if (state.seats.some((p) => p?.userId === user.id)) {
