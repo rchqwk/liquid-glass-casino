@@ -477,7 +477,7 @@ export type TableState = {
   peekByUserId: Record<string, number | null>; // userId -> cardIndex or null
   evictedInventories: Array<{ userId: number; inventory: Inventory }>;
 
-  lastResults?: Record<string, { outcome: string; multiplier: number }>;
+  lastResults?: Record<string, { outcome: string; multiplier: number; wager: number }>;
 };
 
 const RANKS: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -1351,7 +1351,7 @@ function settleRound(state: TableState, now: number): TableState {
     s.dealer.secondChanceUsed = true;
   }
 
-  const results: Record<string, { outcome: string; multiplier: number }> = {};
+  const results: Record<string, { outcome: string; multiplier: number; wager: number }> = {};
   let mythicDropAny = false;
   for (const seatIdx of s.participants) {
     const p = s.seats[seatIdx];
@@ -1361,6 +1361,8 @@ function settleRound(state: TableState, now: number): TableState {
 
     let bestMult = 0;
     let bestOutcome = "";
+    let totalWager = 0;
+    let totalReturn = 0;
     let anySevenCardWinOrPush = false;
 
     // Evaluate each hand vs dealer; choose the best multiplier for player reporting.
@@ -1423,18 +1425,20 @@ function settleRound(state: TableState, now: number): TableState {
       // Apply double payout after bonuses.
       if (h.doublePayoutArmed && mult > 1) mult *= 2;
 
+      totalWager += Number(h.bet ?? 0) || 0;
+      totalReturn += (Number(h.bet ?? 0) || 0) * mult;
+
       if (mult > bestMult) {
         bestMult = mult;
         bestOutcome = outcome;
       }
     }
 
-    // If you won, keep your base bet in play for next round (auto re-bet).
-    if (bestMult > 1) {
-      p.carryBetNext = Number(p.lastBetPlaced ?? p.hands?.[0]?.bet ?? 0) || 0;
-    } else {
-      p.carryBetNext = 0;
-    }
+    const mAll = totalWager > 0 ? totalReturn / totalWager : 0;
+
+    // If you won (net positive), keep your base bet in play for next round (auto re-bet).
+    if (mAll > 1) p.carryBetNext = Number(p.lastBetPlaced ?? p.hands?.[0]?.bet ?? 0) || 0;
+    else p.carryBetNext = 0;
 
     mythicDropAny = mythicDropAny || anySevenCardWinOrPush;
 
@@ -1454,7 +1458,7 @@ function settleRound(state: TableState, now: number): TableState {
       });
     }
 
-    results[String(p.userId)] = { outcome: bestOutcome, multiplier: bestMult };
+    results[String(p.userId)] = { outcome: bestOutcome, multiplier: mAll, wager: totalWager };
   }
 
   // Mythic box drop (table-wide) if anyone achieved 7-card push or win.

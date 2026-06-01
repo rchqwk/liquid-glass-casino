@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
+import { useWallet } from "../../../lib/wallet";
 
 type Suit = "♠" | "♥" | "♦" | "♣";
 type Card = { rank: string; suit: Suit; value: number };
@@ -96,10 +97,11 @@ type BJState = {
   peekCard?: number | null;
   meSeatIndex?: number;
   meInventory?: any;
-  lastResult?: { outcome: string; multiplier: number } | null;
+  lastResult?: { outcome: string; multiplier: number; wager?: number } | null;
 };
 
 export default function BlackjackTablePage() {
+  const { placeBet } = useWallet();
   const params = useParams<{ id?: string | string[] }>();
   const tableId =
     typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params?.id?.[0] : undefined;
@@ -176,11 +178,11 @@ export default function BlackjackTablePage() {
     if (!state) return;
     if (state.phase !== "settling") return;
     if (!mySeat || !state.lastResult) return;
-    if (!(mySeat.bet > 0)) return;
+    const wager = Number(state.lastResult.wager ?? mySeat.bet ?? 0);
+    if (!(wager > 0)) return;
     const key = `${safeTableId ?? "?"}:${state.round}`;
     if (reportedKey === key) return;
 
-    const wager = mySeat.bet;
     const profit = wager * (Number(state.lastResult.multiplier ?? 0) - 1);
     setReportedKey(key);
     void fetch("/api/leaderboard/report", {
@@ -193,6 +195,28 @@ export default function BlackjackTablePage() {
       }),
     }).catch(() => {});
   }, [state, mySeat, reportedKey, safeTableId]);
+
+  // Apply payouts to the client wallet once per round (updates Topbar balance)
+  const [walletSettledKey, setWalletSettledKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!state) return;
+    if (state.phase !== "settling") return;
+    if (!mySeat || !state.lastResult) return;
+    const wager = Number(state.lastResult.wager ?? mySeat.bet ?? 0);
+    if (!(wager > 0)) return;
+    const key = `wallet:${safeTableId ?? "?"}:${state.round}`;
+    if (walletSettledKey === key) return;
+    setWalletSettledKey(key);
+    // This will deduct wager and credit payout immediately using the server-computed multiplier.
+    placeBet({
+      game: "Blackjack (MP)",
+      wager,
+      resolve: () => ({
+        multiplier: Number(state.lastResult?.multiplier ?? 0),
+        outcome: String(state.lastResult?.outcome ?? "Settled"),
+      }),
+    });
+  }, [state, mySeat, safeTableId, walletSettledKey, placeBet]);
 
   const join = async (spectate?: boolean) => {
     setErr(null);
