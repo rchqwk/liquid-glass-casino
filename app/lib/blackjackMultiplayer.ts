@@ -1046,6 +1046,24 @@ function settleRound(state: TableState, now: number): TableState {
       outcome = `Push (${pTotal})`;
     }
 
+    // Card-count bonus rules:
+    // - 6+ cards without busting: if you would have LOST, treat as push instead ("push on lost").
+    // - Extra 2:1 bonus is ONLY for wins:
+    //   if you WIN with 5 cards => +2x; each additional card adds another +2x.
+    if (!isDealerBJ && pTotal <= 21) {
+      const cards = p.cards.length;
+      if (cards >= 6 && mult === 0) {
+        mult = 1;
+        outcome = `Push (6+ cards)`;
+      }
+      if (mult > 1 && cards >= 5) {
+        const bonus = 2 * (cards - 4);
+        mult += bonus;
+        outcome += ` +${bonus.toFixed(0)}x (cards)`;
+      }
+    }
+
+    // Apply double payout after bonuses.
     if (p.doublePayoutArmed && mult > 1) mult *= 2;
 
     // Mystery box distribution:
