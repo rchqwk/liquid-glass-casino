@@ -63,7 +63,7 @@ export async function GET() {
       updatedAt: state.updatedAt,
     });
   }
-  return NextResponse.json({ tables: out });
+  return NextResponse.json({ tables: out, dbSource: dbSource() });
 }
 
 export async function POST(req: Request) {

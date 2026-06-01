@@ -46,5 +46,5 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     next.evictedInventories = [];
   }
 
-  return NextResponse.json({ state: safePublicStateForUser(next, user.id) });
+  return NextResponse.json({ state: safePublicStateForUser(next, user.id), dbSource: dbSource() });
 }

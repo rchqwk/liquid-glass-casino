@@ -118,6 +118,7 @@ export default function BlackjackTablePage({ params }: { params: { id: string } 
         if (cancelled) return;
         if (!res.ok) {
           setErr(data?.error ?? "Failed to load table");
+          setState(null);
           return;
         }
         setErr(null);
@@ -228,7 +229,16 @@ export default function BlackjackTablePage({ params }: { params: { id: string } 
       </div>
 
       {!state ? (
-        <div className="glass-soft rounded-3xl p-5 text-white/70">Loading…</div>
+        <div className="glass-soft rounded-3xl p-5 text-white/70">
+          {err ? (
+            <>
+              <div className="text-sm font-semibold text-rose-200">{err}</div>
+              <div className="mt-2 text-xs text-white/55">If this persists, the Master Debug overlay (bottom-left) will show dbSource + knownTables.</div>
+            </>
+          ) : (
+            "Loading…"
+          )}
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
           <div className="glass-soft glass-shine rounded-3xl p-5">
