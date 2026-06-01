@@ -857,10 +857,11 @@ function startRound(state: TableState, now: number) {
   for (const idx of participants) {
     const p = s.seats[idx]!;
     const bet = Number(p.hands?.[0]?.bet ?? p.bet ?? 0) || 0;
+    const prevNonces = Array.isArray(p.hands?.[0]?.nonces) ? (p.hands[0]!.nonces as number[]) : [];
     p.hands = [
       {
         bet,
-        nonces: [],
+        nonces: [...prevNonces],
         perfectPairsWager: Number(p.hands?.[0]?.perfectPairsWager ?? 0) || 0,
         perfectPairsNonce: p.hands?.[0]?.perfectPairsNonce ?? null,
         perfectPairsSettled: false,
