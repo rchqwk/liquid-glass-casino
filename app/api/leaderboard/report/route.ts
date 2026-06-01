@@ -4,9 +4,9 @@ import { addAnnouncement, recordGameStat, recordLeaderboard, updateBalanceAndChe
 
 function normalizeGameId(raw: string) {
   const g = String(raw ?? "").toLowerCase();
-  if (g.includes("10x10")) return "slots-10x10";
-  if (g.includes("5x5")) return "slots-5x5";
-  if (g.includes("slots")) return "slots";
+  if (g.includes("10x10") || g.includes("break bonanza")) return "slots-10x10";
+  if (g.includes("5x5") || g.includes("fruit bowl")) return "slots-5x5";
+  if (g.includes("emoji hold") || g.includes("hold and win") || g.includes("slots")) return "slots";
   if (g.includes("blackjack")) return "blackjack";
   if (g.includes("roulette")) return "roulette";
   if (g.includes("dice")) return "dice";

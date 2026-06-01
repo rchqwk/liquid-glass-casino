@@ -254,7 +254,7 @@ export default function Slots5x5Page() {
       let resTriggeredFS = false;
 
       const bet = placeBet({
-        game: isFree ? "Slots 5x5 (Free Spin)" : "Slots 5x5",
+        game: isFree ? "Fruit Bowl Super Ways (Free Spin)" : "Fruit Bowl Super Ways",
         wager: cost,
         resolve: (rng2) => {
           const res = spinSlots5x5({
@@ -304,7 +304,7 @@ export default function Slots5x5Page() {
       const returnMult = cost > 0 ? (cost + bet.profit) / cost : 0;
       setLast({ profit: bet.profit, outcome: bet.outcome, returnMult });
       void reportResult({
-        game: luckySpin && !isFree ? "Slots 5x5 (Lucky)" : "Slots 5x5",
+        game: luckySpin && !isFree ? "Fruit Bowl Super Ways (Lucky)" : "Fruit Bowl Super Ways",
         profit: bet.profit,
         wager: cost,
         balance: bet.balanceAfter,
@@ -319,9 +319,9 @@ export default function Slots5x5Page() {
     <div className="flex flex-col gap-4">
       <Slots5x5Sprite />
       <div className="glass glass-shine rounded-3xl p-6">
-        <h2 className="text-xl font-semibold text-white">Slots (5×5 Deluxe)</h2>
+        <h2 className="text-xl font-semibold text-white">Fruit Bowl Super Ways</h2>
         <p className="mt-2 text-sm leading-6 text-white/70">
-          5×5 grid with smoother reel motion and CC0 icon art (no emojis).
+          Fruit bowl super ways on a 5×5 grid with wilds, scatters, free spins, and buy options.
         </p>
       </div>
 
@@ -365,7 +365,7 @@ export default function Slots5x5Page() {
                 if (spinning) return;
                 if (balance < wager * 100) return;
                 const buy = placeBet({
-                  game: "Slots 5x5 Buy Feature",
+                  game: "Fruit Bowl Super Ways Buy Feature",
                   wager: wager * 100,
                   resolve: () => ({ multiplier: 0, outcome: "Bought Free Spins" }),
                 });
@@ -373,7 +373,7 @@ export default function Slots5x5Page() {
                 setFsTier("normal");
                 setFreeSpinsLeft(5);
                 void reportResult({
-                  game: "Slots 5x5 Buy Feature",
+                  game: "Fruit Bowl Super Ways Buy Feature",
                   profit: buy.profit,
                   wager: wager * 100,
                   balance: buy.balanceAfter,
@@ -392,7 +392,7 @@ export default function Slots5x5Page() {
                 if (spinning) return;
                 if (balance < wager * 200) return;
                 const buy = placeBet({
-                  game: "Slots 5x5 Buy Bonus",
+                  game: "Fruit Bowl Super Ways Buy Bonus",
                   wager: wager * 200,
                   resolve: () => ({ multiplier: 0, outcome: "Bought SUPER Free Spins" }),
                 });
@@ -402,7 +402,7 @@ export default function Slots5x5Page() {
                 // SUPER free spins ignores Lucky (since it has its own math).
                 setLuckySpin(false);
                 void reportResult({
-                  game: "Slots 5x5 Buy Bonus",
+                  game: "Fruit Bowl Super Ways Buy Bonus",
                   profit: buy.profit,
                   wager: wager * 200,
                   balance: buy.balanceAfter,

@@ -31,6 +31,10 @@ export type SpinResult = {
   waysBest: WaysWinInfo | null;
 };
 
+// Global RTP tuning for the 5x5 game.
+// Lower this to reduce overall returns.
+const RTP_MULT = 0.5;
+
 const SYMBOLS: { s: SymbolId; w: number }[] = [
   // ~50% more "cheap" symbols (cherry/lemon/bar) to reduce win volatility.
   { s: "cherry", w: 39 },
@@ -172,7 +176,7 @@ export function spinSlots5x5(input: {
 
   const best = analyzeWaysBest(grid);
   const scale = Math.min(10, Math.max(0.1, input.payoutScale || 1));
-  const winMultiplier = (best?.pay ?? 0) * scale;
+  const winMultiplier = (best?.pay ?? 0) * scale * RTP_MULT;
 
   return { grid, scatterCount, winMultiplier, triggeredFreeSpins, waysBest: best };
 }

@@ -299,7 +299,7 @@ export default function SlotsPage() {
       let hsSteps: SymbolKey[][][] | null = null;
 
       const bet = placeBet({
-        game: isFree ? "Slots (Free Spin)" : "Slots",
+        game: isFree ? "EMOJI Hold and Win (Free Spin)" : "EMOJI Hold and Win",
         wager: wager * (luckySpin && !isFree ? 1.5 : 1),
         resolve: (rng) => {
           const heldColumns =
@@ -337,7 +337,7 @@ export default function SlotsPage() {
       setHoldSpinSteps(hsSteps);
       setLastWaysWin(grid ? analyzeWaysWin(grid) : null);
       void reportResult({
-        game: luckySpin && !isFree ? "Slots (Lucky)" : "Slots",
+        game: luckySpin && !isFree ? "EMOJI Hold and Win (Lucky)" : "EMOJI Hold and Win",
         profit: bet.profit,
         wager: wager * (luckySpin && !isFree ? 1.5 : 1),
         balance: bet.balanceAfter,
@@ -426,7 +426,7 @@ export default function SlotsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="glass glass-shine rounded-3xl p-6">
-        <h2 className="text-xl font-semibold text-white">Slots</h2>
+        <h2 className="text-xl font-semibold text-white">EMOJI Hold and Win</h2>
         <p className="mt-2 text-sm leading-6 text-white/70">
           5×3 slot with <span className="font-mono text-white/80">243</span> ways,{" "}
           <span className="text-base">{WILD}</span> wilds,{" "}
@@ -507,7 +507,7 @@ export default function SlotsPage() {
                 if (balance < wager * 100) return;
                 // Buy feature: pay 100× bet to instantly start free spins.
                 const buy = placeBet({
-                  game: "Slots Buy Feature",
+                  game: "EMOJI Hold and Win Buy Feature",
                   wager: wager * 100,
                   resolve: () => ({ multiplier: 0, outcome: "Bought Free Spins" }),
                 });
@@ -518,7 +518,7 @@ export default function SlotsPage() {
                 });
                 setFreeSpinsLeft(5);
                 void reportResult({
-                  game: "Slots Buy Feature",
+                  game: "EMOJI Hold and Win Buy Feature",
                   profit: buy.profit,
                   wager: wager * 100,
                   balance: buy.balanceAfter,
@@ -538,7 +538,7 @@ export default function SlotsPage() {
                 if (balance < wager * 150) return;
                 // Buy bonus: pay 150× bet to start Hold&Spin immediately.
                 const buy = placeBet({
-                  game: "Slots Buy Bonus",
+                  game: "EMOJI Hold and Win Buy Bonus",
                   wager: wager * 150,
                   resolve: (rng) => {
                     const spinRes = spinSlots243Ways({
@@ -553,7 +553,7 @@ export default function SlotsPage() {
                 });
                 setLast({ profit: buy.profit, outcome: "Bought Hold&Spin (150× bet)", multiplier: buy.multiplier });
                 void reportResult({
-                  game: "Slots Buy Bonus",
+                  game: "EMOJI Hold and Win Buy Bonus",
                   profit: buy.profit,
                   wager: wager * 150,
                   balance: buy.balanceAfter,
@@ -681,7 +681,7 @@ export default function SlotsPage() {
                     if (!amount || amount <= 0) return;
                     setPendingGamble(null);
                     const bet = placeBet({
-                      game: "Slots Gamble",
+                      game: "EMOJI Hold and Win Gamble",
                       wager: amount,
                       resolve: (rng) => {
                         const win = rng.float(0) < 0.5;
@@ -697,7 +697,7 @@ export default function SlotsPage() {
                       multiplier: bet.multiplier,
                     });
                     void reportResult({
-                      game: "Slots Gamble",
+                      game: "EMOJI Hold and Win Gamble",
                       profit: bet.profit,
                       wager: amount,
                       balance: bet.balanceAfter,

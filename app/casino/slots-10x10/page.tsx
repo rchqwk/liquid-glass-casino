@@ -114,7 +114,7 @@ export default function Slots10x10Page() {
     let capturedSteps: CascadeStep[] = [];
 
     const bet = placeBet({
-      game: isFree ? "Slots 10x10 (Free Spin)" : luckySpin ? "Slots 10x10 (Lucky)" : "Slots 10x10",
+      game: isFree ? "Break Bonanza (Free Spin)" : luckySpin ? "Break Bonanza (Lucky)" : "Break Bonanza",
       wager: cost,
       resolve: (rng) => {
         const res = spinCluster10x10({
@@ -186,7 +186,7 @@ export default function Slots10x10Page() {
     setAnimProfile(isBig ? "big" : isNear ? "near" : "normal");
 
     void reportResult({
-      game: isFree ? "Slots 10x10" : luckySpin ? "Slots 10x10 (Lucky)" : "Slots 10x10",
+      game: isFree ? "Break Bonanza" : luckySpin ? "Break Bonanza (Lucky)" : "Break Bonanza",
       profit: bet.profit,
       wager: cost,
       balance: bet.balanceAfter,
@@ -227,7 +227,7 @@ export default function Slots10x10Page() {
       <Slots5x5Sprite />
 
       <div className="glass glass-shine rounded-3xl p-6">
-        <h2 className="text-xl font-semibold text-white">Slots (10×10 Cascading)</h2>
+        <h2 className="text-xl font-semibold text-white">Break Bonanza</h2>
         <p className="mt-2 text-sm leading-6 text-white/70">
           Cluster pays: any group of <span className="font-mono text-white/80">6+</span> breaks, pays,
           then symbols fall and can chain.
@@ -297,7 +297,7 @@ export default function Slots10x10Page() {
               if (spinning) return;
               if (balance < wager * 100) return;
               const buy = placeBet({
-                game: "Slots 10x10 Buy Feature",
+                game: "Break Bonanza Buy Feature",
                 wager: wager * 100,
                 resolve: () => ({ multiplier: 0, outcome: "Bought Free Spins" }),
               });
@@ -305,7 +305,7 @@ export default function Slots10x10Page() {
               setFeatureTier(1);
               setFreeSpinsLeft(8);
               void reportResult({
-                game: "Slots 10x10 Buy Feature",
+                game: "Break Bonanza Buy Feature",
                 profit: buy.profit,
                 wager: wager * 100,
                 balance: buy.balanceAfter,
@@ -324,7 +324,7 @@ export default function Slots10x10Page() {
               if (spinning) return;
               if (balance < wager * 250) return;
               const buy = placeBet({
-                game: "Slots 10x10 Buy Bonus",
+                game: "Break Bonanza Buy Bonus",
                 wager: wager * 250,
                 resolve: () => ({ multiplier: 0, outcome: "Bought SUPER Free Spins" }),
               });
@@ -332,7 +332,7 @@ export default function Slots10x10Page() {
               setFeatureTier(2);
               setFreeSpinsLeft(15);
               void reportResult({
-                game: "Slots 10x10 Buy Bonus",
+                game: "Break Bonanza Buy Bonus",
                 profit: buy.profit,
                 wager: wager * 250,
                 balance: buy.balanceAfter,

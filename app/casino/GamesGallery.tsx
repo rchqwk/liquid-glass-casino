@@ -13,9 +13,9 @@ type GameCard = {
 type StatRow = { gameId: string; wagerTotal: number; bets: number };
 
 const GAMES: GameCard[] = [
-  { gameId: "slots", title: "Slots", desc: "5×3 emoji slot with hold/nudge + buy options.", href: "/casino/slots" },
-  { gameId: "slots-5x5", title: "Slots 5×5 Deluxe", desc: "5×5 reel slot with CC0 icons + lucky/buy.", href: "/casino/slots-5x5" },
-  { gameId: "slots-10x10", title: "Slots 10×10 Cascading", desc: "Cluster break + drop + chaining.", href: "/casino/slots-10x10" },
+  { gameId: "slots", title: "EMOJI Hold and Win", desc: "5×3 emoji slot with hold/nudge + buy options.", href: "/casino/slots" },
+  { gameId: "slots-5x5", title: "Fruit Bowl Super Ways", desc: "5×5 super-ways fruit slot (RTP reduced).", href: "/casino/slots-5x5" },
+  { gameId: "slots-10x10", title: "Break Bonanza", desc: "10×10 cascading cluster break + chaining.", href: "/casino/slots-10x10" },
   { gameId: "dice", title: "Dice", desc: "Pick a target and roll under.", href: "/casino/dice" },
   { gameId: "roulette", title: "Roulette", desc: "European (0–36).", href: "/casino/roulette" },
   { gameId: "blackjack", title: "Blackjack", desc: "Basic blackjack (prototype).", href: "/casino/blackjack" },
@@ -168,4 +168,3 @@ export function GamesGallery() {
     </div>
   );
 }
-
