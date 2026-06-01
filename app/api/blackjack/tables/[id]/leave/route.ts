@@ -3,6 +3,9 @@ import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackTable, upsertBlackjackInventory, upsertBlackjackTable } from "../../../../../lib/db";
 import { safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function POST(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,4 +30,3 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
   await upsertBlackjackTable({ id: t.id, public: t.public, name: t.name, state, created_at: t.created_at, updated_at: state.updatedAt });
   return NextResponse.json({ state: safePublicStateForUser(state, user.id) });
 }
-

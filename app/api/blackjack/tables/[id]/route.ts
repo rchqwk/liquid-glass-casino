@@ -3,6 +3,9 @@ import { getAuthedUserAsync } from "../../../../lib/authServer";
 import { getBlackjackTable, upsertBlackjackInventory, upsertBlackjackTable } from "../../../../lib/db";
 import { safePublicStateForUser, tickTable } from "../../../../lib/blackjackMultiplayer";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

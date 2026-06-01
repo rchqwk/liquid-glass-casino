@@ -3,6 +3,9 @@ import { getAuthedUserAsync } from "../../../lib/authServer";
 import { getBlackjackTable, listBlackjackTables, upsertBlackjackTable, upsertBlackjackInventory, getBlackjackInventory } from "../../../lib/db";
 import { defaultInventory, newTableState, safePublicStateForUser, tickTable } from "../../../lib/blackjackMultiplayer";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 function shortId() {
   return Math.random().toString(16).slice(2, 10);
 }
