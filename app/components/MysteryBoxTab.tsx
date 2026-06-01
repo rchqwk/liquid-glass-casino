@@ -7,8 +7,6 @@ import { useAuth } from "../lib/authClient";
 type BoxesResp = {
   unopened: number;
   handsPlayed: number;
-  tradePoints?: number;
-  tradeCharges?: number;
   boxes: Array<{ id: string; tier?: string; awardedAt: number; opened: boolean; openedAt?: number; contents?: string[] }>;
 };
 
@@ -43,7 +41,16 @@ export function MysteryBoxTab() {
   const [err, setErr] = useState<string | null>(null);
 
   const unopened = data?.unopened ?? 0;
-  const tradePoints = data?.tradePoints ?? 0;
+  const counts = useMemo(() => {
+    const out = { normal: 0, rare: 0, legendary: 0, mythic: 0 };
+    for (const b of data?.boxes ?? []) {
+      if (b.opened) continue;
+      const t = (b.tier ?? "normal") as keyof typeof out;
+      if (t in out) (out as any)[t] += 1;
+      else out.normal += 1;
+    }
+    return out;
+  }, [data]);
 
   useEffect(() => {
     if (!user || !isOnBlackjack) return;
@@ -103,13 +110,13 @@ export function MysteryBoxTab() {
     window.setTimeout(() => setOpening(false), 2400);
   };
 
-  const tradeBox = async (tier: "rare" | "mythic") => {
+  const tradeBox = async (toTier: "rare" | "legendary" | "mythic") => {
     setErr(null);
     try {
       const res = await fetch("/api/blackjack/boxes/trade", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tier }),
+        body: JSON.stringify({ toTier }),
       });
       const j = (await res.json().catch(() => ({}))) as any;
       if (!res.ok) throw new Error(j?.error ?? "Trade failed");
@@ -195,26 +202,38 @@ export function MysteryBoxTab() {
                   Every 3 hands played awards a box. Boxes contain 3 powerups weighted by rarity.
                 </p>
                 <div className="mt-3 text-[11px] text-white/60">
-                  Trade points: <span className="font-mono text-white/85">{tradePoints}</span>
+                  Unopened by tier:{" "}
+                  <span className="font-mono text-white/85">
+                    C {counts.normal} • R {counts.rare} • L {counts.legendary} • M {counts.mythic}
+                  </span>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"
                     className="glass-soft rounded-2xl px-3 py-2 text-[11px] text-white/85 hover:bg-white/10 disabled:opacity-40"
                     onClick={() => tradeBox("rare")}
-                    disabled={tradePoints < 20 || opening}
-                    title="Spend 20 trade points for a Rare box (2 guaranteed rare+)"
+                    disabled={counts.normal < 3 || opening}
+                    title="Trade 3 common boxes for 1 rare box"
                   >
-                    Trade 20 → Rare box
+                    Trade 3C → 1R
+                  </button>
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl px-3 py-2 text-[11px] text-white/85 hover:bg-white/10 disabled:opacity-40"
+                    onClick={() => tradeBox("legendary")}
+                    disabled={counts.rare < 3 || opening}
+                    title="Trade 3 rare boxes for 1 legendary box"
+                  >
+                    Trade 3R → 1L
                   </button>
                   <button
                     type="button"
                     className="glass-soft rounded-2xl px-3 py-2 text-[11px] text-white/85 hover:bg-white/10 disabled:opacity-40"
                     onClick={() => tradeBox("mythic")}
-                    disabled={tradePoints < 50 || opening}
-                    title="Spend 50 trade points for a Mythic box (1 mythic)"
+                    disabled={counts.legendary < 3 || opening}
+                    title="Trade 3 legendary boxes for 1 mythic box"
                   >
-                    Trade 50 → Mythic box
+                    Trade 3L → 1M
                   </button>
                 </div>
                 <button

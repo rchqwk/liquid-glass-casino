@@ -230,7 +230,7 @@ export default function BlackjackTablePage() {
     const settlements = state.lastResult.settlements ?? [];
     for (const st of settlements) {
       const nonce = Number(st.nonce);
-      if (!Number.isFinite(nonce) || nonce <= 0) continue;
+      if (!Number.isFinite(nonce) || nonce < 0) continue;
       settleBet({
         nonce,
         multiplier: Number(st.multiplier ?? 0),
@@ -240,7 +240,7 @@ export default function BlackjackTablePage() {
     const pp = state.lastResult.ppSettlements ?? [];
     for (const st of pp) {
       const nonce = Number(st.nonce);
-      if (!Number.isFinite(nonce) || nonce <= 0) continue;
+      if (!Number.isFinite(nonce) || nonce < 0) continue;
       settleBet({
         nonce,
         multiplier: Number(st.multiplier ?? 0),
@@ -320,7 +320,7 @@ export default function BlackjackTablePage() {
       return;
     }
     if (betPending) return;
-    const hasNonce = (mySeat as any)?.hands?.[0]?.perfectPairsNonce;
+    const hasNonce = (mySeat as any)?.hands?.[0]?.perfectPairsNonce != null;
     if (hasNonce) {
       setErr("Perfect Pairs already placed. Clear it first.");
       return;
@@ -342,7 +342,7 @@ export default function BlackjackTablePage() {
     if (state?.phase !== "betting") return;
     if (betPending) return;
     const nonce = Number((mySeat as any)?.hands?.[0]?.perfectPairsNonce ?? 0);
-    if (nonce > 0) settleBet({ nonce, multiplier: 1, outcome: "Bet canceled" });
+    if (Number.isFinite(nonce) && nonce >= 0) settleBet({ nonce, multiplier: 1, outcome: "Bet canceled" });
     setBetPending(true);
     await post("clearperfectpairs");
     setBetPending(false);
@@ -351,7 +351,7 @@ export default function BlackjackTablePage() {
   const clearBetWithWallet = async () => {
     if (state?.phase !== "betting") return;
     if (betPending) return;
-    const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter((x: any) => Number.isFinite(x) && x > 0);
+    const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter((x: any) => Number.isFinite(x) && x >= 0);
     // Refund any reserved stake(s)
     for (const n of nonces) {
       settleBet({ nonce: n, multiplier: 1, outcome: "Bet canceled" });
@@ -545,7 +545,7 @@ export default function BlackjackTablePage() {
                     className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
                     onClick={async () => {
                       // If a bet was reserved, refund it before skipping.
-                      const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter((x: any) => Number.isFinite(x) && x > 0);
+                      const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter((x: any) => Number.isFinite(x) && x >= 0);
                       for (const n of nonces) settleBet({ nonce: n, multiplier: 1, outcome: "Bet canceled" });
                       await post("skip");
                     }}
@@ -567,7 +567,7 @@ export default function BlackjackTablePage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    disabled={state.phase !== "betting" || betPending || !!(mySeat as any)?.hands?.[0]?.perfectPairsNonce}
+                    disabled={state.phase !== "betting" || betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce != null}
                     className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
                     onClick={placePerfectPairsWithWallet}
                     title="Pays on first 2 cards of each hand: perfect=25:1, colored=12:1, mixed=6:1"
@@ -576,7 +576,7 @@ export default function BlackjackTablePage() {
                   </button>
                   <button
                     type="button"
-                    disabled={state.phase !== "betting" || betPending || !(mySeat as any)?.hands?.[0]?.perfectPairsNonce}
+                    disabled={state.phase !== "betting" || betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce == null}
                     className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
                     onClick={clearPerfectPairsWithWallet}
                   >

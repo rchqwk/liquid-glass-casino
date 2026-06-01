@@ -246,7 +246,7 @@ export type Inventory = {
   categories: Record<InventoryCategoryId, Partial<Record<SpecialId, number>>>;
   boxes: Array<{
     id: string;
-    tier: "normal" | "rare" | "mythic";
+    tier: "normal" | "rare" | "legendary" | "mythic";
     awardedAt: number;
     openedAt?: number;
     opened: boolean;
@@ -288,7 +288,7 @@ function normalizeInventory(raw: any): Inventory {
       boxes: Array.isArray(raw.boxes)
         ? (raw.boxes as any[]).map((b) => ({
             id: String(b?.id ?? ""),
-            tier: (b?.tier === "rare" || b?.tier === "mythic" ? b.tier : "normal") as any,
+            tier: (b?.tier === "rare" || b?.tier === "legendary" || b?.tier === "mythic" ? b.tier : "normal") as any,
             awardedAt: Number(b?.awardedAt ?? 0) || 0,
             openedAt: b?.openedAt != null ? Number(b.openedAt) : undefined,
             opened: !!b?.opened,
@@ -310,7 +310,7 @@ function normalizeInventory(raw: any): Inventory {
       const id = k as SpecialId;
       if (!(id in SPECIALS)) continue;
       const n = Number(v ?? 0);
-      if (!Number.isFinite(n) || n <= 0) continue;
+    if (!Number.isFinite(n) || n < 0) continue;
       const cat = classifySpecial(id);
       inv.categories[cat][id] = (inv.categories[cat][id] ?? 0) + n;
     }
@@ -612,7 +612,7 @@ function randSpecial(seed: number, rarity: SpecialRarity): SpecialId {
   return pool[Math.floor(r * pool.length)] ?? "ADD2_SELF";
 }
 
-function rollBox(tier: "normal" | "rare" | "mythic", seed: number): SpecialId[] {
+function rollBox(tier: "normal" | "rare" | "legendary" | "mythic", seed: number): SpecialId[] {
   const rand = lcg(seed);
 
   const weightedPick = (pool: Array<{ id: SpecialId; w: number }>, exclude: Set<SpecialId>) => {
@@ -630,6 +630,13 @@ function rollBox(tier: "normal" | "rare" | "mythic", seed: number): SpecialId[] 
   if (tier === "mythic") {
     const pool = Object.values(SPECIALS)
       .filter((s) => s.rarity === "mythic")
+      .map((s) => ({ id: s.id, w: 1 }));
+    return [weightedPick(pool, new Set())];
+  }
+
+  if (tier === "legendary") {
+    const pool = Object.values(SPECIALS)
+      .filter((s) => s.rarity === "legendary")
       .map((s) => ({ id: s.id, w: 1 }));
     return [weightedPick(pool, new Set())];
   }
@@ -962,9 +969,13 @@ export function applyBet(
   const a = Number(amount);
   if (!Number.isFinite(a) || a <= 0) return { state: s, error: "Invalid bet amount." };
   p.hands[0]!.bet = Math.round(a * 100) / 100;
-  p.hands[0]!.nonces = [];
-  const n = Number(betNonce ?? 0);
-  if (Number.isFinite(n) && n >= 0) p.hands[0]!.nonces = n ? [n] : [];
+  if (betNonce == null) {
+    p.hands[0]!.nonces = [];
+  } else {
+    const n = Number(betNonce);
+    if (!Number.isFinite(n) || n < 0) return { state: s, error: "Wallet nonce missing." };
+    p.hands[0]!.nonces = [n];
+  }
   p.activeHandIndex = 0;
   normalizeHandsForSeat(p);
   p.lastBetPlaced = p.hands[0]!.bet;
@@ -991,11 +1002,12 @@ export function applyPerfectPairsBet(
 
   const w = Math.round(Number(wager ?? 0) * 100) / 100;
   if (!Number.isFinite(w) || w <= 0) return { state: s, error: "Invalid side bet amount." };
-  const n = Number(betNonce ?? 0);
-  if (!Number.isFinite(n) || n <= 0) return { state: s, error: "Wallet nonce missing." };
+  if (betNonce == null) return { state: s, error: "Wallet nonce missing." };
+  const n = Number(betNonce);
+  if (!Number.isFinite(n) || n < 0) return { state: s, error: "Wallet nonce missing." };
 
   const h0 = p.hands[0]!;
-  if ((h0.perfectPairsNonce ?? null) && (h0.perfectPairsWager ?? 0) > 0) {
+  if (h0.perfectPairsNonce != null && (h0.perfectPairsWager ?? 0) > 0) {
     return { state: s, error: "Perfect Pairs bet already placed. Clear bet before placing again." };
   }
   h0.perfectPairsWager = w;
@@ -1111,8 +1123,9 @@ export function applyPlayerAction(
     if (h.busted) return { state: s, error: "You are busted." };
     if (h.cards.length !== 2) return { state: s, error: "Double down is only allowed on your first two cards." };
     if (!(h.bet > 0)) return { state: s, error: "No bet placed." };
-    const n = Number(action.betNonce ?? 0);
-    if (!Number.isFinite(n) || n <= 0) return { state: s, error: "Wallet nonce missing for double down." };
+    if (action.betNonce == null) return { state: s, error: "Wallet nonce missing for double down." };
+    const n = Number(action.betNonce);
+    if (!Number.isFinite(n) || n < 0) return { state: s, error: "Wallet nonce missing for double down." };
     // Double the bet (reserve additional stake via betNonce), draw exactly one card, then stand.
     h.bet = Math.round(h.bet * 2 * 100) / 100;
     h.nonces = [...(h.nonces ?? []), n];
@@ -1134,8 +1147,9 @@ export function applyPlayerAction(
     if (h.cards.length !== 2) return { state: s, error: "Split only allowed with exactly 2 cards." };
     if ((p.hands?.length ?? 1) >= 4) return { state: s, error: "Max splits reached (4 hands)." };
 
-    const n = Number(action.betNonce ?? 0);
-    if (!Number.isFinite(n) || n <= 0) return { state: s, error: "Wallet nonce missing for split." };
+    if (action.betNonce == null) return { state: s, error: "Wallet nonce missing for split." };
+    const n = Number(action.betNonce);
+    if (!Number.isFinite(n) || n < 0) return { state: s, error: "Wallet nonce missing for split." };
 
     const ranksMatch = ranksEqualForSplit(h.cards[0]!, h.cards[1]!);
     const canFreeSplit = invGet(p.inventory, "FREE_SPLIT") > 0;
@@ -1584,12 +1598,18 @@ function settleRound(state: TableState, now: number): TableState {
       if (h.doublePayoutArmed && mult > 1) mult *= 2;
 
       // Perfect Pairs (side bet) — evaluated on the first 2 cards of EACH hand.
-      if (!h.perfectPairsSettled && (h.perfectPairsWager ?? 0) > 0 && h.perfectPairsNonce) {
+      if (
+        !h.perfectPairsSettled &&
+        (h.perfectPairsWager ?? 0) > 0 &&
+        h.perfectPairsNonce != null &&
+        Number.isFinite(Number(h.perfectPairsNonce)) &&
+        Number(h.perfectPairsNonce) >= 0
+      ) {
         if (h.cards.length >= 2) {
           const ppm = perfectPairsMultiplier(h.cards[0]!, h.cards[1]!);
           const out = ppm > 0 ? `Perfect Pairs x${ppm.toFixed(0)}` : "Perfect Pairs lose";
           ppSettlements.push({
-            nonce: h.perfectPairsNonce,
+            nonce: Number(h.perfectPairsNonce),
             wager: h.perfectPairsWager,
             multiplier: ppm,
             outcome: out,
@@ -1599,7 +1619,7 @@ function settleRound(state: TableState, now: number): TableState {
       }
 
       // Create settlements for wallet nonces backing this hand.
-      const nonces = Array.isArray(h.nonces) ? h.nonces.filter((x) => Number.isFinite(x) && x > 0) : [];
+      const nonces = Array.isArray(h.nonces) ? h.nonces.filter((x) => Number.isFinite(x) && x >= 0) : [];
       const parts = Math.max(1, nonces.length);
       const partWager = parts > 0 ? (Number(h.bet ?? 0) || 0) / parts : 0;
       for (const nonce of nonces) {

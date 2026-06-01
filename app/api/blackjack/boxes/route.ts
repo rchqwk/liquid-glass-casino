@@ -6,13 +6,6 @@ import { ensureInventory, unopenedBoxCount, SPECIALS, type InventoryCategoryId }
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function rarityPoints(r: string) {
-  if (r === "mythic") return 20;
-  if (r === "legendary") return 8;
-  if (r === "rare") return 3;
-  return 1;
-}
-
 export async function GET() {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -28,25 +21,10 @@ export async function GET() {
     contents: b.opened ? (b.contents ?? []) : undefined,
   }));
 
-  // Trade stats
-  let tradePoints = 0;
-  let tradeCharges = 0;
-  for (const cat of Object.values(inv.categories ?? {})) {
-    for (const [id, v] of Object.entries(cat ?? {})) {
-      const n = Number(v ?? 0);
-      if (!Number.isFinite(n) || n <= 0) continue;
-      const rarity = (SPECIALS as any)[id]?.rarity ?? "common";
-      tradeCharges += n;
-      tradePoints += n * rarityPoints(String(rarity));
-    }
-  }
-
   return NextResponse.json({
     unopened: unopenedBoxCount(inv),
     handsPlayed: inv.handsPlayed ?? 0,
     boxes,
-    tradePoints,
-    tradeCharges,
   });
 }
 
