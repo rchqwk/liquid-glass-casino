@@ -47,11 +47,13 @@ export function TurnQuickPanel(props: {
   show: boolean;
   isMyTurn: boolean;
   myBet: number;
+  canSplit: boolean;
   canHit: boolean;
   canDoubleDown: boolean;
   onHit: () => void;
   onStand: () => void;
   onDoubleDown: () => void;
+  onSplit: () => void;
   dealerCards: number[];
   myCards: number[];
 }) {
@@ -150,9 +152,10 @@ export function TurnQuickPanel(props: {
                 </button>
                 <button
                   type="button"
-                  className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/60 hover:bg-white/10 disabled:opacity-40"
-                  disabled
-                  title="Split coming next"
+                  className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                  disabled={!props.isMyTurn || !props.canSplit}
+                  onClick={props.onSplit}
+                  title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
                 >
                   Split
                 </button>
@@ -171,4 +174,3 @@ export function TurnQuickPanel(props: {
     </>
   );
 }
-

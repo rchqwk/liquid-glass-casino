@@ -7,20 +7,24 @@ import { useAuth } from "../lib/authClient";
 type BoxesResp = {
   unopened: number;
   handsPlayed: number;
-  boxes: Array<{ id: string; awardedAt: number; opened: boolean; openedAt?: number; contents?: string[] }>;
+  tradePoints?: number;
+  tradeCharges?: number;
+  boxes: Array<{ id: string; tier?: string; awardedAt: number; opened: boolean; openedAt?: number; contents?: string[] }>;
 };
 
 type OpenResp =
-  | { ok: true; unopened: number; box: { id: string; contents: string[]; rarity: string[] } }
+  | { ok: true; unopened: number; box: { id: string; tier?: string; contents: string[]; rarity: string[] } }
   | { error: string };
 
 function rarityClass(r: string) {
+  if (r === "mythic") return "ring-2 ring-cyan-300/70 shadow-[0_0_34px_rgba(34,211,238,.25)]";
   if (r === "legendary") return "ring-2 ring-yellow-300/70 shadow-[0_0_30px_rgba(250,204,21,.35)]";
   if (r === "rare") return "ring-2 ring-fuchsia-300/60 shadow-[0_0_24px_rgba(232,121,249,.25)]";
   return "ring-1 ring-white/15 shadow-[0_0_18px_rgba(255,255,255,.10)]";
 }
 
 function rarityLabel(r: string) {
+  if (r === "mythic") return "MYTHIC";
   if (r === "legendary") return "LEGENDARY";
   if (r === "rare") return "RARE";
   return "COMMON";
@@ -39,6 +43,7 @@ export function MysteryBoxTab() {
   const [err, setErr] = useState<string | null>(null);
 
   const unopened = data?.unopened ?? 0;
+  const tradePoints = data?.tradePoints ?? 0;
 
   useEffect(() => {
     if (!user || !isOnBlackjack) return;
@@ -61,6 +66,7 @@ export function MysteryBoxTab() {
     };
   }, [user, isOnBlackjack]);
 
+  const hasMythic = useMemo(() => (lastOpened?.rarity ?? []).includes("mythic"), [lastOpened]);
   const hasLegendary = useMemo(() => (lastOpened?.rarity ?? []).includes("legendary"), [lastOpened]);
 
   const openNextBox = async () => {
@@ -95,6 +101,24 @@ export function MysteryBoxTab() {
     window.setTimeout(() => setRevealStep(2), 1400);
     window.setTimeout(() => setRevealStep(3), 2000);
     window.setTimeout(() => setOpening(false), 2400);
+  };
+
+  const tradeBox = async (tier: "rare" | "mythic") => {
+    setErr(null);
+    try {
+      const res = await fetch("/api/blackjack/boxes/trade", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tier }),
+      });
+      const j = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok) throw new Error(j?.error ?? "Trade failed");
+      // refresh
+      const r2 = await fetch("/api/blackjack/boxes", { cache: "no-store" });
+      if (r2.ok) setData((await r2.json()) as BoxesResp);
+    } catch (e: any) {
+      setErr(String(e?.message ?? "Trade failed"));
+    }
   };
 
   if (!user || !isOnBlackjack) return null;
@@ -170,6 +194,29 @@ export function MysteryBoxTab() {
                 <p className="mt-2 text-[11px] leading-5 text-white/60">
                   Every 3 hands played awards a box. Boxes contain 3 powerups weighted by rarity.
                 </p>
+                <div className="mt-3 text-[11px] text-white/60">
+                  Trade points: <span className="font-mono text-white/85">{tradePoints}</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl px-3 py-2 text-[11px] text-white/85 hover:bg-white/10 disabled:opacity-40"
+                    onClick={() => tradeBox("rare")}
+                    disabled={tradePoints < 20 || opening}
+                    title="Spend 20 trade points for a Rare box (2 guaranteed rare+)"
+                  >
+                    Trade 20 → Rare box
+                  </button>
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl px-3 py-2 text-[11px] text-white/85 hover:bg-white/10 disabled:opacity-40"
+                    onClick={() => tradeBox("mythic")}
+                    disabled={tradePoints < 50 || opening}
+                    title="Spend 50 trade points for a Mythic box (1 mythic)"
+                  >
+                    Trade 50 → Mythic box
+                  </button>
+                </div>
                 <button
                   type="button"
                   disabled={unopened <= 0 || opening}
@@ -201,7 +248,11 @@ export function MysteryBoxTab() {
 
                 {lastOpened ? (
                   <>
-                    {hasLegendary ? (
+                    {hasMythic ? (
+                      <div className="mt-4 animate-[mb-fanfare_.35s_ease-out] rounded-3xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-center text-sm font-semibold text-cyan-100 shadow-[0_0_44px_rgba(34,211,238,.18)]">
+                        MYTHIC DROP
+                      </div>
+                    ) : hasLegendary ? (
                       <div className="mt-4 animate-[mb-fanfare_.35s_ease-out] rounded-3xl border border-yellow-300/25 bg-yellow-300/10 px-4 py-3 text-center text-sm font-semibold text-yellow-100 shadow-[0_0_40px_rgba(250,204,21,.20)]">
                         LEGENDARY DROP
                       </div>

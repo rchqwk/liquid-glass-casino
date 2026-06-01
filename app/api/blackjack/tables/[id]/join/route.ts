@@ -48,6 +48,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       turnEnded: false,
       doublePayoutArmed: false,
       usedThisRound: {},
+      hands: [
+        {
+          bet: 0,
+          cards: [],
+          bonusPoints: 0,
+          stood: false,
+          busted: false,
+          turnEnded: false,
+          doublePayoutArmed: false,
+          usedThisRound: {},
+        },
+      ],
+      activeHandIndex: 0,
       bjProtected: false,
       extendUsedThisTurn: false,
     };

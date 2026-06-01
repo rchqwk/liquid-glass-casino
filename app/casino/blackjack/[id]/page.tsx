@@ -153,6 +153,7 @@ export default function BlackjackTablePage() {
   const myTurnSeat = state?.participants?.[state.turnIndex] ?? null;
   const isMyTurn = mySeat && state?.phase === "player_turns" && myTurnSeat === state.meSeatIndex;
   const canDoubleDown = !!isMyTurn && !mySeat?.busted && (mySeat?.cards?.length ?? 0) === 2 && (mySeat?.bet ?? 0) > 0;
+  const canSplit = !!isMyTurn && !mySeat?.busted && (mySeat?.cards?.length ?? 0) === 2;
 
   const dealerTotal = useMemo(() => {
     if (!state) return 0;
@@ -228,11 +229,13 @@ export default function BlackjackTablePage() {
         show={!!state && !!mySeat}
         isMyTurn={!!isMyTurn}
         myBet={Number(mySeat?.bet ?? 0)}
+        canSplit={canSplit}
         canHit={!mySeat?.busted}
         canDoubleDown={canDoubleDown}
         onHit={() => post("action", { type: "hit" })}
         onStand={() => post("action", { type: "stand" })}
         onDoubleDown={() => post("action", { type: "double_down" })}
+        onSplit={() => post("action", { type: "split" })}
         dealerCards={state?.dealer?.cards ?? []}
         myCards={mySeat?.cards ?? []}
       />
@@ -383,6 +386,7 @@ export default function BlackjackTablePage() {
                       { id: "saves", label: "Saves" },
                       { id: "utility", label: "Utility" },
                       { id: "magic", label: "Magic" },
+                      { id: "mythic", label: "Mythic" },
                       { id: "dealer", label: "Dealer" },
                     ];
 
@@ -415,7 +419,7 @@ export default function BlackjackTablePage() {
                               {g.items.map(([k, v]) => {
                                 const isDealerWindowCard =
                                   k.includes("DEALER") && !k.includes("TARGET") && !k.includes("MAGIC");
-                                const isAnytimeCard = k.includes("TARGET") || k.includes("MAGIC");
+                                const isAnytimeCard = k.includes("TARGET") || k.includes("MAGIC") || k.includes("MYTHIC");
                                 const isBettingCard = k === "BJ_PROTECTOR";
                                 const enabled =
                                   v > 0 &&

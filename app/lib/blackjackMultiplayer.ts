@@ -17,6 +17,7 @@ export type SpecialId =
   | "ADD1_SELF"
   | "PEEK_NEXT"
   | "BJ_PROTECTOR"
+  | "FREE_SPLIT"
   | "SWAP_ONE"
   | "DOUBLE_PAYOUT"
   | "ADD2_DEALER"
@@ -33,9 +34,10 @@ export type SpecialId =
   | "MAGIC_KING"
   | "MAGIC_QUEEN"
   | "MAGIC_JACK"
-  | "MAGIC_JOKER";
+  | "MAGIC_JOKER"
+  | "MYTHIC_COPY_HANDS";
 
-export type SpecialRarity = "common" | "rare" | "legendary";
+export type SpecialRarity = "common" | "rare" | "legendary" | "mythic";
 export type SpecialTiming = "betting" | "own_turn" | "dealer_window" | "anytime";
 
 export type SpecialDef = {
@@ -78,6 +80,14 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
     desc: "Protect yourself from dealer blackjack this round (push instead of lose). Only usable during betting phase.",
     rarity: "rare",
     timing: "betting",
+    target: "self",
+  },
+  FREE_SPLIT: {
+    id: "FREE_SPLIT",
+    name: "Free Split",
+    desc: "Legendary: allows you to split ANY starting 2 cards (even if ranks don't match). Consumed when you split.",
+    rarity: "legendary",
+    timing: "anytime",
     target: "self",
   },
   SWAP_ONE: {
@@ -217,9 +227,17 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
     timing: "anytime",
     target: "any",
   },
+  MYTHIC_COPY_HANDS: {
+    id: "MYTHIC_COPY_HANDS",
+    name: "Mythic: Copy Hands",
+    desc: "MYTHIC: Copy a chosen player's current hand to EVERYONE (except dealer). Usable any time before end of round.",
+    rarity: "mythic",
+    timing: "anytime",
+    target: "any",
+  },
 };
 
-export type InventoryCategoryId = "boosts" | "saves" | "utility" | "magic" | "dealer";
+export type InventoryCategoryId = "boosts" | "saves" | "utility" | "magic" | "dealer" | "mythic";
 
 export type Inventory = {
   v: 2;
@@ -228,6 +246,7 @@ export type Inventory = {
   categories: Record<InventoryCategoryId, Partial<Record<SpecialId, number>>>;
   boxes: Array<{
     id: string;
+    tier: "normal" | "rare" | "mythic";
     awardedAt: number;
     openedAt?: number;
     opened: boolean;
@@ -236,28 +255,53 @@ export type Inventory = {
 };
 
 function classifySpecial(id: SpecialId): InventoryCategoryId {
+  if (SPECIALS[id]?.rarity === "mythic") return "mythic";
   if (id.startsWith("MAGIC_") || id.includes("_MAGIC")) return "magic";
   if (id.startsWith("SUB")) return "saves";
   if (id.includes("DEALER")) return "dealer";
-  if (id === "PEEK_NEXT" || id === "SWAP_ONE" || id === "FORCE_HIT_TARGET" || id === "BJ_PROTECTOR") return "utility";
+  if (
+    id === "PEEK_NEXT" ||
+    id === "SWAP_ONE" ||
+    id === "FORCE_HIT_TARGET" ||
+    id === "BJ_PROTECTOR" ||
+    id === "FREE_SPLIT"
+  )
+    return "utility";
   return "boosts";
 }
 
 function normalizeInventory(raw: any): Inventory {
   // Migration from the old flat object: {SPECIAL_ID: count}
   if (raw && raw.v === 2 && raw.categories) {
+    const cats = raw.categories ?? {};
     return {
       v: 2,
       handsPlayed: Number(raw.handsPlayed ?? 0) || 0,
-      categories: raw.categories as Inventory["categories"],
-      boxes: Array.isArray(raw.boxes) ? (raw.boxes as Inventory["boxes"]) : [],
+      categories: {
+        boosts: (cats.boosts ?? {}) as any,
+        saves: (cats.saves ?? {}) as any,
+        utility: (cats.utility ?? {}) as any,
+        magic: (cats.magic ?? {}) as any,
+        dealer: (cats.dealer ?? {}) as any,
+        mythic: (cats.mythic ?? {}) as any,
+      },
+      boxes: Array.isArray(raw.boxes)
+        ? (raw.boxes as any[]).map((b) => ({
+            id: String(b?.id ?? ""),
+            tier: (b?.tier === "rare" || b?.tier === "mythic" ? b.tier : "normal") as any,
+            awardedAt: Number(b?.awardedAt ?? 0) || 0,
+            openedAt: b?.openedAt != null ? Number(b.openedAt) : undefined,
+            opened: !!b?.opened,
+            contents: Array.isArray(b?.contents) ? (b.contents as SpecialId[]) : undefined,
+          }))
+        : [],
     };
   }
 
   const inv: Inventory = {
     v: 2,
     handsPlayed: 0,
-    categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {} },
+    categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {}, mythic: {} },
     boxes: [],
   };
 
@@ -300,6 +344,66 @@ function invConsume(inv: Inventory, id: SpecialId) {
   return true;
 }
 
+function rarityOf(id: SpecialId): SpecialRarity {
+  return (SPECIALS[id]?.rarity ?? "common") as SpecialRarity;
+}
+
+function ranksEqualForSplit(cardA: number, cardB: number) {
+  try {
+    return cardFromIndex(cardA).rank === cardFromIndex(cardB).rank;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeHandsForSeat(p: any) {
+  if (!p) return;
+  if (!Array.isArray(p.hands) || p.hands.length === 0) {
+    p.hands = [
+      {
+        bet: Number(p.bet ?? 0) || 0,
+        cards: Array.isArray(p.cards) ? p.cards : [],
+        bonusPoints: Number(p.bonusPoints ?? 0) || 0,
+        stood: !!p.stood,
+        busted: !!p.busted,
+        turnEnded: !!p.turnEnded,
+        doublePayoutArmed: !!p.doublePayoutArmed,
+        usedThisRound: (p.usedThisRound ?? {}) as any,
+      },
+    ];
+    p.activeHandIndex = 0;
+  }
+  if (typeof p.activeHandIndex !== "number" || !Number.isFinite(p.activeHandIndex)) p.activeHandIndex = 0;
+  if (p.activeHandIndex < 0) p.activeHandIndex = 0;
+  if (p.activeHandIndex >= p.hands.length) p.activeHandIndex = p.hands.length - 1;
+
+  // Ensure each hand has defaults
+  for (const h of p.hands) {
+    if (!h) continue;
+    h.bet = Number(h.bet ?? 0) || 0;
+    h.cards = Array.isArray(h.cards) ? h.cards : [];
+    h.bonusPoints = Number(h.bonusPoints ?? 0) || 0;
+    h.stood = !!h.stood;
+    h.busted = !!h.busted;
+    h.turnEnded = !!h.turnEnded;
+    h.doublePayoutArmed = !!h.doublePayoutArmed;
+    h.usedThisRound = (h.usedThisRound ?? {}) as any;
+  }
+
+  // Sync legacy fields from active hand (for UI compatibility)
+  const cur = p.hands[p.activeHandIndex] ?? p.hands[0];
+  if (cur) {
+    p.bet = cur.bet;
+    p.cards = cur.cards;
+    p.bonusPoints = cur.bonusPoints;
+    p.stood = cur.stood;
+    p.busted = cur.busted;
+    p.turnEnded = cur.turnEnded;
+    p.doublePayoutArmed = cur.doublePayoutArmed;
+    p.usedThisRound = cur.usedThisRound;
+  }
+}
+
 export type PlayerSeat = {
   userId: number;
   username: string;
@@ -310,6 +414,8 @@ export type PlayerSeat = {
   inventory: Inventory;
 
   // round state
+  // Legacy single-hand fields are kept for backward compatibility, but are derived
+  // from the currently active hand (hands[activeHandIndex]).
   bet: number;
   betNonce?: number | null; // client-side only; kept for convenience
   cards: number[];
@@ -319,6 +425,20 @@ export type PlayerSeat = {
   turnEnded: boolean;
   doublePayoutArmed: boolean;
   usedThisRound: Partial<Record<SpecialId, boolean>>;
+
+  // Multi-hand (split) support
+  hands: Array<{
+    bet: number;
+    cards: number[];
+    bonusPoints: number;
+    stood: boolean;
+    busted: boolean;
+    turnEnded: boolean;
+    doublePayoutArmed: boolean;
+    usedThisRound: Partial<Record<SpecialId, boolean>>;
+  }>;
+  activeHandIndex: number;
+
   lastBox?: SpecialId[];
   bjProtected: boolean;
   extendUsedThisTurn: boolean;
@@ -429,7 +549,7 @@ export function defaultInventory(): Inventory {
   const inv: Inventory = {
     v: 2,
     handsPlayed: 0,
-    categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {} },
+    categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {}, mythic: {} },
     boxes: [],
   };
   // Small starter kit
@@ -438,6 +558,7 @@ export function defaultInventory(): Inventory {
   invAdd(inv, "PEEK_NEXT", 1);
   invAdd(inv, "DOUBLE_PAYOUT", 1);
   invAdd(inv, "SUB1_SELF", 1);
+  invAdd(inv, "BJ_PROTECTOR", 1);
   return inv;
 }
 
@@ -447,13 +568,10 @@ function randSpecial(seed: number, rarity: SpecialRarity): SpecialId {
   return pool[Math.floor(r * pool.length)] ?? "ADD2_SELF";
 }
 
-function rollMysteryBox(seed: number): SpecialId[] {
-  // Weighted by rarity: mostly common, some rare, very few legendary.
-  const weights: Record<SpecialRarity, number> = { common: 70, rare: 25, legendary: 5 };
-  const pool = Object.values(SPECIALS).map((s) => ({ id: s.id, w: weights[s.rarity] ?? 1 }));
+function rollBox(tier: "normal" | "rare" | "mythic", seed: number): SpecialId[] {
   const rand = lcg(seed);
 
-  const pickOne = (exclude: Set<SpecialId>) => {
+  const weightedPick = (pool: Array<{ id: SpecialId; w: number }>, exclude: Set<SpecialId>) => {
     let total = 0;
     for (const p of pool) total += exclude.has(p.id) ? 0 : p.w;
     let r = rand() * total;
@@ -462,13 +580,37 @@ function rollMysteryBox(seed: number): SpecialId[] {
       r -= p.w;
       if (r <= 0) return p.id;
     }
-    return "ADD2_SELF";
+    return pool[0]?.id ?? "ADD2_SELF";
   };
 
+  if (tier === "mythic") {
+    const pool = Object.values(SPECIALS)
+      .filter((s) => s.rarity === "mythic")
+      .map((s) => ({ id: s.id, w: 1 }));
+    return [weightedPick(pool, new Set())];
+  }
+
+  if (tier === "rare") {
+    const weights: Record<SpecialRarity, number> = { common: 0, rare: 80, legendary: 20, mythic: 0 };
+    const pool = Object.values(SPECIALS)
+      .filter((s) => s.rarity === "rare" || s.rarity === "legendary")
+      .map((s) => ({ id: s.id, w: weights[s.rarity] ?? 1 }));
+    const used = new Set<SpecialId>();
+    const a = weightedPick(pool, used);
+    used.add(a);
+    const b = weightedPick(pool, used);
+    return [a, b];
+  }
+
+  // normal
+  const weights: Record<SpecialRarity, number> = { common: 70, rare: 25, legendary: 5, mythic: 0 };
+  const pool = Object.values(SPECIALS)
+    .filter((s) => s.rarity !== "mythic")
+    .map((s) => ({ id: s.id, w: weights[s.rarity] ?? 1 }));
   const out: SpecialId[] = [];
   const used = new Set<SpecialId>();
   for (let i = 0; i < 3; i++) {
-    const id = pickOne(used);
+    const id = weightedPick(pool, used);
     out.push(id);
     used.add(id);
   }
@@ -515,6 +657,7 @@ export function tickTable(state: TableState, now: number): TableState {
   for (const p of s.seats) {
     if (!p) continue;
     p.inventory = normalizeInventory(p.inventory);
+    normalizeHandsForSeat(p);
   }
 
   // Clean dead spectators (no-op for MVP)
@@ -584,16 +727,21 @@ function startBetting(state: TableState, now: number) {
     const p = s.seats[i];
     if (!p) continue;
     p.inventory = normalizeInventory(p.inventory);
-    p.bet = 0;
     p.skipThisRound = false;
-    p.cards = [];
-    p.bonusPoints = 0;
-    p.stood = false;
-    p.busted = false;
-    p.turnEnded = false;
-    p.doublePayoutArmed = false;
-    p.usedThisRound = {};
-    p.lastBox = undefined;
+    p.hands = [
+      {
+        bet: 0,
+        cards: [],
+        bonusPoints: 0,
+        stood: false,
+        busted: false,
+        turnEnded: false,
+        doublePayoutArmed: false,
+        usedThisRound: {},
+      },
+    ];
+    p.activeHandIndex = 0;
+    normalizeHandsForSeat(p);
     p.bjProtected = false;
     p.extendUsedThisTurn = false;
   }
@@ -650,20 +798,28 @@ function startRound(state: TableState, now: number) {
   // deal: each participant 2, dealer 2
   for (const idx of participants) {
     const p = s.seats[idx]!;
-    p.cards = [];
-    p.bonusPoints = 0;
-    p.stood = false;
-    p.busted = false;
-    p.turnEnded = false;
-    p.doublePayoutArmed = false;
-    p.usedThisRound = {};
+    const bet = Number(p.hands?.[0]?.bet ?? p.bet ?? 0) || 0;
+    p.hands = [
+      {
+        bet,
+        cards: [],
+        bonusPoints: 0,
+        stood: false,
+        busted: false,
+        turnEnded: false,
+        doublePayoutArmed: false,
+        usedThisRound: {},
+      },
+    ];
+    p.activeHandIndex = 0;
     // Keep bjProtected if set during betting; otherwise false.
     p.bjProtected = !!p.bjProtected;
     p.extendUsedThisTurn = false;
     const a = drawFromShoe(s);
     const b = drawFromShoe(s);
-    if (a != null) p.cards.push(a);
-    if (b != null) p.cards.push(b);
+    if (a != null) p.hands[0]!.cards.push(a);
+    if (b != null) p.hands[0]!.cards.push(b);
+    normalizeHandsForSeat(p);
   }
   const d1 = drawFromShoe(s);
   const d2 = drawFromShoe(s);
@@ -680,9 +836,11 @@ function startRound(state: TableState, now: number) {
   // auto-finish players with blackjack
   for (const idx of participants) {
     const p = s.seats[idx]!;
-    if (handTotal(p.cards, p.bonusPoints).total === 21) {
-      p.turnEnded = true;
-      p.stood = true;
+    const h = p.hands?.[0];
+    if (h && handTotal(h.cards, h.bonusPoints).total === 21) {
+      h.turnEnded = true;
+      h.stood = true;
+      normalizeHandsForSeat(p);
     }
   }
   // if first player is already ended, advance
@@ -700,15 +858,23 @@ function currentTurnSeatIndex(s: TableState) {
 
 function advanceTurn(state: TableState, now: number): TableState {
   const s: TableState = { ...state };
-  // skip ended players
+  // find next active hand (hands are played sequentially per seat)
   while (s.turnIndex < s.participants.length) {
     const seatIdx = s.participants[s.turnIndex]!;
     const p = s.seats[seatIdx];
-    if (!p || p.turnEnded) {
+    if (!p) {
       s.turnIndex += 1;
       continue;
     }
-    // found active player
+    normalizeHandsForSeat(p);
+    const nextHandIdx = (p.hands ?? []).findIndex((h: any) => !h?.turnEnded);
+    if (nextHandIdx < 0) {
+      // seat finished all hands
+      s.turnIndex += 1;
+      continue;
+    }
+    p.activeHandIndex = nextHandIdx;
+    normalizeHandsForSeat(p);
     s.turnEndsAt = now + 20_000;
     p.extendUsedThisTurn = false;
     s.updatedAt = now;
@@ -727,13 +893,17 @@ export function applyBet(state: TableState, userId: number, amount: number, now:
   const seatIdx = s.seats.findIndex((p) => p?.userId === userId);
   if (seatIdx < 0) return { state: s, error: "You are not seated at this table." };
   const p = s.seats[seatIdx]!;
+  normalizeHandsForSeat(p);
   const a = Number(amount);
   if (!Number.isFinite(a) || a <= 0) return { state: s, error: "Invalid bet amount." };
-  p.bet = Math.round(a * 100) / 100;
+  p.hands[0]!.bet = Math.round(a * 100) / 100;
+  p.activeHandIndex = 0;
+  normalizeHandsForSeat(p);
   p.skipThisRound = false;
   p.lastSeenAt = now;
   s.lastActivityAt = now;
-  return { state: { ...s, updatedAt: now } };
+  s.updatedAt = now;
+  return { state: s };
 }
 
 export function applySkip(state: TableState, userId: number, now: number): { state: TableState; error?: string } {
@@ -742,17 +912,21 @@ export function applySkip(state: TableState, userId: number, now: number): { sta
   const seatIdx = s.seats.findIndex((p) => p?.userId === userId);
   if (seatIdx < 0) return { state: s, error: "You are not seated at this table." };
   const p = s.seats[seatIdx]!;
-  p.bet = 0;
+  normalizeHandsForSeat(p);
+  p.hands[0]!.bet = 0;
+  p.activeHandIndex = 0;
+  normalizeHandsForSeat(p);
   p.skipThisRound = true;
   p.lastSeenAt = now;
   s.lastActivityAt = now;
-  return { state: { ...s, updatedAt: now } };
+  s.updatedAt = now;
+  return { state: s };
 }
 
 export function applyPlayerAction(
   state: TableState,
   userId: number,
-  action: { type: "hit" | "stand" | "double_down" },
+  action: { type: "hit" | "stand" | "double_down" | "split" },
   now: number,
 ): { state: TableState; error?: string } {
   const s = tickTable(state, now);
@@ -761,51 +935,140 @@ export function applyPlayerAction(
   if (turnSeatIdx == null) return { state: s, error: "No active turn." };
   const p = s.seats[turnSeatIdx];
   if (!p) return { state: s, error: "Turn seat empty." };
+  normalizeHandsForSeat(p);
+  const h = p.hands[p.activeHandIndex]!;
   if (p.userId !== userId) return { state: s, error: "Not your turn." };
-  if (action.type === "hit" && p.busted) return { state: s, error: "You are busted. Play a save card or stand." };
+  if (action.type === "hit" && h.busted) return { state: s, error: "You are busted. Play a save card or stand." };
 
   if (action.type === "hit") {
     const c = drawFromShoe(s);
-    if (c != null) p.cards.push(c);
+    if (c != null) h.cards.push(c);
     s.lastActivityAt = now;
     // Reset turn timer on irreversible action
     s.turnEndsAt = now + 20_000;
-    const t = handTotal(p.cards, p.bonusPoints).total;
+    const t = handTotal(h.cards, h.bonusPoints).total;
     if (t > 21) {
       // Allow "save" cards (-1/-2/-5/-10) before the turn is over.
-      p.busted = true;
-      return { state: { ...s, updatedAt: now } };
+      h.busted = true;
+      normalizeHandsForSeat(p);
+      s.updatedAt = now;
+      return { state: s };
     }
     // if 21, auto-stand
     if (t === 21) {
-      p.turnEnded = true;
-      p.stood = true;
+      h.turnEnded = true;
+      h.stood = true;
+      normalizeHandsForSeat(p);
       return { state: advanceTurn(s, now) };
     }
-    return { state: { ...s, updatedAt: now } };
+    normalizeHandsForSeat(p);
+    s.updatedAt = now;
+    return { state: s };
   }
 
   if (action.type === "double_down") {
-    if (p.busted) return { state: s, error: "You are busted." };
-    if (p.cards.length !== 2) return { state: s, error: "Double down is only allowed on your first two cards." };
-    if (!(p.bet > 0)) return { state: s, error: "No bet placed." };
+    if (h.busted) return { state: s, error: "You are busted." };
+    if (h.cards.length !== 2) return { state: s, error: "Double down is only allowed on your first two cards." };
+    if (!(h.bet > 0)) return { state: s, error: "No bet placed." };
     // Double the bet, draw exactly one card, then stand.
-    p.bet = Math.round(p.bet * 2 * 100) / 100;
+    h.bet = Math.round(h.bet * 2 * 100) / 100;
     const c = drawFromShoe(s);
-    if (c != null) p.cards.push(c);
+    if (c != null) h.cards.push(c);
     s.lastActivityAt = now;
     s.turnEndsAt = now + 20_000;
-    const t = handTotal(p.cards, p.bonusPoints).total;
-    if (t > 21) p.busted = true;
-    p.turnEnded = true;
-    p.stood = true;
+    const t = handTotal(h.cards, h.bonusPoints).total;
+    if (t > 21) h.busted = true;
+    h.turnEnded = true;
+    h.stood = true;
+    normalizeHandsForSeat(p);
     return { state: advanceTurn(s, now) };
   }
 
-  if (action.type === "stand") {
-    p.turnEnded = true;
-    p.stood = true;
+  if (action.type === "split") {
+    if (h.busted) return { state: s, error: "You are busted." };
+    if (h.turnEnded) return { state: s, error: "Hand already ended." };
+    if (h.cards.length !== 2) return { state: s, error: "Split only allowed with exactly 2 cards." };
+    if ((p.hands?.length ?? 1) >= 4) return { state: s, error: "Max splits reached (4 hands)." };
+
+    const ranksMatch = ranksEqualForSplit(h.cards[0]!, h.cards[1]!);
+    const canFreeSplit = invGet(p.inventory, "FREE_SPLIT") > 0;
+    const canSplit = ranksMatch || canFreeSplit;
+    if (!canSplit) return { state: s, error: "Split requires matching ranks (or Free Split powerup)." };
+
+    if (!ranksMatch && canFreeSplit) {
+      // Only consume when used to bypass rank condition.
+      invConsume(p.inventory, "FREE_SPLIT");
+    }
+
+    const c1 = h.cards[0]!;
+    const c2 = h.cards[1]!;
+
+    const newHandA = {
+      bet: h.bet,
+      cards: [c1],
+      bonusPoints: 0,
+      stood: false,
+      busted: false,
+      turnEnded: false,
+      doublePayoutArmed: false,
+      usedThisRound: {},
+    };
+    const newHandB = {
+      bet: h.bet,
+      cards: [c2],
+      bonusPoints: 0,
+      stood: false,
+      busted: false,
+      turnEnded: false,
+      doublePayoutArmed: false,
+      usedThisRound: {},
+    };
+
+    // Replace current hand with hand A, insert hand B after it
+    const hands = p.hands ?? [];
+    hands.splice(p.activeHandIndex, 1, newHandA, newHandB);
+    p.hands = hands;
+
+    // Deal one card to each split hand immediately
+    const a = drawFromShoe(s);
+    const b = drawFromShoe(s);
+    if (a != null) newHandA.cards.push(a);
+    if (b != null) newHandB.cards.push(b);
+
+    // If splitting aces: allow resplit aces up to 4 per your rule, but otherwise play normally.
+    // (No special restriction.)
+
+    // If hand A hits 21, auto-stand it.
+    const ta = handTotal(newHandA.cards, newHandA.bonusPoints).total;
+    if (ta === 21) {
+      newHandA.turnEnded = true;
+      newHandA.stood = true;
+    } else if (ta > 21) {
+      newHandA.busted = true;
+    }
+    const tb = handTotal(newHandB.cards, newHandB.bonusPoints).total;
+    if (tb === 21) {
+      newHandB.turnEnded = true;
+      newHandB.stood = true;
+    } else if (tb > 21) {
+      newHandB.busted = true;
+    }
+
+    // Continue with current seat; choose the first non-ended hand as active
+    p.activeHandIndex = Math.max(0, p.hands.findIndex((hh: any) => !hh?.turnEnded));
+    if (p.activeHandIndex < 0) p.activeHandIndex = 0;
+    normalizeHandsForSeat(p);
     s.lastActivityAt = now;
+    s.turnEndsAt = now + 20_000;
+    s.updatedAt = now;
+    return { state: s };
+  }
+
+  if (action.type === "stand") {
+    h.turnEnded = true;
+    h.stood = true;
+    s.lastActivityAt = now;
+    normalizeHandsForSeat(p);
     return { state: advanceTurn(s, now) };
   }
 
@@ -820,8 +1083,11 @@ export function applyVoteSkipTurn(state: TableState, userId: number, now: number
   const p = s.seats[turnSeatIdx];
   if (!p) return { state: s, error: "Turn seat empty." };
   if (p.userId !== userId) return { state: s, error: "Only the current player can skip the timer." };
-  p.turnEnded = true;
-  p.stood = true;
+  normalizeHandsForSeat(p);
+  const h = p.hands[p.activeHandIndex]!;
+  h.turnEnded = true;
+  h.stood = true;
+  normalizeHandsForSeat(p);
   s.lastActivityAt = now;
   return { state: advanceTurn(s, now) };
 }
@@ -843,7 +1109,8 @@ export function applyExtendTurnTimer(
   // Add 15 seconds to current timer (or reset to now+15s if it already expired).
   s.turnEndsAt = Math.max(s.turnEndsAt, now) + 15_000;
   s.lastActivityAt = now;
-  return { state: { ...s, updatedAt: now } };
+  s.updatedAt = now;
+  return { state: s };
 }
 
 export function applySpecial(
@@ -857,6 +1124,7 @@ export function applySpecial(
   if (seatIdx < 0) return { state: s, error: "You are not seated." };
   const actor = s.seats[seatIdx]!;
   actor.inventory = normalizeInventory(actor.inventory);
+  normalizeHandsForSeat(actor);
   const def = SPECIALS[input.id];
   if (!def) return { state: s, error: "Unknown special." };
   if (invGet(actor.inventory, input.id) <= 0) return { state: s, error: "No charges left." };
@@ -867,12 +1135,14 @@ export function applySpecial(
     "DOUBLE_PAYOUT",
     "DEALER_SECOND_CHANCE",
     "BJ_PROTECTOR",
+    "MYTHIC_COPY_HANDS",
   ]);
   if (singleUsePerRound.has(input.id) && actor.usedThisRound?.[input.id]) {
     return { state: s, error: "Already used this round." };
   }
 
-  const isOwnTurn = s.phase === "player_turns" && currentTurnSeatIndex(s) != null && s.seats[currentTurnSeatIndex(s)!]?.userId === userId;
+  const isOwnTurn =
+    s.phase === "player_turns" && currentTurnSeatIndex(s) != null && s.seats[currentTurnSeatIndex(s)!]?.userId === userId;
   // "Anytime" magic cards are allowed any time before the end of the round:
   // during player turns, dealer phase, and the dealer-window (but not after settling starts).
   const isBeforeEndOfRound = s.phase === "player_turns" || s.phase === "dealer" || s.phase === "dealer_window";
@@ -909,31 +1179,37 @@ export function applySpecial(
 
   // Apply effects
   if (input.id === "ADD2_SELF") {
-    actor.bonusPoints += 2;
-    const t = handTotal(actor.cards, actor.bonusPoints).total;
+    const h = actor.hands[actor.activeHandIndex]!;
+    h.bonusPoints += 2;
+    const t = handTotal(h.cards, h.bonusPoints).total;
     if (t > 21) {
       // Allow save cards before the turn is over.
-      actor.busted = true;
+      h.busted = true;
     }
   } else if (input.id === "ADD1_SELF") {
-    actor.bonusPoints += 1;
-    const t = handTotal(actor.cards, actor.bonusPoints).total;
-    if (t > 21) actor.busted = true;
+    const h = actor.hands[actor.activeHandIndex]!;
+    h.bonusPoints += 1;
+    const t = handTotal(h.cards, h.bonusPoints).total;
+    if (t > 21) h.busted = true;
   } else if (input.id === "PEEK_NEXT") {
     const next = s.shoe[s.shoe.length - 1];
     s.peekByUserId[String(userId)] = typeof next === "number" ? next : null;
   } else if (input.id === "BJ_PROTECTOR") {
     actor.bjProtected = true;
+  } else if (input.id === "FREE_SPLIT") {
+    return { state: s, error: "This powerup is consumed automatically when you Split." };
   } else if (input.id === "SWAP_ONE") {
-    if (actor.cards.length === 0) return { state: s, error: "No cards to swap." };
+    const h = actor.hands[actor.activeHandIndex]!;
+    if (h.cards.length === 0) return { state: s, error: "No cards to swap." };
     const next = drawFromShoe(s);
     if (next == null) return { state: s, error: "Shoe empty." };
     // swap the last card
-    actor.cards[actor.cards.length - 1] = next;
-    const t = handTotal(actor.cards, actor.bonusPoints).total;
-    if (t > 21) actor.busted = true;
+    h.cards[h.cards.length - 1] = next;
+    const t = handTotal(h.cards, h.bonusPoints).total;
+    if (t > 21) h.busted = true;
   } else if (input.id === "DOUBLE_PAYOUT") {
-    actor.doublePayoutArmed = true;
+    const h = actor.hands[actor.activeHandIndex]!;
+    h.doublePayoutArmed = true;
   } else if (input.id === "ADD2_DEALER") {
     s.dealer.bonusPoints += 2;
   } else if (input.id === "DEALER_SECOND_CHANCE") {
@@ -944,9 +1220,11 @@ export function applySpecial(
       s.dealer.bonusPoints += 2;
     } else {
       targetSeat.inventory = normalizeInventory(targetSeat.inventory);
-      targetSeat.bonusPoints += 2;
-      const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
-      if (t > 21) targetSeat.busted = true;
+      normalizeHandsForSeat(targetSeat);
+      const th = targetSeat.hands[targetSeat.activeHandIndex]!;
+      th.bonusPoints += 2;
+      const t = handTotal(th.cards, th.bonusPoints).total;
+      if (t > 21) th.busted = true;
     }
   } else if (input.id === "FORCE_HIT_TARGET") {
     const c = drawFromShoe(s);
@@ -955,9 +1233,11 @@ export function applySpecial(
       s.dealer.cards.push(c);
     } else {
       targetSeat.inventory = normalizeInventory(targetSeat.inventory);
-      targetSeat.cards.push(c);
-      const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
-      if (t > 21) targetSeat.busted = true;
+      normalizeHandsForSeat(targetSeat);
+      const th = targetSeat.hands[targetSeat.activeHandIndex]!;
+      th.cards.push(c);
+      const t = handTotal(th.cards, th.bonusPoints).total;
+      if (t > 21) th.busted = true;
     }
   } else if (input.id === "ADD1_MAGIC" || input.id === "ADD2_MAGIC") {
     const delta = input.id === "ADD1_MAGIC" ? 1 : 2;
@@ -965,9 +1245,11 @@ export function applySpecial(
       s.dealer.bonusPoints += delta;
     } else {
       targetSeat.inventory = normalizeInventory(targetSeat.inventory);
-      targetSeat.bonusPoints += delta;
-      const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
-      if (t > 21) targetSeat.busted = true;
+      normalizeHandsForSeat(targetSeat);
+      const th = targetSeat.hands[targetSeat.activeHandIndex]!;
+      th.bonusPoints += delta;
+      const t = handTotal(th.cards, th.bonusPoints).total;
+      if (t > 21) th.busted = true;
     }
   } else if (
     input.id === "MAGIC_ACE" ||
@@ -992,9 +1274,34 @@ export function applySpecial(
       s.dealer.cards.push(magicCard);
     } else {
       targetSeat.inventory = normalizeInventory(targetSeat.inventory);
-      targetSeat.cards.push(magicCard);
-      const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
-      if (t > 21) targetSeat.busted = true;
+      normalizeHandsForSeat(targetSeat);
+      const th = targetSeat.hands[targetSeat.activeHandIndex]!;
+      th.cards.push(magicCard);
+      const t = handTotal(th.cards, th.bonusPoints).total;
+      if (t > 21) th.busted = true;
+    }
+  } else if (input.id === "MYTHIC_COPY_HANDS") {
+    if (!targetSeat) return { state: s, error: "Choose a player to copy." };
+    normalizeHandsForSeat(targetSeat);
+    const copyFrom = targetSeat.hands[targetSeat.activeHandIndex]!;
+    for (const other of s.seats) {
+      if (!other) continue;
+      normalizeHandsForSeat(other);
+      // Copy to ALL players (including the actor) except dealer; keep bet, reset statuses to continue round.
+      other.hands = [
+        {
+          bet: other.hands?.[0]?.bet ?? other.bet ?? 0,
+          cards: [...copyFrom.cards],
+          bonusPoints: copyFrom.bonusPoints,
+          stood: false,
+          busted: false,
+          turnEnded: false,
+          doublePayoutArmed: false,
+          usedThisRound: {},
+        },
+      ];
+      other.activeHandIndex = 0;
+      normalizeHandsForSeat(other);
     }
   } else if (
     input.id === "SUB1_SELF" ||
@@ -1004,9 +1311,10 @@ export function applySpecial(
   ) {
     const delta =
       input.id === "SUB1_SELF" ? -1 : input.id === "SUB2_SELF" ? -2 : input.id === "SUB5_SELF" ? -5 : -10;
-    actor.bonusPoints += delta;
-    const t = handTotal(actor.cards, actor.bonusPoints).total;
-    if (t <= 21) actor.busted = false;
+    const h = actor.hands[actor.activeHandIndex]!;
+    h.bonusPoints += delta;
+    const t = handTotal(h.cards, h.bonusPoints).total;
+    if (t <= 21) h.busted = false;
   }
 
   if (singleUsePerRound.has(input.id)) actor.usedThisRound[input.id] = true;
@@ -1016,7 +1324,9 @@ export function applySpecial(
   // Reset turn timer on irreversible action (using a powerup on your own turn).
   if (isOwnTurn) s.turnEndsAt = now + 20_000;
 
-  return { state: { ...s, updatedAt: now } };
+  normalizeHandsForSeat(actor);
+  s.updatedAt = now;
+  return { state: s };
 }
 
 function settleRound(state: TableState, now: number): TableState {
@@ -1030,83 +1340,121 @@ function settleRound(state: TableState, now: number): TableState {
   }
 
   const results: Record<string, { outcome: string; multiplier: number }> = {};
+  let mythicDropAny = false;
   for (const seatIdx of s.participants) {
     const p = s.seats[seatIdx];
     if (!p) continue;
     p.inventory = normalizeInventory(p.inventory);
-    const pTotal = handTotal(p.cards, p.bonusPoints).total;
-    let mult = 0;
-    let outcome = "";
-    const pBJ = pTotal === 21 && p.cards.length === 2;
+    normalizeHandsForSeat(p);
+
+    let bestMult = 0;
+    let bestOutcome = "";
+    let anySevenCardWinOrPush = false;
+
+    // Evaluate each hand vs dealer; choose the best multiplier for player reporting.
+    for (const h of p.hands ?? []) {
+      const pTotal = handTotal(h.cards, h.bonusPoints).total;
+      let mult = 0;
+      let outcome = "";
+      const pBJ = pTotal === 21 && h.cards.length === 2;
     const dBJ = dTotal === 21 && s.dealer.cards.length === 2;
 
-    if (isDealerBJ) {
-      if (p.bjProtected) {
-        mult = 1;
-        outcome = "Dealer blackjack (protected)";
-      } else {
+      if (isDealerBJ) {
+        if (p.bjProtected) {
+          mult = 1;
+          outcome = "Dealer blackjack (protected)";
+        } else {
+          mult = 0;
+          outcome = "Dealer blackjack";
+        }
+      } else if (pTotal > 21) {
         mult = 0;
-        outcome = "Dealer blackjack";
-      }
-    } else if (pTotal > 21) {
-      mult = 0;
-      outcome = `Bust (${pTotal})`;
-    } else if (dBJ && pBJ) {
-      mult = 1;
-      outcome = "Push (both blackjack)";
-    } else if (pBJ) {
-      mult = 2.5;
-      outcome = "Blackjack (3:2)";
-    } else if (dTotal > 21) {
-      mult = 2;
-      outcome = `Dealer bust (${dTotal})`;
-    } else if (pTotal > dTotal) {
-      mult = 2;
-      outcome = `${pTotal} > ${dTotal}`;
-    } else if (pTotal < dTotal) {
-      mult = 0;
-      outcome = `${pTotal} < ${dTotal}`;
-    } else {
-      mult = 1;
-      outcome = `Push (${pTotal})`;
-    }
-
-    // Card-count bonus rules:
-    // - 6+ cards without busting: if you would have LOST, treat as push instead ("push on lost").
-    // - Extra 2:1 bonus is ONLY for wins:
-    //   if you WIN with 5 cards => +2x; each additional card adds another +2x.
-    if (!isDealerBJ && pTotal <= 21) {
-      const cards = p.cards.length;
-      if (cards >= 6 && mult === 0) {
+        outcome = `Bust (${pTotal})`;
+      } else if (dBJ && pBJ) {
         mult = 1;
-        outcome = `Push (6+ cards)`;
+        outcome = "Push (both blackjack)";
+      } else if (pBJ) {
+        mult = 2.5;
+        outcome = "Blackjack (3:2)";
+      } else if (dTotal > 21) {
+        mult = 2;
+        outcome = `Dealer bust (${dTotal})`;
+      } else if (pTotal > dTotal) {
+        mult = 2;
+        outcome = `${pTotal} > ${dTotal}`;
+      } else if (pTotal < dTotal) {
+        mult = 0;
+        outcome = `${pTotal} < ${dTotal}`;
+      } else {
+        mult = 1;
+        outcome = `Push (${pTotal})`;
       }
-      if (mult > 1 && cards >= 5) {
-        const bonus = 2 * (cards - 4);
-        mult += bonus;
-        outcome += ` +${bonus.toFixed(0)}x (cards)`;
+
+      // Card-count bonus rules:
+      // - 6+ cards without busting: if you would have LOST, treat as push instead ("push on lost").
+      // - Extra 2:1 bonus is ONLY for wins:
+      //   if you WIN with 5 cards => +2x; each additional card adds another +2x.
+      if (!isDealerBJ && pTotal <= 21) {
+        const cards = h.cards.length;
+        if (cards >= 6 && mult === 0) {
+          mult = 1;
+          outcome = `Push (6+ cards)`;
+        }
+        if (mult > 1 && cards >= 5) {
+          const bonus = 2 * (cards - 4);
+          mult += bonus;
+          outcome += ` +${bonus.toFixed(0)}x (cards)`;
+        }
+        if (cards >= 7 && mult >= 1) anySevenCardWinOrPush = true;
+      }
+
+      // Apply double payout after bonuses.
+      if (h.doublePayoutArmed && mult > 1) mult *= 2;
+
+      if (mult > bestMult) {
+        bestMult = mult;
+        bestOutcome = outcome;
       }
     }
 
-    // Apply double payout after bonuses.
-    if (p.doublePayoutArmed && mult > 1) mult *= 2;
+    mythicDropAny = mythicDropAny || anySevenCardWinOrPush;
 
-    // Mystery box distribution:
-    // Every 3 hands played, award a mystery box (3 powerups inside). Boxes are opened from the UI.
+    // Box distribution:
+    // Every 3 hands played, award a normal box.
     p.inventory.handsPlayed = Number(p.inventory.handsPlayed ?? 0) + 1;
     if (p.inventory.handsPlayed % 3 === 0) {
       const seed = Math.floor(now / 1000) ^ (s.round * 1103515245) ^ (p.userId * 2654435761);
-      const box = rollMysteryBox(seed);
+      const box = rollBox("normal", seed);
       p.inventory.boxes = p.inventory.boxes ?? [];
       p.inventory.boxes.push({
         id: shortId(),
+        tier: "normal",
         awardedAt: now,
         opened: false,
         contents: box,
       });
     }
 
-    results[String(p.userId)] = { outcome, multiplier: mult };
+    results[String(p.userId)] = { outcome: bestOutcome, multiplier: bestMult };
+  }
+
+  // Mythic box drop (table-wide) if anyone achieved 7-card push or win.
+  if (mythicDropAny) {
+    for (const seatIdx of s.participants) {
+      const p = s.seats[seatIdx];
+      if (!p) continue;
+      p.inventory = normalizeInventory(p.inventory);
+      const seed = Math.floor(now / 1000) ^ (s.round * 2246822519) ^ (p.userId * 3266489917);
+      const box = rollBox("mythic", seed);
+      p.inventory.boxes = p.inventory.boxes ?? [];
+      p.inventory.boxes.push({
+        id: shortId(),
+        tier: "mythic",
+        awardedAt: now,
+        opened: false,
+        contents: box,
+      });
+    }
   }
 
   s.lastResults = results;
