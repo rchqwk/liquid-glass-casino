@@ -177,6 +177,24 @@ export default function BlackjackTablePage() {
   const canSplit = !!isMyTurn && !mySeat?.busted && (mySeat?.cards?.length ?? 0) === 2;
   const myHandIndex = Number((mySeat as any)?.activeHandIndex ?? 0) || 0;
   const myHandCount = Number((mySeat as any)?.hands?.length ?? 1) || 1;
+  const myHands = (mySeat as any)?.hands ?? [];
+
+  const timerLabel =
+    state?.phase === "betting"
+      ? "Betting ends in"
+      : state?.phase === "player_turns"
+        ? "Turn ends in"
+        : state?.phase === "dealer_window"
+          ? "Dealer window"
+          : null;
+  const timerSeconds =
+    state?.phase === "betting"
+      ? bettingLeft
+      : state?.phase === "player_turns"
+        ? turnLeft
+        : state?.phase === "dealer_window"
+          ? dealerLeft
+          : undefined;
 
   // Auto-reserve funds for carried bets (bet appears prefilled due to carryBetNext)
   useEffect(() => {
@@ -440,9 +458,14 @@ export default function BlackjackTablePage() {
         myBet={Number(mySeat?.bet ?? 0)}
         handIndex={myHandIndex}
         handCount={myHandCount}
+        hands={myHands}
+        timerLabel={timerLabel ?? undefined}
+        timerSeconds={typeof timerSeconds === "number" ? timerSeconds : undefined}
         canSplit={canSplit}
         canHit={!mySeat?.busted}
         canDoubleDown={canDoubleDown}
+        canExtend={true}
+        extendUsed={!!mySeat?.extendUsedThisTurn}
         onHit={() => post("action", { type: "hit" })}
         onStand={() => post("action", { type: "stand" })}
         onDoubleDown={() => {
@@ -463,6 +486,7 @@ export default function BlackjackTablePage() {
           }
           void post("action", { type: "split", betNonce: started.nonce });
         }}
+        onExtend={() => post("action", { type: "extend_timer" })}
         dealerCards={state?.dealer?.cards ?? []}
         myCards={mySeat?.cards ?? []}
       />
@@ -767,6 +791,40 @@ export default function BlackjackTablePage() {
                         onClick={() => post("action", { type: "stand" })}
                       >
                         Stand
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                        onClick={() => {
+                          const wager = Number(mySeat?.bet ?? 0);
+                          const started = beginBet({ game: "Blackjack (MP)", wager });
+                          if ("error" in started) {
+                            setErr(started.error);
+                            return;
+                          }
+                          void post("action", { type: "double_down", betNonce: started.nonce });
+                        }}
+                        disabled={!canDoubleDown}
+                        title="Double your bet, draw one card, and stand"
+                      >
+                        DD
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                        onClick={() => {
+                          const wager = Number(mySeat?.bet ?? 0);
+                          const started = beginBet({ game: "Blackjack (MP)", wager });
+                          if ("error" in started) {
+                            setErr(started.error);
+                            return;
+                          }
+                          void post("action", { type: "split", betNonce: started.nonce });
+                        }}
+                        disabled={!canSplit}
+                        title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
+                      >
+                        Split
                       </button>
                       <button
                         type="button"

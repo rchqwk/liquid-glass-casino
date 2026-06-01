@@ -49,23 +49,69 @@ export function TurnQuickPanel(props: {
   myBet: number;
   handIndex: number; // 0-based
   handCount: number;
+  hands?: Array<{ stood?: boolean; busted?: boolean; turnEnded?: boolean; cards?: number[] }>;
+  timerLabel?: string;
+  timerSeconds?: number;
   canSplit: boolean;
   canHit: boolean;
   canDoubleDown: boolean;
+  canExtend?: boolean;
+  extendUsed?: boolean;
   onHit: () => void;
   onStand: () => void;
   onDoubleDown: () => void;
   onSplit: () => void;
+  onExtend?: () => void;
   dealerCards: number[];
   myCards: number[];
 }) {
   const [open, setOpen] = useState(false);
   if (!props.show) return null;
 
+  const HandBadges = () => {
+    const hs = props.hands ?? [];
+    if ((props.handCount ?? 1) <= 1 || hs.length <= 1) return null;
+    return (
+      <div className="mt-3 flex flex-wrap gap-2">
+        {hs.map((h, i) => {
+          const active = i === props.handIndex;
+          const busted = !!h?.busted;
+          const ended = !!h?.turnEnded;
+          const cls = active
+            ? "bg-emerald-500/20 text-emerald-100 border-emerald-300/20"
+            : busted
+              ? "bg-rose-500/15 text-rose-100 border-rose-300/20"
+              : ended
+                ? "bg-white/5 text-white/70 border-white/10"
+                : "bg-white/5 text-white/70 border-white/10";
+          const label = busted ? "BUST" : ended ? "DONE" : active ? "ACTIVE" : "WAIT";
+          return (
+            <div key={i} className={`rounded-2xl border px-3 py-2 text-[11px] ${cls}`}>
+              <span className="font-semibold">Hand {i + 1}</span>
+              <span className="ml-2 font-mono opacity-80">{label}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <>
       {/* Floating tab (stack above Mystery Boxes) */}
       <div className="pointer-events-none fixed bottom-24 right-4 z-[65]">
+        {props.timerLabel && typeof props.timerSeconds === "number" ? (
+          <div className="pointer-events-none absolute -top-12 right-0">
+            <div
+              className={`glass-soft rounded-2xl border px-3 py-2 text-[11px] text-white/80 ${
+                props.isMyTurn ? "border-emerald-300/20 bg-emerald-500/10" : "border-white/10 bg-white/5"
+              }`}
+            >
+              <div className="text-white/60">{props.timerLabel}</div>
+              <div className="font-mono text-sm text-white/90">{Math.max(0, props.timerSeconds)}s</div>
+            </div>
+          </div>
+        ) : null}
         <button
           type="button"
           className={`pointer-events-auto glass glass-shine relative rounded-3xl border px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10 ${
@@ -135,6 +181,7 @@ export function TurnQuickPanel(props: {
                     <CardPip key={`${c}-${i}`} idx={c} />
                   ))}
                 </div>
+                <HandBadges />
               </div>
             </div>
 
@@ -174,6 +221,15 @@ export function TurnQuickPanel(props: {
                   title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
                 >
                   Split
+                </button>
+                <button
+                  type="button"
+                  className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+                  disabled={!props.isMyTurn || !props.canExtend || !!props.extendUsed}
+                  onClick={props.onExtend}
+                  title="Extend your turn timer once"
+                >
+                  DE
                 </button>
               </div>
               {props.isMyTurn ? (
