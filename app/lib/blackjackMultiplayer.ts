@@ -495,6 +495,9 @@ export type TableState = {
   password?: string | null; // never sent to clients
   afkKickEnabled?: boolean; // default true
 
+  // Simple room chat (stored on the table state)
+  chat?: Array<{ id: string; userId: number; username: string; text: string; at: number }>;
+
   phase: Phase;
   round: number;
   bettingEndsAt: number; // epoch ms
@@ -679,6 +682,10 @@ function shortId() {
   return Math.random().toString(16).slice(2, 10);
 }
 
+function shortChatId() {
+  return Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 10);
+}
+
 export function newTableState(input: { id: string; name: string; public: boolean; now: number }): TableState {
   return {
     id: input.id,
@@ -692,6 +699,7 @@ export function newTableState(input: { id: string; name: string; public: boolean
     passwordEnabled: false,
     password: null,
     afkKickEnabled: true,
+    chat: [],
     phase: "betting",
     round: 1,
     bettingEndsAt: input.now + 30_000,
@@ -723,6 +731,7 @@ export function tickTable(state: TableState, now: number): TableState {
   if (s.passwordEnabled && typeof s.password !== "string") s.password = String(s.password ?? "");
   if (!s.passwordEnabled) s.password = null;
   if (typeof s.afkKickEnabled !== "boolean") s.afkKickEnabled = true;
+  if (!Array.isArray(s.chat)) s.chat = [];
 
   // Inventory migration safety
   for (const p of s.seats) {
@@ -1740,4 +1749,30 @@ export function safePublicStateForUser(state: TableState, userId: number) {
     meInventory: meSeat?.inventory ?? null,
     lastResult: state.lastResults?.[String(userId)] ?? null,
   };
+}
+
+export function applyChatMessage(
+  state: TableState,
+  userId: number,
+  input: { text: string },
+  now: number,
+): { state: TableState; error?: string } {
+  const s = tickTable(state, now);
+  const text = String(input?.text ?? "").trim();
+  if (!text) return { state: s, error: "Message is empty." };
+  if (text.length > 240) return { state: s, error: "Message too long." };
+
+  const seat = s.seats.find((p) => p?.userId === userId) ?? null;
+  const isSpectator = (s.spectators ?? []).includes(userId);
+  if (!seat && !isSpectator) return { state: s, error: "Join the room to chat." };
+
+  const username = seat?.username ?? "Spectator";
+  s.chat = Array.isArray(s.chat) ? s.chat : [];
+  s.chat.push({ id: shortChatId(), userId, username, text, at: now });
+  // Keep last 120 messages.
+  if (s.chat.length > 120) s.chat = s.chat.slice(s.chat.length - 120);
+
+  s.lastActivityAt = now;
+  s.updatedAt = now;
+  return { state: s };
 }

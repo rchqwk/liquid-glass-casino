@@ -95,6 +95,7 @@ type BJState = {
   disabledCategories?: string[];
   passwordEnabled?: boolean;
   afkKickEnabled?: boolean;
+  chat?: Array<{ id: string; userId: number; username: string; text: string; at: number }>;
   seats: Array<Seat | null>;
   spectators: number[];
   participants: number[];
@@ -141,6 +142,9 @@ export default function BlackjackTablePage() {
   const [hostPassword, setHostPassword] = useState("");
   const [hostAfkKick, setHostAfkKick] = useState(true);
   const [hostSaving, setHostSaving] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatText, setChatText] = useState("");
+  const [chatLastReadAt, setChatLastReadAt] = useState(0);
 
   const inviteUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -198,6 +202,11 @@ export default function BlackjackTablePage() {
   const myHandCount = Number((mySeat as any)?.hands?.length ?? 1) || 1;
   const myHands = (mySeat as any)?.hands ?? [];
   const isHost = !!mySeat && state?.meSeatIndex === 0;
+  const chatMessages = state?.chat ?? [];
+  const unreadChat = useMemo(() => {
+    if (chatOpen) return 0;
+    return chatMessages.filter((m) => (Number(m.at) || 0) > chatLastReadAt).length;
+  }, [chatMessages, chatLastReadAt, chatOpen]);
 
   useEffect(() => {
     if (!hostOpen || !state) return;
@@ -216,6 +225,12 @@ export default function BlackjackTablePage() {
     setHostPassword("");
     setHostAfkKick(state.afkKickEnabled !== false);
   }, [hostOpen, state]);
+
+  useEffect(() => {
+    if (!chatOpen) return;
+    const latest = chatMessages.reduce((a, b) => Math.max(a, Number(b.at) || 0), 0);
+    if (latest > chatLastReadAt) setChatLastReadAt(latest);
+  }, [chatOpen, chatMessages, chatLastReadAt]);
 
   const timerLabel =
     state?.phase === "betting"
@@ -446,16 +461,21 @@ export default function BlackjackTablePage() {
         </div>
       ) : null}
 
-      {/* Floating invite button (bottom-left) */}
+      {/* Floating chat bubble (bottom-left) */}
       <div className="pointer-events-none fixed bottom-24 left-4 z-[65]">
         <button
           type="button"
-          className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
-          onClick={() => setInviteOpen(true)}
-          title="Share a link to join this table"
+          className="pointer-events-auto glass glass-shine relative rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
+          onClick={() => setChatOpen(true)}
+          title="Room chat"
         >
-          <div className="font-semibold">Invite players</div>
-          <div className="mt-1 text-[11px] text-white/60">Share link to join</div>
+          <div className="font-semibold">Chat</div>
+          <div className="mt-1 text-[11px] text-white/60">Talk to players</div>
+          {unreadChat > 0 ? (
+            <div className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-fuchsia-500 px-2 text-[11px] font-semibold text-white shadow-[0_10px_20px_rgba(0,0,0,.35)]">
+              {Math.min(99, unreadChat)}
+            </div>
+          ) : null}
         </button>
       </div>
 
@@ -585,6 +605,80 @@ export default function BlackjackTablePage() {
                 }}
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {chatOpen ? (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
+          <div className="glass glass-shine w-full max-w-[720px] rounded-3xl border border-white/10 p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">Chat</div>
+                <div className="mt-1 text-xs text-white/60">Room messages</div>
+              </div>
+              <button
+                type="button"
+                className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
+                onClick={() => setChatOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 h-[360px] overflow-auto rounded-3xl border border-white/10 bg-white/5 p-4">
+              {chatMessages.length ? (
+                <div className="flex flex-col gap-2">
+                  {chatMessages.map((m) => (
+                    <div key={m.id} className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3 text-[11px] text-white/60">
+                        <span className="font-semibold text-white/80">{m.username}</span>
+                        <span className="font-mono">{new Date(m.at).toLocaleTimeString()}</span>
+                      </div>
+                      <div className="mt-1 whitespace-pre-wrap text-sm text-white/85">{m.text}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-white/60">No messages yet.</div>
+              )}
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <input
+                type="text"
+                value={chatText}
+                onChange={(e) => setChatText(e.target.value)}
+                placeholder="Type a message…"
+                className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    (e.currentTarget as any).blur?.();
+                    (async () => {
+                      if (!safeTableId) return;
+                      const text = chatText.trim();
+                      if (!text) return;
+                      setChatText("");
+                      await post("chat", { text });
+                    })();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                disabled={!chatText.trim()}
+                onClick={async () => {
+                  if (!safeTableId) return;
+                  const text = chatText.trim();
+                  if (!text) return;
+                  setChatText("");
+                  await post("chat", { text });
+                }}
+              >
+                Send
               </button>
             </div>
           </div>
@@ -772,6 +866,14 @@ export default function BlackjackTablePage() {
             <Link href="/casino/blackjack" className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10">
               Back to lobby
             </Link>
+            <button
+              type="button"
+              className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
+              onClick={() => setInviteOpen(true)}
+              title="Share a link to join this table"
+            >
+              Invite players
+            </button>
             <button
               type="button"
               className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
