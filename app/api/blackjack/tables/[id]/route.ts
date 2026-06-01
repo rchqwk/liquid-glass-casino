@@ -7,9 +7,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function dbSource() {
-  if (process.env.DATABASE_URL) return "DATABASE_URL";
   if (process.env.POSTGRES_URL) return "POSTGRES_URL";
   if (process.env.NEON_DATABASE_URL) return "NEON_DATABASE_URL";
+  if (process.env.DATABASE_URL) return "DATABASE_URL";
   return "file";
 }
 

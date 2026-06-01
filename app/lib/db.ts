@@ -137,10 +137,12 @@ export async function withStore<T>(fn: (s: Store) => T | Promise<T>): Promise<T>
 const MASTER_USERNAME = normalizeUsername(process.env.LGC_MASTER_USERNAME ?? "master");
 
 function getSql() {
+  // Prefer POSTGRES_URL first (Vercel/Neon integrations often populate it),
+  // then NEON_DATABASE_URL, then DATABASE_URL (which may point elsewhere).
   const url =
-    process.env.DATABASE_URL ||
     process.env.POSTGRES_URL ||
     process.env.NEON_DATABASE_URL ||
+    process.env.DATABASE_URL ||
     "";
   if (!url) return null;
   return neon(url);
