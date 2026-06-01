@@ -91,6 +91,10 @@ type BJState = {
   bettingEndsAt: number;
   turnEndsAt: number;
   dealerWindowEndsAt: number;
+  turnDurationMs?: number;
+  disabledCategories?: string[];
+  passwordEnabled?: boolean;
+  afkKickEnabled?: boolean;
   seats: Array<Seat | null>;
   spectators: number[];
   participants: number[];
@@ -130,6 +134,13 @@ export default function BlackjackTablePage() {
   const [betPending, setBetPending] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [hostOpen, setHostOpen] = useState(false);
+  const [hostTurnMs, setHostTurnMs] = useState<30_000 | 60_000>(30_000);
+  const [hostDisabled, setHostDisabled] = useState<Record<string, boolean>>({});
+  const [hostPasswordEnabled, setHostPasswordEnabled] = useState(false);
+  const [hostPassword, setHostPassword] = useState("");
+  const [hostAfkKick, setHostAfkKick] = useState(true);
+  const [hostSaving, setHostSaving] = useState(false);
 
   const inviteUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -186,6 +197,25 @@ export default function BlackjackTablePage() {
   const myHandIndex = Number((mySeat as any)?.activeHandIndex ?? 0) || 0;
   const myHandCount = Number((mySeat as any)?.hands?.length ?? 1) || 1;
   const myHands = (mySeat as any)?.hands ?? [];
+  const isHost = !!mySeat && state?.meSeatIndex === 0;
+
+  useEffect(() => {
+    if (!hostOpen || !state) return;
+    const ms = Number(state.turnDurationMs ?? 30_000) === 60_000 ? 60_000 : 30_000;
+    setHostTurnMs(ms);
+    const disabled = new Set<string>((state.disabledCategories ?? []).map(String));
+    setHostDisabled({
+      boosts: disabled.has("boosts"),
+      saves: disabled.has("saves"),
+      utility: disabled.has("utility"),
+      magic: disabled.has("magic"),
+      dealer: disabled.has("dealer"),
+      mythic: disabled.has("mythic"),
+    });
+    setHostPasswordEnabled(!!state.passwordEnabled);
+    setHostPassword("");
+    setHostAfkKick(state.afkKickEnabled !== false);
+  }, [hostOpen, state]);
 
   const timerLabel =
     state?.phase === "betting"
@@ -288,10 +318,15 @@ export default function BlackjackTablePage() {
       setErr("Invalid table id");
       return;
     }
+    let password: string | undefined = undefined;
+    if (state?.passwordEnabled) {
+      const entered = window.prompt("Room password") ?? "";
+      password = entered;
+    }
     const res = await fetch(`/api/blackjack/tables/${safeTableId}/join`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ spectate: !!spectate }),
+      body: JSON.stringify({ spectate: !!spectate, password }),
     });
     const data = (await res.json()) as any;
     if (!res.ok) {
@@ -396,6 +431,21 @@ export default function BlackjackTablePage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Host options (seat 1 only) */}
+      {isHost ? (
+        <div className="pointer-events-none fixed bottom-40 left-4 z-[65]">
+          <button
+            type="button"
+            className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
+            onClick={() => setHostOpen(true)}
+            title="Host settings"
+          >
+            <div className="font-semibold">Host options</div>
+            <div className="mt-1 text-[11px] text-white/60">Turn time, powerups, password</div>
+          </button>
+        </div>
+      ) : null}
+
       {/* Floating invite button (bottom-left) */}
       <div className="pointer-events-none fixed bottom-24 left-4 z-[65]">
         <button
@@ -408,6 +458,138 @@ export default function BlackjackTablePage() {
           <div className="mt-1 text-[11px] text-white/60">Share link to join</div>
         </button>
       </div>
+
+      {hostOpen ? (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
+          <div className="glass glass-shine w-full max-w-[720px] rounded-3xl border border-white/10 p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">Host options</div>
+                <div className="mt-1 text-xs text-white/60">Only Player 1 (seat 1) can edit these.</div>
+              </div>
+              <button
+                type="button"
+                className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
+                onClick={() => {
+                  if (hostSaving) return;
+                  setHostOpen(false);
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <div className="text-xs font-semibold text-white/80">Turn time</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={`rounded-2xl px-3 py-2 text-xs font-medium transition ${
+                      hostTurnMs === 30_000 ? "bg-white/10 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                    onClick={() => setHostTurnMs(30_000)}
+                  >
+                    30s
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-2xl px-3 py-2 text-xs font-medium transition ${
+                      hostTurnMs === 60_000 ? "bg-white/10 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                    onClick={() => setHostTurnMs(60_000)}
+                  >
+                    1m
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <div className="text-xs font-semibold text-white/80">AFK kick</div>
+                <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-white/70">
+                  <input type="checkbox" checked={hostAfkKick} onChange={(e) => setHostAfkKick(e.target.checked)} />
+                  Enable AFK kick (miss 5 rounds)
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-4">
+              <div className="text-xs font-semibold text-white/80">Disable powerups</div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-white/70 sm:grid-cols-3">
+                {(["boosts", "saves", "utility", "magic", "dealer", "mythic"] as const).map((k) => (
+                  <label key={k} className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={!!hostDisabled[k]}
+                      onChange={(e) => setHostDisabled((m) => ({ ...m, [k]: e.target.checked }))}
+                    />
+                    {k}
+                  </label>
+                ))}
+              </div>
+              <div className="mt-2 text-[11px] text-white/50">
+                Disabled categories cannot be used by any player in this room.
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-4">
+              <div className="text-xs font-semibold text-white/80">Password</div>
+              <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-white/70">
+                <input
+                  type="checkbox"
+                  checked={hostPasswordEnabled}
+                  onChange={(e) => setHostPasswordEnabled(e.target.checked)}
+                />
+                Require password to join
+              </label>
+              {hostPasswordEnabled ? (
+                <input
+                  type="text"
+                  value={hostPassword}
+                  onChange={(e) => setHostPassword(e.target.value)}
+                  placeholder="Set room password"
+                  className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                />
+              ) : null}
+              {hostPasswordEnabled ? (
+                <div className="mt-2 text-[11px] text-white/50">
+                  Note: you must enter the password when saving (it is not shown back to you).
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                disabled={hostSaving}
+                onClick={async () => {
+                  if (!safeTableId) return;
+                  if (hostPasswordEnabled && !hostPassword.trim()) {
+                    setErr("Password cannot be empty.");
+                    return;
+                  }
+                  setHostSaving(true);
+                  const disabledCategories = Object.entries(hostDisabled)
+                    .filter(([, v]) => !!v)
+                    .map(([k]) => k);
+                  const res = await post("settings", {
+                    turnDurationMs: hostTurnMs,
+                    disabledCategories,
+                    passwordEnabled: hostPasswordEnabled,
+                    password: hostPasswordEnabled ? hostPassword.trim() : undefined,
+                    afkKickEnabled: hostAfkKick,
+                  });
+                  setHostSaving(false);
+                  if (res?.ok) setHostOpen(false);
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {inviteOpen ? (
         <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">

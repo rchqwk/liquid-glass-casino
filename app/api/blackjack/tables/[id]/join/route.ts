@@ -10,7 +10,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
-  const body = (await req.json().catch(() => null)) as { spectate?: boolean } | null;
+  const body = (await req.json().catch(() => null)) as { spectate?: boolean; password?: string } | null;
 
   const t = await getBlackjackTable(id);
   if (!t) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -18,6 +18,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const now = Date.now();
   const state = tickTable(t.state, now);
   state.lastActivityAt = now;
+
+  // Password gate (applies to both seating and spectating).
+  if (state.passwordEnabled) {
+    const provided = String(body?.password ?? "");
+    const expected = String(state.password ?? "");
+    if (!expected || provided !== expected) {
+      return NextResponse.json({ error: "Incorrect room password." }, { status: 403 });
+    }
+  }
 
   // Already seated?
   if (state.seats.some((p) => p?.userId === user.id)) {

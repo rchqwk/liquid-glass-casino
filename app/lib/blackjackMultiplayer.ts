@@ -488,6 +488,13 @@ export type TableState = {
   // Updated only on player activity (join/leave/bet/actions), NOT on passive polling ticks.
   lastActivityAt: number;
 
+  // Table settings (host-controlled)
+  turnDurationMs?: number; // 30000 (default) or 60000
+  disabledCategories?: InventoryCategoryId[]; // disables use of specials in these categories
+  passwordEnabled?: boolean;
+  password?: string | null; // never sent to clients
+  afkKickEnabled?: boolean; // default true
+
   phase: Phase;
   round: number;
   bettingEndsAt: number; // epoch ms
@@ -680,6 +687,11 @@ export function newTableState(input: { id: string; name: string; public: boolean
     createdAt: input.now,
     updatedAt: input.now,
     lastActivityAt: input.now,
+    turnDurationMs: 30_000,
+    disabledCategories: [],
+    passwordEnabled: false,
+    password: null,
+    afkKickEnabled: true,
     phase: "betting",
     round: 1,
     bettingEndsAt: input.now + 30_000,
@@ -703,6 +715,14 @@ export function tickTable(state: TableState, now: number): TableState {
   // If updatedAt changes on every poll, it causes constant DB writes and can overwrite
   // other sources-of-truth (like inventory updates from the mystery box endpoint).
   const s: TableState = { ...state };
+
+  // Default settings
+  if (typeof s.turnDurationMs !== "number" || !Number.isFinite(s.turnDurationMs)) s.turnDurationMs = 30_000;
+  if (!Array.isArray(s.disabledCategories)) s.disabledCategories = [];
+  s.passwordEnabled = !!s.passwordEnabled;
+  if (s.passwordEnabled && typeof s.password !== "string") s.password = String(s.password ?? "");
+  if (!s.passwordEnabled) s.password = null;
+  if (typeof s.afkKickEnabled !== "boolean") s.afkKickEnabled = true;
 
   // Inventory migration safety
   for (const p of s.seats) {
@@ -825,14 +845,16 @@ function startRound(state: TableState, now: number) {
     }
   }
 
-  // Drop players who missed 5 rounds
-  for (let i = 0; i < s.seats.length; i++) {
-    const p = s.seats[i];
-    if (!p) continue;
-    if (p.missedRounds >= 5) {
-      s.evictedInventories = s.evictedInventories ?? [];
-      s.evictedInventories.push({ userId: p.userId, inventory: p.inventory });
-      s.seats[i] = null;
+  // Drop players who missed 5 rounds (AFK kick)
+  if (s.afkKickEnabled) {
+    for (let i = 0; i < s.seats.length; i++) {
+      const p = s.seats[i];
+      if (!p) continue;
+      if (p.missedRounds >= 5) {
+        s.evictedInventories = s.evictedInventories ?? [];
+        s.evictedInventories.push({ userId: p.userId, inventory: p.inventory });
+        s.seats[i] = null;
+      }
     }
   }
 
@@ -844,7 +866,7 @@ function startRound(state: TableState, now: number) {
   s.participants = participants;
   s.turnIndex = 0;
   s.phase = "player_turns";
-  s.turnEndsAt = now + 20_000;
+  s.turnEndsAt = now + turnDurationMs(s);
   s.peekByUserId = {};
   s.dealerBlackjack = false;
 
@@ -919,6 +941,12 @@ function currentTurnSeatIndex(s: TableState) {
   return s.participants[s.turnIndex] ?? null;
 }
 
+function turnDurationMs(s: TableState) {
+  // Only allow 30s or 60s (host setting).
+  const v = Number(s.turnDurationMs ?? 30_000);
+  return v === 60_000 ? 60_000 : 30_000;
+}
+
 function advanceTurn(state: TableState, now: number): TableState {
   const s: TableState = { ...state };
   // find next active hand (hands are played sequentially per seat)
@@ -938,7 +966,7 @@ function advanceTurn(state: TableState, now: number): TableState {
     }
     p.activeHandIndex = nextHandIdx;
     normalizeHandsForSeat(p);
-    s.turnEndsAt = now + 20_000;
+    s.turnEndsAt = now + turnDurationMs(s);
     p.extendUsedThisTurn = false;
     s.updatedAt = now;
     return s;
@@ -1099,7 +1127,7 @@ export function applyPlayerAction(
     if (c != null) h.cards.push(c);
     s.lastActivityAt = now;
     // Reset turn timer on irreversible action
-    s.turnEndsAt = now + 20_000;
+    s.turnEndsAt = now + turnDurationMs(s);
     const t = handTotal(h.cards, h.bonusPoints).total;
     if (t > 21) {
       // Allow "save" cards (-1/-2/-5/-10) before the turn is over.
@@ -1133,7 +1161,7 @@ export function applyPlayerAction(
     const c = drawFromShoe(s);
     if (c != null) h.cards.push(c);
     s.lastActivityAt = now;
-    s.turnEndsAt = now + 20_000;
+    s.turnEndsAt = now + turnDurationMs(s);
     const t = handTotal(h.cards, h.bonusPoints).total;
     if (t > 21) h.busted = true;
     h.turnEnded = true;
@@ -1229,7 +1257,7 @@ export function applyPlayerAction(
     if (p.activeHandIndex < 0) p.activeHandIndex = 0;
     normalizeHandsForSeat(p);
     s.lastActivityAt = now;
-    s.turnEndsAt = now + 20_000;
+    s.turnEndsAt = now + turnDurationMs(s);
     s.updatedAt = now;
     return { state: s };
   }
@@ -1297,6 +1325,10 @@ export function applySpecial(
   normalizeHandsForSeat(actor);
   const def = SPECIALS[input.id];
   if (!def) return { state: s, error: "Unknown special." };
+  const cat = classifySpecial(input.id);
+  if ((s.disabledCategories ?? []).includes(cat)) {
+    return { state: s, error: "That powerup category is disabled for this table." };
+  }
   if (invGet(actor.inventory, input.id) <= 0) return { state: s, error: "No charges left." };
   // Some specials are limited to once per round; others can stack if you have charges.
   const singleUsePerRound = new Set<SpecialId>([
@@ -1496,7 +1528,7 @@ export function applySpecial(
   actor.lastSeenAt = now;
   s.lastActivityAt = now;
   // Reset turn timer on irreversible action (using a powerup on your own turn).
-  if (isOwnTurn) s.turnEndsAt = now + 20_000;
+  if (isOwnTurn) s.turnEndsAt = now + turnDurationMs(s);
 
   normalizeHandsForSeat(actor);
   s.updatedAt = now;
@@ -1691,6 +1723,8 @@ function settleRound(state: TableState, now: number): TableState {
 }
 
 export function safePublicStateForUser(state: TableState, userId: number) {
+  // Never leak table password to clients.
+  const { password: _pw, ...rest } = state as any;
   const meSeat = state.seats.find((p) => p?.userId === userId) ?? null;
   const peek = state.peekByUserId[String(userId)] ?? null;
   // hide dealer hole card during player turns
@@ -1698,7 +1732,7 @@ export function safePublicStateForUser(state: TableState, userId: number) {
   const dealerCards = hideDealerHole ? state.dealer.cards.map((c, i) => (i === 1 ? -1 : c)) : state.dealer.cards;
 
   return {
-    ...state,
+    ...rest,
     dealer: { ...state.dealer, cards: dealerCards },
     // spectators list is fine
     peekCard: peek,
