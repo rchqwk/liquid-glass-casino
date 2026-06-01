@@ -47,6 +47,8 @@ export function TurnQuickPanel(props: {
   show: boolean;
   isMyTurn: boolean;
   myBet: number;
+  handIndex: number; // 0-based
+  handCount: number;
   canSplit: boolean;
   canHit: boolean;
   canDoubleDown: boolean;
@@ -71,7 +73,14 @@ export function TurnQuickPanel(props: {
           }`}
           onClick={() => setOpen(true)}
         >
-          <div className="font-semibold">{props.isMyTurn ? "Your turn" : "Table"}</div>
+          <div className="font-semibold">
+            {props.isMyTurn ? "Your turn" : "Table"}
+            {props.handCount > 1 ? (
+              <span className="ml-2 text-[11px] font-medium text-white/60">
+                (Hand {props.handIndex + 1}/{props.handCount})
+              </span>
+            ) : null}
+          </div>
           <div className="mt-1 text-[11px] text-white/60">
             Bet: <span className="font-mono text-white/90">{props.myBet.toFixed(2)}</span>
           </div>
@@ -88,7 +97,14 @@ export function TurnQuickPanel(props: {
           <div className="glass glass-shine w-full max-w-[720px] rounded-3xl border border-white/10 p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-white">{props.isMyTurn ? "Your turn" : "Actions"}</div>
+                <div className="text-sm font-semibold text-white">
+                  {props.isMyTurn ? "Your turn" : "Actions"}
+                  {props.handCount > 1 ? (
+                    <span className="ml-2 text-xs font-medium text-white/60">
+                      (Hand {props.handIndex + 1}/{props.handCount})
+                    </span>
+                  ) : null}
+                </div>
                 <div className="mt-1 text-xs text-white/60">
                   Bet: <span className="font-mono text-white/80">{props.myBet.toFixed(2)}</span>
                 </div>

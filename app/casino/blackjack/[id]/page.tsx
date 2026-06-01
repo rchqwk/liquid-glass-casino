@@ -69,6 +69,8 @@ type Seat = {
   missedRounds: number;
   bet: number;
   cards: number[];
+  hands?: Array<{ cards: number[] }>;
+  activeHandIndex?: number;
   bonusPoints: number;
   stood: boolean;
   busted: boolean;
@@ -167,9 +169,14 @@ export default function BlackjackTablePage() {
 
   const mySeat = state?.meSeatIndex != null && state.meSeatIndex >= 0 ? state.seats[state.meSeatIndex] : null;
   const myTurnSeat = state?.participants?.[state.turnIndex] ?? null;
+  const turnSeatObj = myTurnSeat != null && state ? (state.seats[myTurnSeat] as any) : null;
+  const turnHandIndex = Number(turnSeatObj?.activeHandIndex ?? 0) || 0;
+  const turnHandCount = Number(turnSeatObj?.hands?.length ?? 1) || 1;
   const isMyTurn = mySeat && state?.phase === "player_turns" && myTurnSeat === state.meSeatIndex;
   const canDoubleDown = !!isMyTurn && !mySeat?.busted && (mySeat?.cards?.length ?? 0) === 2 && (mySeat?.bet ?? 0) > 0;
   const canSplit = !!isMyTurn && !mySeat?.busted && (mySeat?.cards?.length ?? 0) === 2;
+  const myHandIndex = Number((mySeat as any)?.activeHandIndex ?? 0) || 0;
+  const myHandCount = Number((mySeat as any)?.hands?.length ?? 1) || 1;
 
   // Auto-reserve funds for carried bets (bet appears prefilled due to carryBetNext)
   useEffect(() => {
@@ -431,6 +438,8 @@ export default function BlackjackTablePage() {
         show={!!state && !!mySeat}
         isMyTurn={!!isMyTurn}
         myBet={Number(mySeat?.bet ?? 0)}
+        handIndex={myHandIndex}
+        handCount={myHandCount}
         canSplit={canSplit}
         canHit={!mySeat?.busted}
         canDoubleDown={canDoubleDown}
@@ -499,10 +508,17 @@ export default function BlackjackTablePage() {
           <div className="glass-soft glass-shine rounded-3xl p-5">
             <p className="text-sm font-medium text-white">Round controls</p>
             <div className="mt-3 text-xs text-white/60">
-              {state.phase === "betting" ? (
+            {state.phase === "betting" ? (
                 <>Betting ends in <span className="font-mono text-white/80">{bettingLeft}s</span></>
               ) : state.phase === "player_turns" ? (
-                <>Turn ends in <span className="font-mono text-white/80">{turnLeft}s</span></>
+              <>
+                Turn ends in <span className="font-mono text-white/80">{turnLeft}s</span>
+                {turnHandCount > 1 ? (
+                  <span className="ml-2 text-[11px] text-white/55">
+                    (Hand {turnHandIndex + 1}/{turnHandCount})
+                  </span>
+                ) : null}
+              </>
               ) : state.phase === "dealer_window" ? (
                 <>Dealer window <span className="font-mono text-white/80">{dealerLeft}s</span></>
               ) : (
