@@ -102,6 +102,7 @@ type BJState = {
     multiplier: number;
     wager?: number;
     settlements?: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }>;
+    ppSettlements?: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }>;
   } | null;
 };
 
@@ -113,6 +114,7 @@ export default function BlackjackTablePage() {
   const safeTableId = tableId && tableId !== "undefined" ? tableId : null;
   const [state, setState] = useState<BJState | null>(null);
   const [betAmount, setBetAmount] = useState(10);
+  const [ppAmount, setPpAmount] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [reportedKey, setReportedKey] = useState<string | null>(null);
@@ -235,6 +237,16 @@ export default function BlackjackTablePage() {
         outcome: String(st.outcome ?? "Settled"),
       });
     }
+    const pp = state.lastResult.ppSettlements ?? [];
+    for (const st of pp) {
+      const nonce = Number(st.nonce);
+      if (!Number.isFinite(nonce) || nonce <= 0) continue;
+      settleBet({
+        nonce,
+        multiplier: Number(st.multiplier ?? 0),
+        outcome: String(st.outcome ?? "Perfect Pairs"),
+      });
+    }
   }, [state, mySeat, safeTableId, walletSettledKey, settleBet]);
 
   const join = async (spectate?: boolean) => {
@@ -298,6 +310,42 @@ export default function BlackjackTablePage() {
     if (!res?.ok) {
       settleBet({ nonce: started.nonce, multiplier: 1, outcome: "Bet canceled" });
     }
+  };
+
+  const placePerfectPairsWithWallet = async () => {
+    if (state?.phase !== "betting") return;
+    const wager = Math.round(Number(ppAmount ?? 0) * 100) / 100;
+    if (!(wager > 0)) {
+      setErr("Invalid Perfect Pairs amount");
+      return;
+    }
+    if (betPending) return;
+    const hasNonce = (mySeat as any)?.hands?.[0]?.perfectPairsNonce;
+    if (hasNonce) {
+      setErr("Perfect Pairs already placed. Clear it first.");
+      return;
+    }
+    const started = beginBet({ game: "Blackjack PP", wager });
+    if ("error" in started) {
+      setErr(started.error);
+      return;
+    }
+    setBetPending(true);
+    const res = await post("perfectpairs", { amount: wager, betNonce: started.nonce });
+    setBetPending(false);
+    if (!res?.ok) {
+      settleBet({ nonce: started.nonce, multiplier: 1, outcome: "Bet canceled" });
+    }
+  };
+
+  const clearPerfectPairsWithWallet = async () => {
+    if (state?.phase !== "betting") return;
+    if (betPending) return;
+    const nonce = Number((mySeat as any)?.hands?.[0]?.perfectPairsNonce ?? 0);
+    if (nonce > 0) settleBet({ nonce, multiplier: 1, outcome: "Bet canceled" });
+    setBetPending(true);
+    await post("clearperfectpairs");
+    setBetPending(false);
   };
 
   const clearBetWithWallet = async () => {
@@ -503,6 +551,36 @@ export default function BlackjackTablePage() {
                     }}
                   >
                     Skip round
+                  </button>
+                </div>
+
+                <label className="mt-5 block text-xs text-white/60">Perfect Pairs side bet (ⓒ)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={ppAmount}
+                  onChange={(e) => setPpAmount(Number(e.target.value))}
+                  disabled={state.phase !== "betting"}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={state.phase !== "betting" || betPending || !!(mySeat as any)?.hands?.[0]?.perfectPairsNonce}
+                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
+                    onClick={placePerfectPairsWithWallet}
+                    title="Pays on first 2 cards of each hand: perfect=25:1, colored=12:1, mixed=6:1"
+                  >
+                    Add PP bet
+                  </button>
+                  <button
+                    type="button"
+                    disabled={state.phase !== "betting" || betPending || !(mySeat as any)?.hands?.[0]?.perfectPairsNonce}
+                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+                    onClick={clearPerfectPairsWithWallet}
+                  >
+                    Clear PP bet
                   </button>
                 </div>
 

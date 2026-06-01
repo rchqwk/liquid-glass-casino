@@ -52,6 +52,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         {
           bet: 0,
           nonces: [],
+          perfectPairsWager: 0,
+          perfectPairsNonce: null,
+          perfectPairsSettled: false,
           cards: [],
           bonusPoints: 0,
           stood: false,

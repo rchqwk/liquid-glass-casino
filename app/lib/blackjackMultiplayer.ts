@@ -356,6 +356,22 @@ function ranksEqualForSplit(cardA: number, cardB: number) {
   }
 }
 
+function perfectPairsMultiplier(cardA: number, cardB: number): number {
+  // 25 / 12 / 6 (perfect / colored / mixed)
+  try {
+    const a = cardFromIndex(cardA);
+    const b = cardFromIndex(cardB);
+    if (a.rank !== b.rank) return 0;
+    const aRed = a.suit === "♥" || a.suit === "♦";
+    const bRed = b.suit === "♥" || b.suit === "♦";
+    if (a.suit === b.suit) return 26; // 25:1 profit -> return multiplier 26x
+    if (aRed === bRed) return 13; // 12:1 profit -> 13x return
+    return 7; // 6:1 profit -> 7x return
+  } catch {
+    return 0;
+  }
+}
+
 function normalizeHandsForSeat(p: any) {
   if (!p) return;
   if (typeof p.lastBetPlaced !== "number" || !Number.isFinite(p.lastBetPlaced)) p.lastBetPlaced = 0;
@@ -365,6 +381,9 @@ function normalizeHandsForSeat(p: any) {
       {
         bet: Number(p.bet ?? 0) || 0,
         nonces: Array.isArray(p.nonces) ? p.nonces : [],
+        perfectPairsWager: 0,
+        perfectPairsNonce: null,
+        perfectPairsSettled: false,
         cards: Array.isArray(p.cards) ? p.cards : [],
         bonusPoints: Number(p.bonusPoints ?? 0) || 0,
         stood: !!p.stood,
@@ -385,6 +404,10 @@ function normalizeHandsForSeat(p: any) {
     if (!h) continue;
     h.bet = Number(h.bet ?? 0) || 0;
     h.nonces = Array.isArray(h.nonces) ? h.nonces : [];
+    h.perfectPairsWager = Number(h.perfectPairsWager ?? 0) || 0;
+    h.perfectPairsNonce = h.perfectPairsNonce == null ? null : Number(h.perfectPairsNonce);
+    if (!Number.isFinite(h.perfectPairsNonce)) h.perfectPairsNonce = null;
+    h.perfectPairsSettled = !!h.perfectPairsSettled;
     h.cards = Array.isArray(h.cards) ? h.cards : [];
     h.bonusPoints = Number(h.bonusPoints ?? 0) || 0;
     h.stood = !!h.stood;
@@ -434,6 +457,9 @@ export type PlayerSeat = {
   hands: Array<{
     bet: number;
     nonces: number[]; // wallet nonces for stakes backing this hand (split/DD create additional nonces)
+    perfectPairsWager: number;
+    perfectPairsNonce: number | null;
+    perfectPairsSettled: boolean;
     cards: number[];
     bonusPoints: number;
     stood: boolean;
@@ -487,6 +513,7 @@ export type TableState = {
       multiplier: number;
       wager: number;
       settlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }>;
+      ppSettlements?: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }>;
     }
   >;
 };
@@ -751,6 +778,9 @@ function startBetting(state: TableState, now: number) {
       {
         bet: carry,
         nonces: [],
+        perfectPairsWager: 0,
+        perfectPairsNonce: null,
+        perfectPairsSettled: false,
         cards: [],
         bonusPoints: 0,
         stood: false,
@@ -824,6 +854,9 @@ function startRound(state: TableState, now: number) {
       {
         bet,
         nonces: [],
+        perfectPairsWager: Number(p.hands?.[0]?.perfectPairsWager ?? 0) || 0,
+        perfectPairsNonce: p.hands?.[0]?.perfectPairsNonce ?? null,
+        perfectPairsSettled: false,
         cards: [],
         bonusPoints: 0,
         stood: false,
@@ -937,6 +970,55 @@ export function applyBet(
   p.lastBetPlaced = p.hands[0]!.bet;
   p.skipThisRound = false;
   p.lastSeenAt = now;
+  s.lastActivityAt = now;
+  s.updatedAt = now;
+  return { state: s };
+}
+
+export function applyPerfectPairsBet(
+  state: TableState,
+  userId: number,
+  wager: number,
+  now: number,
+  betNonce?: number | null,
+): { state: TableState; error?: string } {
+  const s = tickTable(state, now);
+  if (s.phase !== "betting") return { state: s, error: "Betting is closed." };
+  const seatIdx = s.seats.findIndex((p) => p?.userId === userId);
+  if (seatIdx < 0) return { state: s, error: "You are not seated at this table." };
+  const p = s.seats[seatIdx]!;
+  normalizeHandsForSeat(p);
+
+  const w = Math.round(Number(wager ?? 0) * 100) / 100;
+  if (!Number.isFinite(w) || w <= 0) return { state: s, error: "Invalid side bet amount." };
+  const n = Number(betNonce ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return { state: s, error: "Wallet nonce missing." };
+
+  const h0 = p.hands[0]!;
+  if ((h0.perfectPairsNonce ?? null) && (h0.perfectPairsWager ?? 0) > 0) {
+    return { state: s, error: "Perfect Pairs bet already placed. Clear bet before placing again." };
+  }
+  h0.perfectPairsWager = w;
+  h0.perfectPairsNonce = n;
+  h0.perfectPairsSettled = false;
+  normalizeHandsForSeat(p);
+  s.lastActivityAt = now;
+  s.updatedAt = now;
+  return { state: s };
+}
+
+export function applyClearPerfectPairsBet(state: TableState, userId: number, now: number): { state: TableState; error?: string } {
+  const s = tickTable(state, now);
+  if (s.phase !== "betting") return { state: s, error: "You can only clear bets during betting." };
+  const seatIdx = s.seats.findIndex((p) => p?.userId === userId);
+  if (seatIdx < 0) return { state: s, error: "You are not seated at this table." };
+  const p = s.seats[seatIdx]!;
+  normalizeHandsForSeat(p);
+  const h0 = p.hands[0]!;
+  h0.perfectPairsWager = 0;
+  h0.perfectPairsNonce = null;
+  h0.perfectPairsSettled = false;
+  normalizeHandsForSeat(p);
   s.lastActivityAt = now;
   s.updatedAt = now;
   return { state: s };
@@ -1071,6 +1153,9 @@ export function applyPlayerAction(
     const newHandA = {
       bet: h.bet,
       nonces: [...(h.nonces ?? [])],
+      perfectPairsWager: h.perfectPairsWager,
+      perfectPairsNonce: h.perfectPairsNonce,
+      perfectPairsSettled: h.perfectPairsSettled,
       cards: [c1],
       bonusPoints: 0,
       stood: false,
@@ -1082,6 +1167,9 @@ export function applyPlayerAction(
     const newHandB = {
       bet: h.bet,
       nonces: [n],
+      perfectPairsWager: h.perfectPairsWager,
+      perfectPairsNonce: h.perfectPairsNonce,
+      perfectPairsSettled: h.perfectPairsSettled,
       cards: [c2],
       bonusPoints: 0,
       stood: false,
@@ -1359,6 +1447,9 @@ export function applySpecial(
         {
           bet: other.hands?.[0]?.bet ?? other.bet ?? 0,
           nonces: [],
+          perfectPairsWager: other.hands?.[0]?.perfectPairsWager ?? 0,
+          perfectPairsNonce: other.hands?.[0]?.perfectPairsNonce ?? null,
+          perfectPairsSettled: false,
           cards: [...copyFrom.cards],
           bonusPoints: copyFrom.bonusPoints,
           stood: false,
@@ -1409,7 +1500,13 @@ function settleRound(state: TableState, now: number): TableState {
 
   const results: Record<
     string,
-    { outcome: string; multiplier: number; wager: number; settlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }> }
+    {
+      outcome: string;
+      multiplier: number;
+      wager: number;
+      settlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }>;
+      ppSettlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }>;
+    }
   > = {};
   let mythicDropAny = false;
   for (const seatIdx of s.participants) {
@@ -1423,6 +1520,7 @@ function settleRound(state: TableState, now: number): TableState {
     let totalWager = 0;
     let totalReturn = 0;
     const settlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }> = [];
+    const ppSettlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }> = [];
     let anySevenCardWinOrPush = false;
 
     // Evaluate each hand vs dealer; choose the best multiplier for player reporting.
@@ -1485,6 +1583,21 @@ function settleRound(state: TableState, now: number): TableState {
       // Apply double payout after bonuses.
       if (h.doublePayoutArmed && mult > 1) mult *= 2;
 
+      // Perfect Pairs (side bet) — evaluated on the first 2 cards of EACH hand.
+      if (!h.perfectPairsSettled && (h.perfectPairsWager ?? 0) > 0 && h.perfectPairsNonce) {
+        if (h.cards.length >= 2) {
+          const ppm = perfectPairsMultiplier(h.cards[0]!, h.cards[1]!);
+          const out = ppm > 0 ? `Perfect Pairs x${ppm.toFixed(0)}` : "Perfect Pairs lose";
+          ppSettlements.push({
+            nonce: h.perfectPairsNonce,
+            wager: h.perfectPairsWager,
+            multiplier: ppm,
+            outcome: out,
+          });
+          h.perfectPairsSettled = true;
+        }
+      }
+
       // Create settlements for wallet nonces backing this hand.
       const nonces = Array.isArray(h.nonces) ? h.nonces.filter((x) => Number.isFinite(x) && x > 0) : [];
       const parts = Math.max(1, nonces.length);
@@ -1526,7 +1639,7 @@ function settleRound(state: TableState, now: number): TableState {
       });
     }
 
-    results[String(p.userId)] = { outcome: bestOutcome, multiplier: mAll, wager: totalWager, settlements };
+    results[String(p.userId)] = { outcome: bestOutcome, multiplier: mAll, wager: totalWager, settlements, ppSettlements };
   }
 
   // Mythic box drop (table-wide) if anyone achieved 7-card push or win.
