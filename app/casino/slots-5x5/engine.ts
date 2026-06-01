@@ -33,19 +33,19 @@ export type SpinResult = {
 
 // Global RTP tuning for the 5x5 game.
 // Lower this to reduce overall returns.
-const RTP_MULT = 0.25;
+const RTP_MULT = 0.1;
 
 const SYMBOLS: { s: SymbolId; w: number }[] = [
   // ~50% more "cheap" symbols (cherry/lemon/bar) to reduce win volatility.
-  { s: "cherry", w: 39 },
-  { s: "lemon", w: 39 },
-  { s: "bar", w: 33 },
+  { s: "cherry", w: 45 },
+  { s: "lemon", w: 45 },
+  { s: "bar", w: 40 },
   // slightly reduce premium/specials
-  { s: "bell", w: 12 },
-  { s: "star", w: 8 },
-  { s: "seven", w: 5 },
-  { s: "diamond", w: 1.6 }, // wild
-  { s: "coin", w: 1.6 }, // scatter (keep same)
+  { s: "bell", w: 10 },
+  { s: "star", w: 6 },
+  { s: "seven", w: 4 },
+  { s: "diamond", w: 1.2 }, // wild
+  { s: "coin", w: 0.9 }, // scatter (lower feature frequency)
 ];
 
 // base multiplier per way for 3/4/5 in a row (left-to-right)

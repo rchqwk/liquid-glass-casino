@@ -261,10 +261,10 @@ export default function Slots5x5Page() {
             rngFloat: rng2.float,
             mode,
             payoutScale: (cfg.slotsPayoutScale ?? 1) * tierScale,
-            extraChanceProbability: isFree && fsTier === "super" ? 0.18 : 0.13,
+            extraChanceProbability: isFree && fsTier === "super" ? 0.08 : 0.05,
             lucky:
               luckySpin && !isFree
-                ? { scatterWeightMultiplier: 1.25, ensureMinScatters: 2, extraWildChance: 0.25 }
+                ? { scatterWeightMultiplier: 1.15, ensureMinScatters: 1, extraWildChance: 0.15 }
                 : undefined,
           });
           resGrid = res.grid;
