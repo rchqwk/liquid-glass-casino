@@ -1,10 +1,23 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../lib/authServer";
-import { getBlackjackTable, listBlackjackTables, upsertBlackjackTable, upsertBlackjackInventory, getBlackjackInventory } from "../../../lib/db";
+import {
+  getBlackjackTable,
+  listBlackjackTables,
+  upsertBlackjackTable,
+  upsertBlackjackInventory,
+  getBlackjackInventory,
+} from "../../../lib/db";
 import { defaultInventory, newTableState, safePublicStateForUser, tickTable } from "../../../lib/blackjackMultiplayer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function dbSource() {
+  if (process.env.DATABASE_URL) return "DATABASE_URL";
+  if (process.env.POSTGRES_URL) return "POSTGRES_URL";
+  if (process.env.NEON_DATABASE_URL) return "NEON_DATABASE_URL";
+  return "file";
+}
 
 function shortId() {
   return Math.random().toString(16).slice(2, 10);
@@ -87,5 +100,14 @@ export async function POST(req: Request) {
   await upsertBlackjackTable({ id, public: pub, name, state, created_at: now, updated_at: now });
   await upsertBlackjackInventory(user.id, inv);
 
-  return NextResponse.json({ tableId: id, state: safePublicStateForUser(state, user.id) });
+  // Verify table is readable (catches DB misconfiguration / split stores).
+  const check = await getBlackjackTable(id);
+  if (!check) {
+    return NextResponse.json(
+      { error: "Table created but not readable (DB mismatch).", dbSource: dbSource() },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ tableId: id, state: safePublicStateForUser(state, user.id), dbSource: dbSource() });
 }
