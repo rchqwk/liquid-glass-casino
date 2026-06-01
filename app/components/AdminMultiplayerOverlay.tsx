@@ -60,7 +60,7 @@ export function AdminMultiplayerOverlay() {
   }, [isMaster, isMultiplayer]);
 
   useEffect(() => {
-    if (!isMaster || !isMultiplayer || !tableId) {
+    if (!isMaster || !isMultiplayer || !tableId || tableId === "undefined") {
       setTableDiag(null);
       return;
     }

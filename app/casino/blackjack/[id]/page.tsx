@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 type Suit = "♠" | "♥" | "♦" | "♣";
@@ -95,8 +96,11 @@ type BJState = {
   lastResult?: { outcome: string; multiplier: number } | null;
 };
 
-export default function BlackjackTablePage({ params }: { params: { id: string } }) {
-  const tableId = params.id;
+export default function BlackjackTablePage() {
+  const params = useParams<{ id?: string | string[] }>();
+  const tableId =
+    typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params?.id?.[0] : undefined;
+  const safeTableId = tableId && tableId !== "undefined" ? tableId : null;
   const [state, setState] = useState<BJState | null>(null);
   const [betAmount, setBetAmount] = useState(10);
   const [err, setErr] = useState<string | null>(null);
@@ -113,7 +117,12 @@ export default function BlackjackTablePage({ params }: { params: { id: string } 
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/blackjack/tables/${tableId}`, { cache: "no-store" });
+        if (!safeTableId) {
+          setErr("Invalid table id");
+          setState(null);
+          return;
+        }
+        const res = await fetch(`/api/blackjack/tables/${safeTableId}`, { cache: "no-store" });
         const data = (await res.json()) as any;
         if (cancelled) return;
         if (!res.ok) {
@@ -130,7 +139,7 @@ export default function BlackjackTablePage({ params }: { params: { id: string } 
     return () => {
       cancelled = true;
     };
-  }, [tableId, tick]);
+  }, [safeTableId, tick]);
 
   const now = Date.now();
   const bettingLeft = Math.max(0, Math.ceil(((state?.bettingEndsAt ?? 0) - now) / 1000));
@@ -156,7 +165,7 @@ export default function BlackjackTablePage({ params }: { params: { id: string } 
     if (state.phase !== "settling") return;
     if (!mySeat || !state.lastResult) return;
     if (!(mySeat.bet > 0)) return;
-    const key = `${tableId}:${state.round}`;
+    const key = `${safeTableId ?? "?"}:${state.round}`;
     if (reportedKey === key) return;
 
     const wager = mySeat.bet;
@@ -171,11 +180,15 @@ export default function BlackjackTablePage({ params }: { params: { id: string } 
         profit,
       }),
     }).catch(() => {});
-  }, [state, mySeat, reportedKey, tableId]);
+  }, [state, mySeat, reportedKey, safeTableId]);
 
   const join = async (spectate?: boolean) => {
     setErr(null);
-    const res = await fetch(`/api/blackjack/tables/${tableId}/join`, {
+    if (!safeTableId) {
+      setErr("Invalid table id");
+      return;
+    }
+    const res = await fetch(`/api/blackjack/tables/${safeTableId}/join`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ spectate: !!spectate }),
@@ -190,7 +203,11 @@ export default function BlackjackTablePage({ params }: { params: { id: string } 
 
   const post = async (path: string, body?: any) => {
     setErr(null);
-    const res = await fetch(`/api/blackjack/tables/${tableId}/${path}`, {
+    if (!safeTableId) {
+      setErr("Invalid table id");
+      return;
+    }
+    const res = await fetch(`/api/blackjack/tables/${safeTableId}/${path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: body ? JSON.stringify(body) : "{}",
@@ -207,7 +224,7 @@ export default function BlackjackTablePage({ params }: { params: { id: string } 
           <div>
             <h2 className="text-xl font-semibold text-white">{state?.name ?? "Blackjack Table"}</h2>
             <p className="mt-1 text-sm text-white/60">
-              Table: <span className="font-mono">{tableId}</span> • Round{" "}
+              Table: <span className="font-mono">{safeTableId ?? "-"}</span> • Round{" "}
               <span className="font-mono">{state?.round ?? "-"}</span> • Phase{" "}
               <span className="font-mono">{state?.phase ?? "-"}</span>
             </p>
