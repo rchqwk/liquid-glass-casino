@@ -87,6 +87,8 @@ export function AdminMultiplayerOverlay() {
 
   const tablesCount = tablesDiag?.tables?.length ?? 0;
   const db = tableDiag?.dbSource ?? tablesDiag?.dbSource ?? "?";
+  const tableIds = (tablesDiag?.tables ?? []).map((t: any) => String(t?.id ?? "")).filter(Boolean);
+  const currentKnown = tableId ? tableIds.includes(tableId) : null;
 
   return (
     <div className="pointer-events-none fixed bottom-4 left-4 z-[70] w-[340px] max-w-[calc(100vw-2rem)]">
@@ -118,6 +120,31 @@ export function AdminMultiplayerOverlay() {
         {tableId ? (
           <div className="mt-1 text-[11px] text-white/70">
             tableId: <span className="font-mono text-white/90">{tableId}</span>
+          </div>
+        ) : null}
+        {tableId ? (
+          <div className="mt-1 text-[11px] text-white/70">
+            in public list:{" "}
+            <span className={`font-mono ${currentKnown ? "text-emerald-200" : "text-rose-200"}`}>
+              {currentKnown ? "yes" : "no"}
+            </span>
+          </div>
+        ) : null}
+
+        {tableIds.length ? (
+          <div className="mt-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-[11px] font-semibold text-white/80">Public table IDs</div>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {tableIds.slice(0, 6).map((id) => (
+                <Link
+                  key={id}
+                  href={`/casino/blackjack/${id}`}
+                  className="rounded-xl border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-mono text-white/80 hover:bg-white/10"
+                >
+                  {id}
+                </Link>
+              ))}
+            </div>
           </div>
         ) : null}
 
@@ -156,4 +183,3 @@ export function AdminMultiplayerOverlay() {
     </div>
   );
 }
-
