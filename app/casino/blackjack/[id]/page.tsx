@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
 
 type Suit = "♠" | "♥" | "♦" | "♣";
 type Card = { rank: string; suit: Suit; value: number };
@@ -151,6 +152,7 @@ export default function BlackjackTablePage() {
   const mySeat = state?.meSeatIndex != null && state.meSeatIndex >= 0 ? state.seats[state.meSeatIndex] : null;
   const myTurnSeat = state?.participants?.[state.turnIndex] ?? null;
   const isMyTurn = mySeat && state?.phase === "player_turns" && myTurnSeat === state.meSeatIndex;
+  const canDoubleDown = !!isMyTurn && !mySeat?.busted && (mySeat?.cards?.length ?? 0) === 2 && (mySeat?.bet ?? 0) > 0;
 
   const dealerTotal = useMemo(() => {
     if (!state) return 0;
@@ -222,6 +224,18 @@ export default function BlackjackTablePage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <TurnQuickPanel
+        show={!!state && !!mySeat}
+        isMyTurn={!!isMyTurn}
+        myBet={Number(mySeat?.bet ?? 0)}
+        canHit={!mySeat?.busted}
+        canDoubleDown={canDoubleDown}
+        onHit={() => post("action", { type: "hit" })}
+        onStand={() => post("action", { type: "stand" })}
+        onDoubleDown={() => post("action", { type: "double_down" })}
+        dealerCards={state?.dealer?.cards ?? []}
+        myCards={mySeat?.cards ?? []}
+      />
       <div className="glass glass-shine rounded-3xl p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

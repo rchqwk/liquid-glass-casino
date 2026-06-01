@@ -752,7 +752,7 @@ export function applySkip(state: TableState, userId: number, now: number): { sta
 export function applyPlayerAction(
   state: TableState,
   userId: number,
-  action: { type: "hit" | "stand" },
+  action: { type: "hit" | "stand" | "double_down" },
   now: number,
 ): { state: TableState; error?: string } {
   const s = tickTable(state, now);
@@ -783,6 +783,23 @@ export function applyPlayerAction(
       return { state: advanceTurn(s, now) };
     }
     return { state: { ...s, updatedAt: now } };
+  }
+
+  if (action.type === "double_down") {
+    if (p.busted) return { state: s, error: "You are busted." };
+    if (p.cards.length !== 2) return { state: s, error: "Double down is only allowed on your first two cards." };
+    if (!(p.bet > 0)) return { state: s, error: "No bet placed." };
+    // Double the bet, draw exactly one card, then stand.
+    p.bet = Math.round(p.bet * 2 * 100) / 100;
+    const c = drawFromShoe(s);
+    if (c != null) p.cards.push(c);
+    s.lastActivityAt = now;
+    s.turnEndsAt = now + 20_000;
+    const t = handTotal(p.cards, p.bonusPoints).total;
+    if (t > 21) p.busted = true;
+    p.turnEnded = true;
+    p.stood = true;
+    return { state: advanceTurn(s, now) };
   }
 
   if (action.type === "stand") {
