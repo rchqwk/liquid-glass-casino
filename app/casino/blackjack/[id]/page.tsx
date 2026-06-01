@@ -128,6 +128,14 @@ export default function BlackjackTablePage() {
     target: null,
   });
   const [betPending, setBetPending] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+
+  const inviteUrl = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    if (!safeTableId) return "";
+    return `${window.location.origin}/casino/blackjack/${safeTableId}`;
+  }, [safeTableId]);
 
   useEffect(() => {
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
@@ -388,6 +396,71 @@ export default function BlackjackTablePage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {inviteOpen ? (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
+          <div className="glass glass-shine w-full max-w-[620px] rounded-3xl border border-white/10 p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">Invite players</div>
+                <div className="mt-1 text-xs text-white/60">Share this link to join the room:</div>
+              </div>
+              <button
+                type="button"
+                className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
+                onClick={() => {
+                  setInviteOpen(false);
+                  setInviteCopied(false);
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-4">
+              <a
+                href={inviteUrl || "#"}
+                className="break-all font-mono text-xs text-white/85 underline decoration-white/20 underline-offset-4 hover:text-white"
+                onClick={(e) => {
+                  if (!inviteUrl) e.preventDefault();
+                }}
+              >
+                {inviteUrl || "(loading…)"}
+              </a>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
+                  disabled={!inviteUrl}
+                  onClick={async () => {
+                    if (!inviteUrl) return;
+                    try {
+                      await navigator.clipboard.writeText(inviteUrl);
+                      setInviteCopied(true);
+                      window.setTimeout(() => setInviteCopied(false), 1500);
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                >
+                  {inviteCopied ? "Copied" : "Copy link"}
+                </button>
+                <button
+                  type="button"
+                  className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/70 hover:bg-white/10"
+                  onClick={() => {
+                    if (!inviteUrl) return;
+                    window.open(inviteUrl, "_blank", "noopener,noreferrer");
+                  }}
+                  disabled={!inviteUrl}
+                >
+                  Open link
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {targetPopup.open && state ? (
         <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 p-4">
           <div className="glass glass-shine w-full max-w-[520px] rounded-3xl border border-white/10 p-6">
@@ -504,6 +577,14 @@ export default function BlackjackTablePage() {
             <Link href="/casino/blackjack" className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10">
               Back to lobby
             </Link>
+            <button
+              type="button"
+              className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
+              onClick={() => setInviteOpen(true)}
+              title="Share a link to join this table"
+            >
+              Invite players
+            </button>
             <button
               type="button"
               className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
