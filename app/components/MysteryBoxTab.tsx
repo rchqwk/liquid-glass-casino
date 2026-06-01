@@ -162,7 +162,7 @@ export function MysteryBoxTab() {
 
       {/* Overlay */}
       {open ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4">
           <div className="glass glass-shine w-full max-w-[720px] rounded-3xl border border-white/10 p-6">
             <div className="flex items-start justify-between gap-3">
               <div>

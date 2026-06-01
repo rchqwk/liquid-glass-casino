@@ -111,6 +111,12 @@ export default function BlackjackTablePage() {
   const [reportedKey, setReportedKey] = useState<string | null>(null);
   const [targetUserId, setTargetUserId] = useState<number | null>(null);
 
+  const [targetPopup, setTargetPopup] = useState<{ open: boolean; specialId: string | null; target: number | null }>({
+    open: false,
+    specialId: null,
+    target: null,
+  });
+
   useEffect(() => {
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
     return () => window.clearInterval(id);
@@ -225,6 +231,70 @@ export default function BlackjackTablePage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {targetPopup.open && state ? (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 p-4">
+          <div className="glass glass-shine w-full max-w-[520px] rounded-3xl border border-white/10 p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">Choose target</div>
+                <div className="mt-1 text-xs text-white/60 font-mono">{targetPopup.specialId}</div>
+              </div>
+              <button
+                type="button"
+                className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
+                onClick={() => setTargetPopup({ open: false, specialId: null, target: null })}
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <select
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/85 outline-none focus:border-white/20"
+                value={targetPopup.target ?? ""}
+                onChange={(e) => setTargetPopup((p) => ({ ...p, target: e.target.value ? Number(e.target.value) : null }))}
+              >
+                <option value="">Select…</option>
+                {targetPopup.specialId?.includes("MYTHIC") ? null : <option value={-1}>Dealer</option>}
+                {state.seats
+                  .filter(Boolean)
+                  .map((p) => p!)
+                  .map((p) => (
+                    <option key={p.userId} value={p.userId}>
+                      {p.username}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-sm font-semibold text-white/90 hover:bg-white/10 disabled:opacity-40"
+                disabled={targetPopup.target == null || !targetPopup.specialId}
+                onClick={() => {
+                  if (targetPopup.target == null || !targetPopup.specialId) return;
+                  void post("action", {
+                    type: "special",
+                    specialId: targetPopup.specialId,
+                    targetUserId: targetPopup.target,
+                  });
+                  setTargetPopup({ open: false, specialId: null, target: null });
+                }}
+              >
+                Use powerup
+              </button>
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10"
+                onClick={() => setTargetPopup({ open: false, specialId: null, target: null })}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <TurnQuickPanel
         show={!!state && !!mySeat}
         isMyTurn={!!isMyTurn}
@@ -436,13 +506,18 @@ export default function BlackjackTablePage() {
                                     type="button"
                                     className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
                                     disabled={!enabled}
-                                    onClick={() =>
-                                      post("action", {
+                                    onClick={() => {
+                                      if (isAnytimeCard) {
+                                        // Force explicit target choice via popup.
+                                        setTargetPopup({ open: true, specialId: k, target: null });
+                                        return;
+                                      }
+                                      void post("action", {
                                         type: "special",
                                         specialId: k,
-                                        targetUserId: isAnytimeCard ? targetUserId : null,
-                                      })
-                                    }
+                                        targetUserId: null,
+                                      });
+                                    }}
                                     title="Use powerup"
                                   >
                                     <div className="font-semibold text-white">{k}</div>

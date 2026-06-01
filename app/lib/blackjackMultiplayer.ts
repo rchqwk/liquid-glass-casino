@@ -358,6 +358,8 @@ function ranksEqualForSplit(cardA: number, cardB: number) {
 
 function normalizeHandsForSeat(p: any) {
   if (!p) return;
+  if (typeof p.lastBetPlaced !== "number" || !Number.isFinite(p.lastBetPlaced)) p.lastBetPlaced = 0;
+  if (typeof p.carryBetNext !== "number" || !Number.isFinite(p.carryBetNext)) p.carryBetNext = 0;
   if (!Array.isArray(p.hands) || p.hands.length === 0) {
     p.hands = [
       {
@@ -438,6 +440,10 @@ export type PlayerSeat = {
     usedThisRound: Partial<Record<SpecialId, boolean>>;
   }>;
   activeHandIndex: number;
+
+  // Betting carryover
+  lastBetPlaced: number;
+  carryBetNext: number;
 
   lastBox?: SpecialId[];
   bjProtected: boolean;
@@ -728,9 +734,11 @@ function startBetting(state: TableState, now: number) {
     if (!p) continue;
     p.inventory = normalizeInventory(p.inventory);
     p.skipThisRound = false;
+    normalizeHandsForSeat(p);
+    const carry = Number(p.carryBetNext ?? 0) || 0;
     p.hands = [
       {
-        bet: 0,
+        bet: carry,
         cards: [],
         bonusPoints: 0,
         stood: false,
@@ -742,6 +750,7 @@ function startBetting(state: TableState, now: number) {
     ];
     p.activeHandIndex = 0;
     normalizeHandsForSeat(p);
+    p.carryBetNext = 0;
     p.bjProtected = false;
     p.extendUsedThisTurn = false;
   }
@@ -899,6 +908,7 @@ export function applyBet(state: TableState, userId: number, amount: number, now:
   p.hands[0]!.bet = Math.round(a * 100) / 100;
   p.activeHandIndex = 0;
   normalizeHandsForSeat(p);
+  p.lastBetPlaced = p.hands[0]!.bet;
   p.skipThisRound = false;
   p.lastSeenAt = now;
   s.lastActivityAt = now;
@@ -916,6 +926,8 @@ export function applySkip(state: TableState, userId: number, now: number): { sta
   p.hands[0]!.bet = 0;
   p.activeHandIndex = 0;
   normalizeHandsForSeat(p);
+  p.lastBetPlaced = 0;
+  p.carryBetNext = 0;
   p.skipThisRound = true;
   p.lastSeenAt = now;
   s.lastActivityAt = now;
@@ -1415,6 +1427,13 @@ function settleRound(state: TableState, now: number): TableState {
         bestMult = mult;
         bestOutcome = outcome;
       }
+    }
+
+    // If you won, keep your base bet in play for next round (auto re-bet).
+    if (bestMult > 1) {
+      p.carryBetNext = Number(p.lastBetPlaced ?? p.hands?.[0]?.bet ?? 0) || 0;
+    } else {
+      p.carryBetNext = 0;
     }
 
     mythicDropAny = mythicDropAny || anySevenCardWinOrPush;

@@ -61,6 +61,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         },
       ],
       activeHandIndex: 0,
+      lastBetPlaced: 0,
+      carryBetNext: 0,
       bjProtected: false,
       extendUsedThisTurn: false,
     };
