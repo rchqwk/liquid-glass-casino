@@ -16,6 +16,7 @@ export type SpecialId =
   | "ADD2_SELF"
   | "ADD1_SELF"
   | "PEEK_NEXT"
+  | "BJ_PROTECTOR"
   | "SWAP_ONE"
   | "DOUBLE_PAYOUT"
   | "ADD2_DEALER"
@@ -35,7 +36,7 @@ export type SpecialId =
   | "MAGIC_JOKER";
 
 export type SpecialRarity = "common" | "rare" | "legendary";
-export type SpecialTiming = "own_turn" | "dealer_window" | "anytime";
+export type SpecialTiming = "betting" | "own_turn" | "dealer_window" | "anytime";
 
 export type SpecialDef = {
   id: SpecialId;
@@ -69,6 +70,14 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
     desc: "Peek the next card on top of the shoe. Only usable on your turn.",
     rarity: "common",
     timing: "own_turn",
+    target: "self",
+  },
+  BJ_PROTECTOR: {
+    id: "BJ_PROTECTOR",
+    name: "BJ Protector",
+    desc: "Protect yourself from dealer blackjack this round (push instead of lose). Only usable during betting phase.",
+    rarity: "rare",
+    timing: "betting",
     target: "self",
   },
   SWAP_ONE: {
@@ -217,15 +226,20 @@ export type Inventory = {
   // How many hands this player has participated in at this table/session (persisted)
   handsPlayed: number;
   categories: Record<InventoryCategoryId, Partial<Record<SpecialId, number>>>;
-  // ephemeral (for UI): last box contents awarded
-  lastBox?: SpecialId[];
+  boxes: Array<{
+    id: string;
+    awardedAt: number;
+    openedAt?: number;
+    opened: boolean;
+    contents?: SpecialId[]; // stored server-side; omitted from GET response for unopened boxes
+  }>;
 };
 
 function classifySpecial(id: SpecialId): InventoryCategoryId {
   if (id.startsWith("MAGIC_") || id.includes("_MAGIC")) return "magic";
   if (id.startsWith("SUB")) return "saves";
   if (id.includes("DEALER")) return "dealer";
-  if (id === "PEEK_NEXT" || id === "SWAP_ONE" || id === "FORCE_HIT_TARGET") return "utility";
+  if (id === "PEEK_NEXT" || id === "SWAP_ONE" || id === "FORCE_HIT_TARGET" || id === "BJ_PROTECTOR") return "utility";
   return "boosts";
 }
 
@@ -236,7 +250,7 @@ function normalizeInventory(raw: any): Inventory {
       v: 2,
       handsPlayed: Number(raw.handsPlayed ?? 0) || 0,
       categories: raw.categories as Inventory["categories"],
-      lastBox: Array.isArray(raw.lastBox) ? (raw.lastBox as SpecialId[]) : undefined,
+      boxes: Array.isArray(raw.boxes) ? (raw.boxes as Inventory["boxes"]) : [],
     };
   }
 
@@ -244,6 +258,7 @@ function normalizeInventory(raw: any): Inventory {
     v: 2,
     handsPlayed: 0,
     categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {} },
+    boxes: [],
   };
 
   if (raw && typeof raw === "object") {
@@ -261,6 +276,10 @@ function normalizeInventory(raw: any): Inventory {
 
 export function ensureInventory(raw: any): Inventory {
   return normalizeInventory(raw);
+}
+
+export function unopenedBoxCount(inv: Inventory) {
+  return (inv.boxes ?? []).filter((b) => !b.opened).length;
 }
 
 function invGet(inv: Inventory, id: SpecialId) {
@@ -301,6 +320,7 @@ export type PlayerSeat = {
   doublePayoutArmed: boolean;
   usedThisRound: Partial<Record<SpecialId, boolean>>;
   lastBox?: SpecialId[];
+  bjProtected: boolean;
 };
 
 export type TableState = {
@@ -326,6 +346,7 @@ export type TableState = {
 
   shoe: number[]; // remaining cards (ints)
   dealer: { cards: number[]; bonusPoints: number; secondChanceArmed: boolean; secondChanceUsed: boolean };
+  dealerBlackjack: boolean;
   peekByUserId: Record<string, number | null>; // userId -> cardIndex or null
   evictedInventories: Array<{ userId: number; inventory: Inventory }>;
 
@@ -408,6 +429,7 @@ export function defaultInventory(): Inventory {
     v: 2,
     handsPlayed: 0,
     categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {} },
+    boxes: [],
   };
   // Small starter kit
   invAdd(inv, "ADD2_SELF", 1);
@@ -452,6 +474,10 @@ function rollMysteryBox(seed: number): SpecialId[] {
   return out;
 }
 
+function shortId() {
+  return Math.random().toString(16).slice(2, 10);
+}
+
 export function newTableState(input: { id: string; name: string; public: boolean; now: number }): TableState {
   return {
     id: input.id,
@@ -471,6 +497,7 @@ export function newTableState(input: { id: string; name: string; public: boolean
     turnIndex: 0,
     shoe: [],
     dealer: { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false },
+    dealerBlackjack: false,
     peekByUserId: {},
     evictedInventories: [],
     lastResults: {},
@@ -541,6 +568,7 @@ function startBetting(state: TableState, now: number) {
   s.turnIndex = 0;
   s.shoe = [];
   s.dealer = { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false };
+  s.dealerBlackjack = false;
   s.peekByUserId = {};
   s.lastResults = s.lastResults ?? {};
   s.evictedInventories = s.evictedInventories ?? [];
@@ -560,6 +588,7 @@ function startBetting(state: TableState, now: number) {
     p.doublePayoutArmed = false;
     p.usedThisRound = {};
     p.lastBox = undefined;
+    p.bjProtected = false;
   }
   s.round += 1;
   return s;
@@ -603,6 +632,7 @@ function startRound(state: TableState, now: number) {
   s.phase = "player_turns";
   s.turnEndsAt = now + 20_000;
   s.peekByUserId = {};
+  s.dealerBlackjack = false;
 
   // new shoe each round (MVP)
   const seed = Math.floor(now / 1000) ^ (s.round * 2654435761);
@@ -619,6 +649,8 @@ function startRound(state: TableState, now: number) {
     p.turnEnded = false;
     p.doublePayoutArmed = false;
     p.usedThisRound = {};
+    // Keep bjProtected if set during betting; otherwise false.
+    p.bjProtected = !!p.bjProtected;
     const a = drawFromShoe(s);
     const b = drawFromShoe(s);
     if (a != null) p.cards.push(a);
@@ -628,6 +660,13 @@ function startRound(state: TableState, now: number) {
   const d2 = drawFromShoe(s);
   if (d1 != null) s.dealer.cards.push(d1);
   if (d2 != null) s.dealer.cards.push(d2);
+
+  // If dealer has blackjack, reveal immediately and settle the hand.
+  const dBJ = handTotal(s.dealer.cards, s.dealer.bonusPoints).total === 21 && s.dealer.cards.length === 2;
+  if (dBJ) {
+    s.dealerBlackjack = true;
+    return settleRound(s, now);
+  }
 
   // auto-finish players with blackjack
   for (const idx of participants) {
@@ -742,6 +781,20 @@ export function applyPlayerAction(
   return { state: s, error: "Unknown action." };
 }
 
+export function applyVoteSkipTurn(state: TableState, userId: number, now: number): { state: TableState; error?: string } {
+  const s = tickTable(state, now);
+  if (s.phase !== "player_turns") return { state: s, error: "No active turn timer." };
+  const turnSeatIdx = currentTurnSeatIndex(s);
+  if (turnSeatIdx == null) return { state: s, error: "No active turn." };
+  const p = s.seats[turnSeatIdx];
+  if (!p) return { state: s, error: "Turn seat empty." };
+  if (p.userId !== userId) return { state: s, error: "Only the current player can skip the timer." };
+  p.turnEnded = true;
+  p.stood = true;
+  s.lastActivityAt = now;
+  return { state: advanceTurn(s, now) };
+}
+
 export function applySpecial(
   state: TableState,
   userId: number,
@@ -757,7 +810,13 @@ export function applySpecial(
   if (!def) return { state: s, error: "Unknown special." };
   if (invGet(actor.inventory, input.id) <= 0) return { state: s, error: "No charges left." };
   // Some specials are limited to once per round; others can stack if you have charges.
-  const singleUsePerRound = new Set<SpecialId>(["PEEK_NEXT", "SWAP_ONE", "DOUBLE_PAYOUT", "DEALER_SECOND_CHANCE"]);
+  const singleUsePerRound = new Set<SpecialId>([
+    "PEEK_NEXT",
+    "SWAP_ONE",
+    "DOUBLE_PAYOUT",
+    "DEALER_SECOND_CHANCE",
+    "BJ_PROTECTOR",
+  ]);
   if (singleUsePerRound.has(input.id) && actor.usedThisRound?.[input.id]) {
     return { state: s, error: "Already used this round." };
   }
@@ -766,7 +825,9 @@ export function applySpecial(
   // "Anytime" magic cards are allowed any time before the end of the round:
   // during player turns, dealer phase, and the dealer-window (but not after settling starts).
   const isBeforeEndOfRound = s.phase === "player_turns" || s.phase === "dealer" || s.phase === "dealer_window";
+  const isBetting = s.phase === "betting";
 
+  if (def.timing === "betting" && !isBetting) return { state: s, error: "Only usable during betting." };
   if (def.timing === "own_turn" && !isOwnTurn) return { state: s, error: "Only usable on your turn." };
   if (def.timing === "dealer_window" && s.phase !== "dealer_window") return { state: s, error: "Only usable after dealer stands." };
   if (def.timing === "anytime" && !isBeforeEndOfRound) return { state: s, error: "Only usable before the end of the round." };
@@ -810,6 +871,8 @@ export function applySpecial(
   } else if (input.id === "PEEK_NEXT") {
     const next = s.shoe[s.shoe.length - 1];
     s.peekByUserId[String(userId)] = typeof next === "number" ? next : null;
+  } else if (input.id === "BJ_PROTECTOR") {
+    actor.bjProtected = true;
   } else if (input.id === "SWAP_ONE") {
     if (actor.cards.length === 0) return { state: s, error: "No cards to swap." };
     const next = drawFromShoe(s);
@@ -905,9 +968,10 @@ export function applySpecial(
 
 function settleRound(state: TableState, now: number): TableState {
   const s: TableState = { ...state };
+  const isDealerBJ = !!s.dealerBlackjack;
   const dBase = handTotal(s.dealer.cards, s.dealer.bonusPoints).total;
-  let dTotal = dBase;
-  if (dTotal > 21 && s.dealer.secondChanceArmed && !s.dealer.secondChanceUsed) {
+  let dTotal = isDealerBJ ? 21 : dBase;
+  if (!isDealerBJ && dTotal > 21 && s.dealer.secondChanceArmed && !s.dealer.secondChanceUsed) {
     dTotal -= 10;
     s.dealer.secondChanceUsed = true;
   }
@@ -923,7 +987,15 @@ function settleRound(state: TableState, now: number): TableState {
     const pBJ = pTotal === 21 && p.cards.length === 2;
     const dBJ = dTotal === 21 && s.dealer.cards.length === 2;
 
-    if (pTotal > 21) {
+    if (isDealerBJ) {
+      if (p.bjProtected) {
+        mult = 1;
+        outcome = "Dealer blackjack (protected)";
+      } else {
+        mult = 0;
+        outcome = "Dealer blackjack";
+      }
+    } else if (pTotal > 21) {
       mult = 0;
       outcome = `Bust (${pTotal})`;
     } else if (dBJ && pBJ) {
@@ -949,17 +1021,18 @@ function settleRound(state: TableState, now: number): TableState {
     if (p.doublePayoutArmed && mult > 1) mult *= 2;
 
     // Mystery box distribution:
-    // Every 3 hands played, award a box containing 3 powerups (weighted by rarity).
+    // Every 3 hands played, award a mystery box (3 powerups inside). Boxes are opened from the UI.
     p.inventory.handsPlayed = Number(p.inventory.handsPlayed ?? 0) + 1;
     if (p.inventory.handsPlayed % 3 === 0) {
       const seed = Math.floor(now / 1000) ^ (s.round * 1103515245) ^ (p.userId * 2654435761);
       const box = rollMysteryBox(seed);
-      p.lastBox = box;
-      p.inventory.lastBox = box;
-      for (const id of box) invAdd(p.inventory, id, 1);
-    } else {
-      p.lastBox = undefined;
-      p.inventory.lastBox = undefined;
+      p.inventory.boxes = p.inventory.boxes ?? [];
+      p.inventory.boxes.push({
+        id: shortId(),
+        awardedAt: now,
+        opened: false,
+        contents: box,
+      });
     }
 
     results[String(p.userId)] = { outcome, multiplier: mult };

@@ -400,13 +400,16 @@ export default function BlackjackTablePage() {
                                 const isDealerWindowCard =
                                   k.includes("DEALER") && !k.includes("TARGET") && !k.includes("MAGIC");
                                 const isAnytimeCard = k.includes("TARGET") || k.includes("MAGIC");
+                                const isBettingCard = k === "BJ_PROTECTOR";
                                 const enabled =
                                   v > 0 &&
                                   (isDealerWindowCard
                                     ? !!canUseDealerSpecial
                                     : isAnytimeCard
                                       ? !!canUseAnytimeSpecial
-                                      : !!isMyTurn);
+                                      : isBettingCard
+                                        ? state?.phase === "betting"
+                                        : !!isMyTurn);
                                 return (
                                   <button
                                     key={k}
@@ -462,6 +465,14 @@ export default function BlackjackTablePage() {
                         onClick={() => post("action", { type: "stand" })}
                       >
                         Stand
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10"
+                        onClick={() => post("action", { type: "vote_skip" })}
+                        title="Skip the remaining turn timer"
+                      >
+                        Vote skip timer
                       </button>
                     </div>
                   </div>

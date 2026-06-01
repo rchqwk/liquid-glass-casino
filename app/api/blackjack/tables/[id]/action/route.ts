@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackTable, upsertBlackjackInventory, upsertBlackjackTable } from "../../../../../lib/db";
-import { applyPlayerAction, applySpecial, safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { applyPlayerAction, applySpecial, applyVoteSkipTurn, safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
   const body = (await req.json().catch(() => null)) as
-    | { type?: "hit" | "stand" | "special"; specialId?: string; targetUserId?: number | null }
+    | { type?: "hit" | "stand" | "special" | "vote_skip"; specialId?: string; targetUserId?: number | null }
     | null;
 
   const t = await getBlackjackTable(id);
@@ -25,6 +25,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   if (body?.type === "hit" || body?.type === "stand") {
     res = applyPlayerAction(base, user.id, { type: body.type }, now);
+  } else if (body?.type === "vote_skip") {
+    res = applyVoteSkipTurn(base, user.id, now);
   } else if (body?.type === "special") {
     res = applySpecial(base, user.id, { id: body.specialId as any, targetUserId: body.targetUserId ?? null }, now);
   } else {

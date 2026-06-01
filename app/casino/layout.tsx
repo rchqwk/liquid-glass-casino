@@ -3,6 +3,7 @@ import { Topbar } from "../components/Topbar";
 import { SignInGate } from "../components/SignInGate";
 import { BigWinOverlay } from "../components/BigWinOverlay";
 import { AdminMultiplayerOverlay } from "../components/AdminMultiplayerOverlay";
+import { MysteryBoxTab } from "../components/MysteryBoxTab";
 
 export default function CasinoLayout({ children }: { children: ReactNode }) {
   return (
@@ -10,6 +11,7 @@ export default function CasinoLayout({ children }: { children: ReactNode }) {
       <Topbar />
       <BigWinOverlay />
       <AdminMultiplayerOverlay />
+      <MysteryBoxTab />
       <main className="flex-1 p-4 sm:p-6">
         <div className="mx-auto w-full max-w-5xl">
           <SignInGate>{children}</SignInGate>

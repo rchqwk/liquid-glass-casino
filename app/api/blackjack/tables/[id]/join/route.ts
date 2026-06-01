@@ -48,6 +48,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       turnEnded: false,
       doublePayoutArmed: false,
       usedThisRound: {},
+      bjProtected: false,
     };
     await upsertBlackjackInventory(user.id, inv);
   }

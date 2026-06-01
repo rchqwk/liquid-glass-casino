@@ -111,6 +111,7 @@ export async function POST(req: Request) {
     turnEnded: false,
     doublePayoutArmed: false,
     usedThisRound: {},
+    bjProtected: false,
   };
 
   await upsertBlackjackTable({ id, public: pub, name, state, created_at: now, updated_at: now });
