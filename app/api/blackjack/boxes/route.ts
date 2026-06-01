@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../lib/authServer";
-import { getBlackjackInventory, upsertBlackjackInventory } from "../../../lib/db";
+import { getBlackjackInventory, getBlackjackTable, listBlackjackTables, upsertBlackjackInventory, upsertBlackjackTable } from "../../../lib/db";
 import { ensureInventory, unopenedBoxCount, SPECIALS, type InventoryCategoryId } from "../../../lib/blackjackMultiplayer";
 
 export const runtime = "nodejs";
@@ -67,6 +67,35 @@ export async function POST(req: Request) {
   box.openedAt = Date.now();
 
   await upsertBlackjackInventory(user.id, inv);
+
+  // IMPORTANT: keep active table state inventories in sync.
+  // Otherwise, the next table poll tick can overwrite the DB inventory with the stale table copy.
+  const now = Date.now();
+  const metas = await listBlackjackTables();
+  for (const m of metas) {
+    const t = await getBlackjackTable(m.id);
+    if (!t) continue;
+    const st: any = t.state ?? {};
+    const seats: any[] = Array.isArray(st.seats) ? st.seats : [];
+    let touched = false;
+    for (const p of seats) {
+      if (p && p.userId === user.id) {
+        p.inventory = inv;
+        touched = true;
+      }
+    }
+    if (touched) {
+      st.updatedAt = now;
+      await upsertBlackjackTable({
+        id: t.id,
+        public: t.public,
+        name: t.name,
+        state: st,
+        created_at: t.created_at,
+        updated_at: now,
+      });
+    }
+  }
 
   const rarity = contents.map((id) => (SPECIALS as any)[id]?.rarity ?? "common");
   return NextResponse.json({

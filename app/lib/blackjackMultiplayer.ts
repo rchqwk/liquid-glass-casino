@@ -506,7 +506,10 @@ export function newTableState(input: { id: string; name: string; public: boolean
 }
 
 export function tickTable(state: TableState, now: number): TableState {
-  const s: TableState = { ...state, updatedAt: now };
+  // IMPORTANT: updatedAt should only change when the table state actually changes.
+  // If updatedAt changes on every poll, it causes constant DB writes and can overwrite
+  // other sources-of-truth (like inventory updates from the mystery box endpoint).
+  const s: TableState = { ...state };
 
   // Inventory migration safety
   for (const p of s.seats) {
@@ -539,11 +542,13 @@ export function tickTable(state: TableState, now: number): TableState {
       // Dealer hits
       const next = drawFromShoe(s);
       if (next != null) s.dealer.cards.push(next);
-      return { ...s };
+      s.updatedAt = now;
+      return s;
     }
     // Dealer stands -> open window for dealer specials
     s.phase = "dealer_window";
     s.dealerWindowEndsAt = now + 8_000;
+    s.updatedAt = now;
     return s;
   }
 
@@ -593,6 +598,7 @@ function startBetting(state: TableState, now: number) {
     p.extendUsedThisTurn = false;
   }
   s.round += 1;
+  s.updatedAt = now;
   return s;
 }
 
@@ -705,11 +711,13 @@ function advanceTurn(state: TableState, now: number): TableState {
     // found active player
     s.turnEndsAt = now + 20_000;
     p.extendUsedThisTurn = false;
+    s.updatedAt = now;
     return s;
   }
   // all done -> dealer phase
   s.phase = "dealer";
   s.turnEndsAt = 0;
+  s.updatedAt = now;
   return s;
 }
 
@@ -1088,6 +1096,7 @@ function settleRound(state: TableState, now: number): TableState {
   s.phase = "settling";
   s.bettingEndsAt = now + 4_000; // short intermission then betting
   s.dealerWindowEndsAt = 0;
+  s.updatedAt = now;
   return s;
 }
 
