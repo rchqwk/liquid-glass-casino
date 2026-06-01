@@ -10,15 +10,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
-  const body = (await req.json().catch(() => null)) as { amount?: number } | null;
+  const body = (await req.json().catch(() => null)) as { amount?: number; betNonce?: number | null } | null;
   const amount = Number(body?.amount ?? 0);
+  const betNonce = body?.betNonce ?? null;
 
   const t = await getBlackjackTable(id);
   if (!t) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const now = Date.now();
   const base = tickTable(t.state, now);
-  const res = applyBet(base, user.id, amount, now);
+  const res = applyBet(base, user.id, amount, now, betNonce);
 
   await upsertBlackjackTable({ id: t.id, public: t.public, name: t.name, state: res.state, created_at: t.created_at, updated_at: res.state.updatedAt });
   for (const p of res.state.seats) if (p) await upsertBlackjackInventory(p.userId, p.inventory);

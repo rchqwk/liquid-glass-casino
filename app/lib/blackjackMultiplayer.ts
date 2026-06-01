@@ -364,6 +364,7 @@ function normalizeHandsForSeat(p: any) {
     p.hands = [
       {
         bet: Number(p.bet ?? 0) || 0,
+        nonces: Array.isArray(p.nonces) ? p.nonces : [],
         cards: Array.isArray(p.cards) ? p.cards : [],
         bonusPoints: Number(p.bonusPoints ?? 0) || 0,
         stood: !!p.stood,
@@ -383,6 +384,7 @@ function normalizeHandsForSeat(p: any) {
   for (const h of p.hands) {
     if (!h) continue;
     h.bet = Number(h.bet ?? 0) || 0;
+    h.nonces = Array.isArray(h.nonces) ? h.nonces : [];
     h.cards = Array.isArray(h.cards) ? h.cards : [];
     h.bonusPoints = Number(h.bonusPoints ?? 0) || 0;
     h.stood = !!h.stood;
@@ -431,6 +433,7 @@ export type PlayerSeat = {
   // Multi-hand (split) support
   hands: Array<{
     bet: number;
+    nonces: number[]; // wallet nonces for stakes backing this hand (split/DD create additional nonces)
     cards: number[];
     bonusPoints: number;
     stood: boolean;
@@ -477,7 +480,15 @@ export type TableState = {
   peekByUserId: Record<string, number | null>; // userId -> cardIndex or null
   evictedInventories: Array<{ userId: number; inventory: Inventory }>;
 
-  lastResults?: Record<string, { outcome: string; multiplier: number; wager: number }>;
+  lastResults?: Record<
+    string,
+    {
+      outcome: string;
+      multiplier: number;
+      wager: number;
+      settlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }>;
+    }
+  >;
 };
 
 const RANKS: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -739,6 +750,7 @@ function startBetting(state: TableState, now: number) {
     p.hands = [
       {
         bet: carry,
+        nonces: [],
         cards: [],
         bonusPoints: 0,
         stood: false,
@@ -811,6 +823,7 @@ function startRound(state: TableState, now: number) {
     p.hands = [
       {
         bet,
+        nonces: [],
         cards: [],
         bonusPoints: 0,
         stood: false,
@@ -896,7 +909,13 @@ function advanceTurn(state: TableState, now: number): TableState {
   return s;
 }
 
-export function applyBet(state: TableState, userId: number, amount: number, now: number): { state: TableState; error?: string } {
+export function applyBet(
+  state: TableState,
+  userId: number,
+  amount: number,
+  now: number,
+  betNonce?: number | null,
+): { state: TableState; error?: string } {
   const s = tickTable(state, now);
   if (s.phase !== "betting") return { state: s, error: "Betting is closed." };
   const seatIdx = s.seats.findIndex((p) => p?.userId === userId);
@@ -906,6 +925,9 @@ export function applyBet(state: TableState, userId: number, amount: number, now:
   const a = Number(amount);
   if (!Number.isFinite(a) || a <= 0) return { state: s, error: "Invalid bet amount." };
   p.hands[0]!.bet = Math.round(a * 100) / 100;
+  p.hands[0]!.nonces = [];
+  const n = Number(betNonce ?? 0);
+  if (Number.isFinite(n) && n >= 0) p.hands[0]!.nonces = n ? [n] : [];
   p.activeHandIndex = 0;
   normalizeHandsForSeat(p);
   p.lastBetPlaced = p.hands[0]!.bet;
@@ -938,7 +960,7 @@ export function applySkip(state: TableState, userId: number, now: number): { sta
 export function applyPlayerAction(
   state: TableState,
   userId: number,
-  action: { type: "hit" | "stand" | "double_down" | "split" },
+  action: { type: "hit" | "stand" | "double_down" | "split"; betNonce?: number | null },
   now: number,
 ): { state: TableState; error?: string } {
   const s = tickTable(state, now);
@@ -982,8 +1004,11 @@ export function applyPlayerAction(
     if (h.busted) return { state: s, error: "You are busted." };
     if (h.cards.length !== 2) return { state: s, error: "Double down is only allowed on your first two cards." };
     if (!(h.bet > 0)) return { state: s, error: "No bet placed." };
-    // Double the bet, draw exactly one card, then stand.
+    const n = Number(action.betNonce ?? 0);
+    if (!Number.isFinite(n) || n <= 0) return { state: s, error: "Wallet nonce missing for double down." };
+    // Double the bet (reserve additional stake via betNonce), draw exactly one card, then stand.
     h.bet = Math.round(h.bet * 2 * 100) / 100;
+    h.nonces = [...(h.nonces ?? []), n];
     const c = drawFromShoe(s);
     if (c != null) h.cards.push(c);
     s.lastActivityAt = now;
@@ -1002,6 +1027,9 @@ export function applyPlayerAction(
     if (h.cards.length !== 2) return { state: s, error: "Split only allowed with exactly 2 cards." };
     if ((p.hands?.length ?? 1) >= 4) return { state: s, error: "Max splits reached (4 hands)." };
 
+    const n = Number(action.betNonce ?? 0);
+    if (!Number.isFinite(n) || n <= 0) return { state: s, error: "Wallet nonce missing for split." };
+
     const ranksMatch = ranksEqualForSplit(h.cards[0]!, h.cards[1]!);
     const canFreeSplit = invGet(p.inventory, "FREE_SPLIT") > 0;
     const canSplit = ranksMatch || canFreeSplit;
@@ -1017,6 +1045,7 @@ export function applyPlayerAction(
 
     const newHandA = {
       bet: h.bet,
+      nonces: [...(h.nonces ?? [])],
       cards: [c1],
       bonusPoints: 0,
       stood: false,
@@ -1027,6 +1056,7 @@ export function applyPlayerAction(
     };
     const newHandB = {
       bet: h.bet,
+      nonces: [n],
       cards: [c2],
       bonusPoints: 0,
       stood: false,
@@ -1303,6 +1333,7 @@ export function applySpecial(
       other.hands = [
         {
           bet: other.hands?.[0]?.bet ?? other.bet ?? 0,
+          nonces: [],
           cards: [...copyFrom.cards],
           bonusPoints: copyFrom.bonusPoints,
           stood: false,
@@ -1351,7 +1382,10 @@ function settleRound(state: TableState, now: number): TableState {
     s.dealer.secondChanceUsed = true;
   }
 
-  const results: Record<string, { outcome: string; multiplier: number; wager: number }> = {};
+  const results: Record<
+    string,
+    { outcome: string; multiplier: number; wager: number; settlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }> }
+  > = {};
   let mythicDropAny = false;
   for (const seatIdx of s.participants) {
     const p = s.seats[seatIdx];
@@ -1363,6 +1397,7 @@ function settleRound(state: TableState, now: number): TableState {
     let bestOutcome = "";
     let totalWager = 0;
     let totalReturn = 0;
+    const settlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }> = [];
     let anySevenCardWinOrPush = false;
 
     // Evaluate each hand vs dealer; choose the best multiplier for player reporting.
@@ -1425,6 +1460,14 @@ function settleRound(state: TableState, now: number): TableState {
       // Apply double payout after bonuses.
       if (h.doublePayoutArmed && mult > 1) mult *= 2;
 
+      // Create settlements for wallet nonces backing this hand.
+      const nonces = Array.isArray(h.nonces) ? h.nonces.filter((x) => Number.isFinite(x) && x > 0) : [];
+      const parts = Math.max(1, nonces.length);
+      const partWager = parts > 0 ? (Number(h.bet ?? 0) || 0) / parts : 0;
+      for (const nonce of nonces) {
+        settlements.push({ nonce, wager: partWager, multiplier: mult, outcome });
+      }
+
       totalWager += Number(h.bet ?? 0) || 0;
       totalReturn += (Number(h.bet ?? 0) || 0) * mult;
 
@@ -1458,7 +1501,7 @@ function settleRound(state: TableState, now: number): TableState {
       });
     }
 
-    results[String(p.userId)] = { outcome: bestOutcome, multiplier: mAll, wager: totalWager };
+    results[String(p.userId)] = { outcome: bestOutcome, multiplier: mAll, wager: totalWager, settlements };
   }
 
   // Mythic box drop (table-wide) if anyone achieved 7-card push or win.

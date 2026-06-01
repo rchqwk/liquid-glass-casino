@@ -22,6 +22,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         type?: "hit" | "stand" | "double_down" | "split" | "special" | "vote_skip" | "extend_timer";
         specialId?: string;
         targetUserId?: number | null;
+        betNonce?: number | null;
       }
     | null;
 
@@ -35,7 +36,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     | { state: any; error?: string } = { state: base };
 
   if (body?.type === "hit" || body?.type === "stand" || body?.type === "double_down" || body?.type === "split") {
-    res = applyPlayerAction(base, user.id, { type: body.type }, now);
+    res = applyPlayerAction(base, user.id, { type: body.type, betNonce: body.betNonce ?? null }, now);
   } else if (body?.type === "vote_skip") {
     res = applyVoteSkipTurn(base, user.id, now);
   } else if (body?.type === "extend_timer") {

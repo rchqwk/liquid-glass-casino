@@ -97,11 +97,16 @@ type BJState = {
   peekCard?: number | null;
   meSeatIndex?: number;
   meInventory?: any;
-  lastResult?: { outcome: string; multiplier: number; wager?: number } | null;
+  lastResult?: {
+    outcome: string;
+    multiplier: number;
+    wager?: number;
+    settlements?: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }>;
+  } | null;
 };
 
 export default function BlackjackTablePage() {
-  const { placeBet } = useWallet();
+  const { beginBet, settleBet } = useWallet();
   const params = useParams<{ id?: string | string[] }>();
   const tableId =
     typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params?.id?.[0] : undefined;
@@ -163,6 +168,18 @@ export default function BlackjackTablePage() {
   const canDoubleDown = !!isMyTurn && !mySeat?.busted && (mySeat?.cards?.length ?? 0) === 2 && (mySeat?.bet ?? 0) > 0;
   const canSplit = !!isMyTurn && !mySeat?.busted && (mySeat?.cards?.length ?? 0) === 2;
 
+  // Auto-reserve funds for carried bets (bet appears prefilled due to carryBetNext)
+  useEffect(() => {
+    if (!state || state.phase !== "betting") return;
+    if (!mySeat) return;
+    const wager = Number(mySeat.bet ?? 0);
+    const hasNonce = Array.isArray((mySeat as any).hands?.[0]?.nonces) && ((mySeat as any).hands?.[0]?.nonces?.length ?? 0) > 0;
+    if (!(wager > 0) || hasNonce) return;
+    const started = beginBet({ game: "Blackjack (MP)", wager });
+    if ("error" in started) return;
+    void post("bet", { amount: wager, betNonce: started.nonce });
+  }, [state?.phase, state?.round, mySeat?.bet]);
+
   const dealerTotal = useMemo(() => {
     if (!state) return 0;
     const visible = state.dealer.cards.filter((c) => c >= 0);
@@ -202,21 +219,20 @@ export default function BlackjackTablePage() {
     if (!state) return;
     if (state.phase !== "settling") return;
     if (!mySeat || !state.lastResult) return;
-    const wager = Number(state.lastResult.wager ?? mySeat.bet ?? 0);
-    if (!(wager > 0)) return;
     const key = `wallet:${safeTableId ?? "?"}:${state.round}`;
     if (walletSettledKey === key) return;
     setWalletSettledKey(key);
-    // This will deduct wager and credit payout immediately using the server-computed multiplier.
-    placeBet({
-      game: "Blackjack (MP)",
-      wager,
-      resolve: () => ({
-        multiplier: Number(state.lastResult?.multiplier ?? 0),
-        outcome: String(state.lastResult?.outcome ?? "Settled"),
-      }),
-    });
-  }, [state, mySeat, safeTableId, walletSettledKey, placeBet]);
+    const settlements = state.lastResult.settlements ?? [];
+    for (const st of settlements) {
+      const nonce = Number(st.nonce);
+      if (!Number.isFinite(nonce) || nonce <= 0) continue;
+      settleBet({
+        nonce,
+        multiplier: Number(st.multiplier ?? 0),
+        outcome: String(st.outcome ?? "Settled"),
+      });
+    }
+  }, [state, mySeat, safeTableId, walletSettledKey, settleBet]);
 
   const join = async (spectate?: boolean) => {
     setErr(null);
@@ -251,6 +267,21 @@ export default function BlackjackTablePage() {
     const data = (await res.json()) as any;
     if (!res.ok) setErr(data?.error ?? "Action failed");
     if (data?.state) setState(data.state);
+  };
+
+  const placeBetWithWallet = async () => {
+    if (state?.phase !== "betting") return;
+    const wager = Math.round(Number(betAmount ?? 0) * 100) / 100;
+    if (!(wager > 0)) {
+      setErr("Invalid bet amount");
+      return;
+    }
+    const started = beginBet({ game: "Blackjack (MP)", wager });
+    if ("error" in started) {
+      setErr(started.error);
+      return;
+    }
+    await post("bet", { amount: wager, betNonce: started.nonce });
   };
 
   return (
@@ -328,8 +359,24 @@ export default function BlackjackTablePage() {
         canDoubleDown={canDoubleDown}
         onHit={() => post("action", { type: "hit" })}
         onStand={() => post("action", { type: "stand" })}
-        onDoubleDown={() => post("action", { type: "double_down" })}
-        onSplit={() => post("action", { type: "split" })}
+        onDoubleDown={() => {
+          const wager = Number(mySeat?.bet ?? 0);
+          const started = beginBet({ game: "Blackjack (MP)", wager });
+          if ("error" in started) {
+            setErr(started.error);
+            return;
+          }
+          void post("action", { type: "double_down", betNonce: started.nonce });
+        }}
+        onSplit={() => {
+          const wager = Number(mySeat?.bet ?? 0);
+          const started = beginBet({ game: "Blackjack (MP)", wager });
+          if ("error" in started) {
+            setErr(started.error);
+            return;
+          }
+          void post("action", { type: "split", betNonce: started.nonce });
+        }}
         dealerCards={state?.dealer?.cards ?? []}
         myCards={mySeat?.cards ?? []}
       />
@@ -403,7 +450,7 @@ export default function BlackjackTablePage() {
                     type="button"
                     disabled={state.phase !== "betting"}
                     className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                    onClick={() => post("bet", { amount: betAmount })}
+                    onClick={placeBetWithWallet}
                   >
                     Place bet
                   </button>

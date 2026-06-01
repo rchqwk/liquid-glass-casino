@@ -114,6 +114,7 @@ export async function POST(req: Request) {
     hands: [
       {
         bet: 0,
+        nonces: [],
         cards: [],
         bonusPoints: 0,
         stood: false,
