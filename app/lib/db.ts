@@ -53,6 +53,8 @@ type Store = {
   config: Record<string, { value: string; updated_at: number }>;
   nextAnnouncementId?: number;
   announcements?: Array<{ id: number; ts: number; message: string }>;
+  nextGlobalChatId?: number;
+  global_chat?: Array<{ id: number; ts: number; user_id: number; username: string; text: string }>;
 };
 
 const STORE_PATH = (() => {
@@ -80,6 +82,8 @@ function defaultStore(): Store {
     config: {},
     nextAnnouncementId: 1,
     announcements: [],
+    nextGlobalChatId: 1,
+    global_chat: [],
   };
 }
 
@@ -195,6 +199,16 @@ async function ensureSchema() {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS global_chat (
+      id SERIAL PRIMARY KEY,
+      ts BIGINT NOT NULL,
+      user_id INT NOT NULL REFERENCES users(id),
+      username TEXT NOT NULL,
+      text TEXT NOT NULL
+    )
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS game_stats (
       game_id TEXT PRIMARY KEY,
       wager_total DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -232,6 +246,104 @@ async function ensureSchema() {
 
   await sql`ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`;
   schemaReady = true;
+}
+
+export async function touchUserLastSeen(userId: number) {
+  const sql = getSql();
+  const now = Date.now();
+  if (sql) {
+    await ensureSchema();
+    await sql`UPDATE users SET last_seen = ${now} WHERE id = ${userId}`;
+    return;
+  }
+  return withStore((s) => {
+    const u: any = s.users.find((x) => x.id === userId);
+    if (u) u.last_seen = now;
+  });
+}
+
+export async function getPresenceCounts() {
+  const sql = getSql();
+  const now = Date.now();
+  const onlineCutoff = now - 2 * 60 * 1000;
+  const active1hCutoff = now - 60 * 60 * 1000;
+  if (sql) {
+    await ensureSchema();
+    const rows =
+      (await sql`
+        SELECT
+          SUM(CASE WHEN last_seen >= ${onlineCutoff} THEN 1 ELSE 0 END) AS online,
+          SUM(CASE WHEN last_seen >= ${active1hCutoff} THEN 1 ELSE 0 END) AS active_1h
+        FROM users
+      `) as any[];
+    return {
+      online: Number(rows[0]?.online ?? 0),
+      active1h: Number(rows[0]?.active_1h ?? 0),
+    };
+  }
+
+  return withStore((s) => {
+    const users = s.users ?? [];
+    const online = users.filter((u: any) => Number(u.last_seen ?? 0) >= onlineCutoff).length;
+    const active1h = users.filter((u: any) => Number(u.last_seen ?? 0) >= active1hCutoff).length;
+    return { online, active1h };
+  });
+}
+
+export async function addGlobalChatMessage(input: { userId: number; username: string; text: string }) {
+  const sql = getSql();
+  const now = Date.now();
+  const text = String(input.text ?? "").trim().slice(0, 240);
+  const username = String(input.username ?? "user").slice(0, 32);
+  if (!text) return;
+
+  if (sql) {
+    await ensureSchema();
+    await sql`INSERT INTO global_chat (ts, user_id, username, text) VALUES (${now}, ${input.userId}, ${username}, ${text})`;
+    // keep last ~24h
+    await sql`DELETE FROM global_chat WHERE ts < ${now - 24 * 60 * 60 * 1000}`;
+    return;
+  }
+
+  return withStore((s) => {
+    const id = s.nextGlobalChatId ?? 1;
+    s.nextGlobalChatId = id + 1;
+    s.global_chat = s.global_chat ?? [];
+    s.global_chat.push({ id, ts: now, user_id: input.userId, username, text });
+    s.global_chat = s.global_chat.filter((m) => m.ts >= now - 24 * 60 * 60 * 1000).slice(-120);
+  });
+}
+
+export async function getGlobalChatMessages(limit = 120) {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      SELECT id, ts, user_id, username, text
+      FROM global_chat
+      ORDER BY id DESC
+      LIMIT ${limit}
+    `) as any[];
+    // return ascending for UI
+    return rows.reverse().map((r) => ({
+      id: String(r.id),
+      ts: Number(r.ts ?? 0),
+      userId: Number(r.user_id ?? 0),
+      username: String(r.username ?? ""),
+      text: String(r.text ?? ""),
+    }));
+  }
+
+  return withStore((s) => {
+    const list = (s.global_chat ?? []).slice(-limit);
+    return list.map((m) => ({
+      id: String(m.id),
+      ts: Number(m.ts ?? 0),
+      userId: Number(m.user_id ?? 0),
+      username: String(m.username ?? ""),
+      text: String(m.text ?? ""),
+    }));
+  });
 }
 
 export async function addAnnouncement(message: string) {

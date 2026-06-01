@@ -145,6 +145,12 @@ export default function BlackjackTablePage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatText, setChatText] = useState("");
   const [chatLastReadAt, setChatLastReadAt] = useState(0);
+  const [chatScope, setChatScope] = useState<"room" | "global">("room");
+  const [globalChat, setGlobalChat] = useState<{
+    messages: Array<{ id: string; ts: number; userId: number; username: string; text: string }>;
+    online: number;
+    active1h: number;
+  }>({ messages: [], online: 0, active1h: 0 });
 
   const inviteUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -231,6 +237,38 @@ export default function BlackjackTablePage() {
     const latest = chatMessages.reduce((a, b) => Math.max(a, Number(b.at) || 0), 0);
     if (latest > chatLastReadAt) setChatLastReadAt(latest);
   }, [chatOpen, chatMessages, chatLastReadAt]);
+
+  const refreshGlobalChat = async () => {
+    try {
+      const res = await fetch("/api/chat/global", { cache: "no-store" });
+      const data = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok) return;
+      setGlobalChat({
+        messages: Array.isArray(data.messages) ? data.messages : [],
+        online: Number(data.online ?? 0) || 0,
+        active1h: Number(data.active1h ?? 0) || 0,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (!chatOpen) return;
+    if (chatScope !== "global") return;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      await refreshGlobalChat();
+    };
+    const id = window.setInterval(tick, 5000);
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatOpen, chatScope]);
 
   const timerLabel =
     state?.phase === "betting"
@@ -617,7 +655,34 @@ export default function BlackjackTablePage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-white">Chat</div>
-                <div className="mt-1 text-xs text-white/60">Room messages</div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className={`rounded-2xl px-3 py-1.5 text-xs font-medium transition ${
+                      chatScope === "room" ? "bg-white/10 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                    onClick={() => setChatScope("room")}
+                  >
+                    Room
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-2xl px-3 py-1.5 text-xs font-medium transition ${
+                      chatScope === "global" ? "bg-white/10 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                    onClick={() => setChatScope("global")}
+                  >
+                    Global
+                  </button>
+                  {chatScope === "global" ? (
+                    <span className="ml-1 text-[11px] text-white/60">
+                      Online: <span className="font-mono text-white/80">{globalChat.online}</span> • Active 1h:{" "}
+                      <span className="font-mono text-white/80">{globalChat.active1h}</span>
+                    </span>
+                  ) : (
+                    <span className="ml-1 text-[11px] text-white/60">Room messages</span>
+                  )}
+                </div>
               </div>
               <button
                 type="button"
@@ -629,7 +694,23 @@ export default function BlackjackTablePage() {
             </div>
 
             <div className="mt-4 h-[360px] overflow-auto rounded-3xl border border-white/10 bg-white/5 p-4">
-              {chatMessages.length ? (
+              {chatScope === "global" ? (
+                globalChat.messages.length ? (
+                  <div className="flex flex-col gap-2">
+                    {globalChat.messages.map((m) => (
+                      <div key={m.id} className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
+                        <div className="flex items-center justify-between gap-3 text-[11px] text-white/60">
+                          <span className="font-semibold text-white/80">{m.username}</span>
+                          <span className="font-mono">{new Date(m.ts).toLocaleTimeString()}</span>
+                        </div>
+                        <div className="mt-1 whitespace-pre-wrap text-sm text-white/85">{m.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-white/60">No messages yet.</div>
+                )
+              ) : chatMessages.length ? (
                 <div className="flex flex-col gap-2">
                   {chatMessages.map((m) => (
                     <div key={m.id} className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
@@ -661,7 +742,16 @@ export default function BlackjackTablePage() {
                       const text = chatText.trim();
                       if (!text) return;
                       setChatText("");
-                      await post("chat", { text });
+                      if (chatScope === "global") {
+                        await fetch("/api/chat/global", {
+                          method: "POST",
+                          headers: { "content-type": "application/json" },
+                          body: JSON.stringify({ text }),
+                        });
+                        await refreshGlobalChat();
+                      } else {
+                        await post("chat", { text });
+                      }
                     })();
                   }
                 }}
@@ -675,7 +765,16 @@ export default function BlackjackTablePage() {
                   const text = chatText.trim();
                   if (!text) return;
                   setChatText("");
-                  await post("chat", { text });
+                  if (chatScope === "global") {
+                    await fetch("/api/chat/global", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ text }),
+                    });
+                    await refreshGlobalChat();
+                  } else {
+                    await post("chat", { text });
+                  }
                 }}
               >
                 Send
@@ -885,6 +984,95 @@ export default function BlackjackTablePage() {
         </div>
         {err ? <div className="mt-3 text-sm text-rose-200">{err}</div> : null}
       </div>
+
+      {/* Top-of-page turn actions (non-popup) */}
+      {state && mySeat && isMyTurn ? (
+        <div className="sticky top-3 z-[60]">
+          <div className="glass glass-shine rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-white">
+                Your turn
+                {myHandCount > 1 ? (
+                  <span className="ml-2 text-xs font-medium text-white/70">
+                    (Hand {myHandIndex + 1}/{myHandCount})
+                  </span>
+                ) : null}
+              </div>
+              <div className="text-xs text-white/70">
+                Time: <span className="font-mono text-white/85">{turnLeft}s</span>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                onClick={() => post("action", { type: "hit" })}
+                disabled={!!mySeat?.busted}
+              >
+                Hit
+              </button>
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                onClick={() => post("action", { type: "stand" })}
+              >
+                Stand
+              </button>
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                onClick={() => {
+                  const wager = Number(mySeat?.bet ?? 0);
+                  const started = beginBet({ game: "Arcade Blackjack", wager });
+                  if ("error" in started) {
+                    setErr(started.error);
+                    return;
+                  }
+                  void post("action", { type: "double_down", betNonce: started.nonce });
+                }}
+                disabled={!canDoubleDown}
+                title="Double your bet, draw one card, and stand"
+              >
+                DD
+              </button>
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                onClick={() => {
+                  const wager = Number(mySeat?.bet ?? 0);
+                  const started = beginBet({ game: "Arcade Blackjack", wager });
+                  if ("error" in started) {
+                    setErr(started.error);
+                    return;
+                  }
+                  void post("action", { type: "split", betNonce: started.nonce });
+                }}
+                disabled={!canSplit}
+                title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
+              >
+                Split
+              </button>
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10"
+                onClick={() => post("action", { type: "vote_skip" })}
+                title="Skip the remaining turn timer"
+              >
+                Vote skip
+              </button>
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+                onClick={() => post("action", { type: "extend_timer" })}
+                disabled={!!mySeat?.extendUsedThisTurn}
+                title="Extend your turn timer once"
+              >
+                Extend timer
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {!state ? (
         <div className="glass-soft rounded-3xl p-5 text-white/70">
