@@ -62,6 +62,10 @@ const BASE_PAY: Record<SymbolId, number> = {
   coin: 0,
 };
 
+// Global RTP tuning for the 10x10 game.
+// Lower this to reduce overall returns and prevent "infinite profit" loops.
+const RTP_MULT = 0.5;
+
 function weightedPick(r01: number): SymbolId {
   const total = SYMBOLS.reduce((a, b) => a + b.w, 0);
   let x = r01 * total;
@@ -261,7 +265,7 @@ export function spinCluster10x10(input: {
     finalGrid: cur,
     steps,
     scatterCount,
-    winMultiplier: total * scale * tierMult,
+    winMultiplier: total * scale * tierMult * RTP_MULT,
     triggeredFS: 0,
   };
 }

@@ -101,7 +101,7 @@ export function TurnQuickPanel(props: {
       {/* Floating tab (stack above Mystery Boxes) */}
       <div className="pointer-events-none fixed bottom-24 right-4 z-[65]">
         {props.timerLabel && typeof props.timerSeconds === "number" ? (
-          <div className="pointer-events-none absolute -top-12 right-0">
+          <div className="pointer-events-none absolute -top-16 right-0">
             <div
               className={`glass-soft rounded-2xl border px-3 py-2 text-[11px] text-white/80 ${
                 props.isMyTurn ? "border-emerald-300/20 bg-emerald-500/10" : "border-white/10 bg-white/5"
@@ -229,7 +229,7 @@ export function TurnQuickPanel(props: {
                   onClick={props.onExtend}
                   title="Extend your turn timer once"
                 >
-                  DE
+                  Extend timer
                 </button>
               </div>
               {props.isMyTurn ? (

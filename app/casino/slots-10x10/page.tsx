@@ -17,7 +17,7 @@ function SymbolIcon({ id }: { id: SymbolId }) {
 
 export default function Slots10x10Page() {
   const { placeBet, balance } = useWallet();
-  const { reportResult } = useAuth();
+  const { reportResult, user } = useAuth();
   const cfg = useGameConfig();
 
   const [wager, setWager] = useState(5);
@@ -34,6 +34,33 @@ export default function Slots10x10Page() {
   const [last, setLast] = useState<{ profit: number; returnMult: number; outcome: string } | null>(null);
   const [lastScatterCount, setLastScatterCount] = useState(0);
   const [animProfile, setAnimProfile] = useState<"normal" | "near" | "big">("normal");
+
+  const maxWinStateKey = useMemo(() => `lgc.slots10x10.maxwin.v1.${user?.id ?? "anon"}`, [user?.id]);
+  const MAX_WIN_PROFIT = 1500;
+  const MAX_WIN_WINDOW_MS = 24 * 60 * 60 * 1000;
+  const MAX_WIN_TIER_PROFITS = [1500, 750, 500, 250];
+
+  function loadMaxWinState(): { firstAt: number; count: number } | null {
+    try {
+      const raw = localStorage.getItem(maxWinStateKey);
+      if (!raw) return null;
+      const j = JSON.parse(raw) as any;
+      const firstAt = Number(j?.firstAt ?? 0);
+      const count = Number(j?.count ?? 0);
+      if (!Number.isFinite(firstAt) || !Number.isFinite(count)) return null;
+      return { firstAt, count };
+    } catch {
+      return null;
+    }
+  }
+
+  function saveMaxWinState(s: { firstAt: number; count: number }) {
+    try {
+      localStorage.setItem(maxWinStateKey, JSON.stringify(s));
+    } catch {
+      // ignore
+    }
+  }
 
   const defaultGrid: SymbolId[][] = useMemo(
     () =>
@@ -122,9 +149,28 @@ export default function Slots10x10Page() {
         setGrid(res.finalGrid);
         setSteps(res.steps);
 
-        const multiplier = (isFree ? 1 : 0) + res.winMultiplier; // refund stake in free spins
-        const outcome =
-          res.winMultiplier > 0 ? `WIN +${res.winMultiplier.toFixed(2)}x` : "LOSE";
+        let multiplier = (isFree ? 1 : 0) + res.winMultiplier; // refund stake in free spins
+        let outcome = res.winMultiplier > 0 ? `WIN +${res.winMultiplier.toFixed(2)}x` : "LOSE";
+
+        // Max-win cap: profit capped to 1500, and can only hit that cap tier once per 24h per player.
+        // Subsequent "would-be max win" spins in the 24h window are capped to 750, then 500, then 250.
+        const wagerAmt = Math.max(0, Number(cost) || 0);
+        if (wagerAmt > 0) {
+          const payout = wagerAmt * Math.max(0, Number(multiplier) || 0);
+          const profit = payout - wagerAmt;
+          if (profit > MAX_WIN_PROFIT) {
+            const now = Date.now();
+            const cur = loadMaxWinState();
+            const expired = !cur?.firstAt || now - cur.firstAt > MAX_WIN_WINDOW_MS;
+            const base = expired ? { firstAt: now, count: 0 } : cur!;
+            const tier = MAX_WIN_TIER_PROFITS[Math.min(base.count, MAX_WIN_TIER_PROFITS.length - 1)] ?? 250;
+            const cappedProfit = tier;
+            multiplier = (wagerAmt + cappedProfit) / wagerAmt;
+            outcome = `MAX WIN CAPPED: +${cappedProfit.toFixed(2)} ⓒ`;
+            saveMaxWinState({ firstAt: base.firstAt, count: Math.min(base.count + 1, MAX_WIN_TIER_PROFITS.length - 1) });
+          }
+        }
+
         return { multiplier, outcome };
       },
     });
