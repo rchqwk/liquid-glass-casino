@@ -24,7 +24,7 @@ const GAMES: GameCard[] = [
   {
     gameId: "slots-5x5",
     title: "Fruit Bowl Super Ways",
-    desc: "5×5 super-ways fruit slot (RTP reduced).",
+    desc: "5×5 super-ways fruit slot.",
     href: "/casino/slots-5x5",
     tag: "BUY FS & FEATURE",
   },
