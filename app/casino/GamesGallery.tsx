@@ -8,17 +8,36 @@ type GameCard = {
   title: string;
   desc: string;
   href: string;
+  tag?: string;
 };
 
 type StatRow = { gameId: string; wagerTotal: number; bets: number };
 
 const GAMES: GameCard[] = [
-  { gameId: "slots", title: "EMOJI Hold and Win", desc: "5×3 emoji slot with hold/nudge + buy options.", href: "/casino/slots" },
-  { gameId: "slots-5x5", title: "Fruit Bowl Super Ways", desc: "5×5 super-ways fruit slot (RTP reduced).", href: "/casino/slots-5x5" },
-  { gameId: "slots-10x10", title: "Break Bonanza", desc: "10×10 cascading cluster break + chaining.", href: "/casino/slots-10x10" },
+  {
+    gameId: "slots",
+    title: "EMOJI Hold and Win",
+    desc: "5×3 emoji slot with hold/nudge + buy options.",
+    href: "/casino/slots",
+    tag: "BUY FS & FEATURE",
+  },
+  {
+    gameId: "slots-5x5",
+    title: "Fruit Bowl Super Ways",
+    desc: "5×5 super-ways fruit slot (RTP reduced).",
+    href: "/casino/slots-5x5",
+    tag: "BUY FS & FEATURE",
+  },
+  {
+    gameId: "slots-10x10",
+    title: "Break Bonanza",
+    desc: "10×10 cascading cluster break + chaining.",
+    href: "/casino/slots-10x10",
+    tag: "BUY FS & FEATURE",
+  },
   { gameId: "dice", title: "Dice", desc: "Pick a target and roll under.", href: "/casino/dice" },
   { gameId: "roulette", title: "Roulette", desc: "European (0–36).", href: "/casino/roulette" },
-  { gameId: "blackjack", title: "Blackjack", desc: "Basic blackjack (prototype).", href: "/casino/blackjack" },
+  { gameId: "blackjack", title: "Arcade Blackjack", desc: "Basic blackjack (prototype).", href: "/casino/blackjack", tag: "UP TO 10 PLAYERS" },
   { gameId: "poker", title: "Poker", desc: "Prototype poker page.", href: "/casino/poker" },
 ];
 
@@ -132,6 +151,13 @@ export function GamesGallery() {
               <h3 className="text-base font-semibold text-white">{c.title}</h3>
               <span className="text-xs text-white/60">Open</span>
             </div>
+            {c.tag ? (
+              <div className="mt-2">
+                <span className="inline-flex rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-white/75">
+                  {c.tag}
+                </span>
+              </div>
+            ) : null}
             <p className="mt-2 text-sm leading-6 text-white/70">{c.desc}</p>
             <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-white/60">
               <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
