@@ -123,6 +123,7 @@ export default function BlackjackTablePage() {
     specialId: null,
     target: null,
   });
+  const [betPending, setBetPending] = useState(false);
 
   useEffect(() => {
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
@@ -174,11 +175,13 @@ export default function BlackjackTablePage() {
     if (!mySeat) return;
     const wager = Number(mySeat.bet ?? 0);
     const hasNonce = Array.isArray((mySeat as any).hands?.[0]?.nonces) && ((mySeat as any).hands?.[0]?.nonces?.length ?? 0) > 0;
+    if (betPending) return;
     if (!(wager > 0) || hasNonce) return;
     const started = beginBet({ game: "Blackjack (MP)", wager });
     if ("error" in started) return;
-    void post("bet", { amount: wager, betNonce: started.nonce });
-  }, [state?.phase, state?.round, mySeat?.bet]);
+    setBetPending(true);
+    void post("bet", { amount: wager, betNonce: started.nonce }).finally(() => setBetPending(false));
+  }, [state?.phase, state?.round, mySeat?.bet, betPending, beginBet]);
 
   const dealerTotal = useMemo(() => {
     if (!state) return 0;
@@ -257,7 +260,7 @@ export default function BlackjackTablePage() {
     setErr(null);
     if (!safeTableId) {
       setErr("Invalid table id");
-      return;
+      return { ok: false as const };
     }
     const res = await fetch(`/api/blackjack/tables/${safeTableId}/${path}`, {
       method: "POST",
@@ -267,6 +270,7 @@ export default function BlackjackTablePage() {
     const data = (await res.json()) as any;
     if (!res.ok) setErr(data?.error ?? "Action failed");
     if (data?.state) setState(data.state);
+    return { ok: !!res.ok, data };
   };
 
   const placeBetWithWallet = async () => {
@@ -276,12 +280,37 @@ export default function BlackjackTablePage() {
       setErr("Invalid bet amount");
       return;
     }
+    if (betPending) return;
+    const hasNonce = Array.isArray((mySeat as any)?.hands?.[0]?.nonces) && (((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0);
+    if (hasNonce) {
+      setErr("Bet already placed. Clear bet first.");
+      return;
+    }
     const started = beginBet({ game: "Blackjack (MP)", wager });
     if ("error" in started) {
       setErr(started.error);
       return;
     }
-    await post("bet", { amount: wager, betNonce: started.nonce });
+    setBetPending(true);
+    const res = await post("bet", { amount: wager, betNonce: started.nonce });
+    setBetPending(false);
+    // If server rejected, refund the reserved wallet bet immediately.
+    if (!res?.ok) {
+      settleBet({ nonce: started.nonce, multiplier: 1, outcome: "Bet canceled" });
+    }
+  };
+
+  const clearBetWithWallet = async () => {
+    if (state?.phase !== "betting") return;
+    if (betPending) return;
+    const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter((x: any) => Number.isFinite(x) && x > 0);
+    // Refund any reserved stake(s)
+    for (const n of nonces) {
+      settleBet({ nonce: n, multiplier: 1, outcome: "Bet canceled" });
+    }
+    setBetPending(true);
+    await post("clearbet");
+    setBetPending(false);
   };
 
   return (
@@ -448,7 +477,7 @@ export default function BlackjackTablePage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    disabled={state.phase !== "betting"}
+                    disabled={state.phase !== "betting" || betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
                     className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
                     onClick={placeBetWithWallet}
                   >
@@ -456,9 +485,22 @@ export default function BlackjackTablePage() {
                   </button>
                   <button
                     type="button"
+                    disabled={state.phase !== "betting" || betPending || (((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) === 0)}
+                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 disabled:opacity-40"
+                    onClick={clearBetWithWallet}
+                  >
+                    Clear bet
+                  </button>
+                  <button
+                    type="button"
                     disabled={state.phase !== "betting"}
                     className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                    onClick={() => post("skip")}
+                    onClick={async () => {
+                      // If a bet was reserved, refund it before skipping.
+                      const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter((x: any) => Number.isFinite(x) && x > 0);
+                      for (const n of nonces) settleBet({ nonce: n, multiplier: 1, outcome: "Bet canceled" });
+                      await post("skip");
+                    }}
                   >
                     Skip round
                   </button>

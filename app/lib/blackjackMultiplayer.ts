@@ -922,6 +922,10 @@ export function applyBet(
   if (seatIdx < 0) return { state: s, error: "You are not seated at this table." };
   const p = s.seats[seatIdx]!;
   normalizeHandsForSeat(p);
+  // Only allow one bet reservation per round unless the user clears it.
+  if ((p.hands?.[0]?.nonces?.length ?? 0) > 0 && (p.hands?.[0]?.bet ?? 0) > 0) {
+    return { state: s, error: "Bet already placed. Clear bet before placing again." };
+  }
   const a = Number(amount);
   if (!Number.isFinite(a) || a <= 0) return { state: s, error: "Invalid bet amount." };
   p.hands[0]!.bet = Math.round(a * 100) / 100;
@@ -946,11 +950,32 @@ export function applySkip(state: TableState, userId: number, now: number): { sta
   const p = s.seats[seatIdx]!;
   normalizeHandsForSeat(p);
   p.hands[0]!.bet = 0;
+  p.hands[0]!.nonces = [];
   p.activeHandIndex = 0;
   normalizeHandsForSeat(p);
   p.lastBetPlaced = 0;
   p.carryBetNext = 0;
   p.skipThisRound = true;
+  p.lastSeenAt = now;
+  s.lastActivityAt = now;
+  s.updatedAt = now;
+  return { state: s };
+}
+
+export function applyClearBet(state: TableState, userId: number, now: number): { state: TableState; error?: string } {
+  const s = tickTable(state, now);
+  if (s.phase !== "betting") return { state: s, error: "You can only clear bets during betting." };
+  const seatIdx = s.seats.findIndex((p) => p?.userId === userId);
+  if (seatIdx < 0) return { state: s, error: "You are not seated at this table." };
+  const p = s.seats[seatIdx]!;
+  normalizeHandsForSeat(p);
+  p.hands[0]!.bet = 0;
+  p.hands[0]!.nonces = [];
+  p.activeHandIndex = 0;
+  normalizeHandsForSeat(p);
+  p.lastBetPlaced = 0;
+  p.carryBetNext = 0;
+  p.skipThisRound = false;
   p.lastSeenAt = now;
   s.lastActivityAt = now;
   s.updatedAt = now;
