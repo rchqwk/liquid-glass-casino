@@ -33,7 +33,7 @@ export type SpinResult = {
 
 // Global RTP tuning for the 5x5 game.
 // Lower this to reduce overall returns.
-const RTP_MULT = 0.5;
+const RTP_MULT = 0.25;
 
 const SYMBOLS: { s: SymbolId; w: number }[] = [
   // ~50% more "cheap" symbols (cherry/lemon/bar) to reduce win volatility.
