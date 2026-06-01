@@ -396,6 +396,19 @@ export default function BlackjackTablePage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Floating invite button (bottom-left) */}
+      <div className="pointer-events-none fixed bottom-24 left-4 z-[65]">
+        <button
+          type="button"
+          className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
+          onClick={() => setInviteOpen(true)}
+          title="Share a link to join this table"
+        >
+          <div className="font-semibold">Invite players</div>
+          <div className="mt-1 text-[11px] text-white/60">Share link to join</div>
+        </button>
+      </div>
+
       {inviteOpen ? (
         <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
           <div className="glass glass-shine w-full max-w-[620px] rounded-3xl border border-white/10 p-6">
@@ -577,14 +590,6 @@ export default function BlackjackTablePage() {
             <Link href="/casino/blackjack" className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10">
               Back to lobby
             </Link>
-            <button
-              type="button"
-              className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
-              onClick={() => setInviteOpen(true)}
-              title="Share a link to join this table"
-            >
-              Invite players
-            </button>
             <button
               type="button"
               className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
