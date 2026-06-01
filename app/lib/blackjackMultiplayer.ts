@@ -14,13 +14,20 @@ export type Phase =
 
 export type SpecialId =
   | "ADD2_SELF"
+  | "ADD1_SELF"
   | "PEEK_NEXT"
   | "SWAP_ONE"
   | "DOUBLE_PAYOUT"
   | "ADD2_DEALER"
   | "DEALER_SECOND_CHANCE"
   | "ADD2_TARGET"
-  | "FORCE_HIT_TARGET";
+  | "FORCE_HIT_TARGET"
+  | "ADD1_MAGIC"
+  | "ADD2_MAGIC"
+  | "SUB1_SELF"
+  | "SUB2_SELF"
+  | "SUB5_SELF"
+  | "SUB10_SELF";
 
 export type SpecialRarity = "common" | "rare";
 export type SpecialTiming = "own_turn" | "dealer_window" | "anytime";
@@ -39,6 +46,14 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
     id: "ADD2_SELF",
     name: "+2 (You)",
     desc: "Add +2 to your hand total. Only usable on your turn.",
+    rarity: "common",
+    timing: "own_turn",
+    target: "self",
+  },
+  ADD1_SELF: {
+    id: "ADD1_SELF",
+    name: "+1 (You)",
+    desc: "Add +1 to your hand total. Only usable on your turn.",
     rarity: "common",
     timing: "own_turn",
     target: "self",
@@ -98,6 +113,54 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
     rarity: "rare",
     timing: "anytime",
     target: "any",
+  },
+  ADD1_MAGIC: {
+    id: "ADD1_MAGIC",
+    name: "+1 Magic",
+    desc: "Add +1 to anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
+    rarity: "rare",
+    timing: "anytime",
+    target: "any",
+  },
+  ADD2_MAGIC: {
+    id: "ADD2_MAGIC",
+    name: "+2 Magic",
+    desc: "Add +2 to anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
+    rarity: "rare",
+    timing: "anytime",
+    target: "any",
+  },
+  SUB1_SELF: {
+    id: "SUB1_SELF",
+    name: "-1 (Save)",
+    desc: "Subtract 1 from your total. Can save you from bust as long as your turn is not over.",
+    rarity: "common",
+    timing: "own_turn",
+    target: "self",
+  },
+  SUB2_SELF: {
+    id: "SUB2_SELF",
+    name: "-2 (Save)",
+    desc: "Subtract 2 from your total. Can save you from bust as long as your turn is not over.",
+    rarity: "common",
+    timing: "own_turn",
+    target: "self",
+  },
+  SUB5_SELF: {
+    id: "SUB5_SELF",
+    name: "-5 (Save)",
+    desc: "Subtract 5 from your total. Rare. Can save you from bust as long as your turn is not over.",
+    rarity: "rare",
+    timing: "own_turn",
+    target: "self",
+  },
+  SUB10_SELF: {
+    id: "SUB10_SELF",
+    name: "-10 (Save)",
+    desc: "Subtract 10 from your total. Very rare. Can save you from bust as long as your turn is not over.",
+    rarity: "rare",
+    timing: "own_turn",
+    target: "self",
   },
 };
 
@@ -204,6 +267,7 @@ function shuffleDeck(seed: number) {
 export function defaultInventory(): Inventory {
   return {
     ADD2_SELF: 1,
+    ADD1_SELF: 1,
     PEEK_NEXT: 1,
     DOUBLE_PAYOUT: 1,
     SWAP_ONE: 0,
@@ -211,6 +275,12 @@ export function defaultInventory(): Inventory {
     DEALER_SECOND_CHANCE: 0,
     ADD2_TARGET: 0,
     FORCE_HIT_TARGET: 0,
+    ADD1_MAGIC: 0,
+    ADD2_MAGIC: 0,
+    SUB1_SELF: 1,
+    SUB2_SELF: 0,
+    SUB5_SELF: 0,
+    SUB10_SELF: 0,
   };
 }
 
@@ -471,6 +541,7 @@ export function applyPlayerAction(
   const p = s.seats[turnSeatIdx];
   if (!p) return { state: s, error: "Turn seat empty." };
   if (p.userId !== userId) return { state: s, error: "Not your turn." };
+  if (action.type === "hit" && p.busted) return { state: s, error: "You are busted. Play a save card or stand." };
 
   if (action.type === "hit") {
     const c = drawFromShoe(s);
@@ -478,10 +549,9 @@ export function applyPlayerAction(
     s.lastActivityAt = now;
     const t = handTotal(p.cards, p.bonusPoints).total;
     if (t > 21) {
+      // Allow "save" cards (-1/-2/-5/-10) before the turn is over.
       p.busted = true;
-      p.turnEnded = true;
-      p.stood = true;
-      return { state: advanceTurn(s, now) };
+      return { state: { ...s, updatedAt: now } };
     }
     // if 21, auto-stand
     if (t === 21) {
@@ -515,14 +585,20 @@ export function applySpecial(
   const def = SPECIALS[input.id];
   if (!def) return { state: s, error: "Unknown special." };
   if ((actor.inventory[input.id] ?? 0) <= 0) return { state: s, error: "No charges left." };
-  if (actor.usedThisRound?.[input.id]) return { state: s, error: "Already used this round." };
+  // Some specials are limited to once per round; others can stack if you have charges.
+  const singleUsePerRound = new Set<SpecialId>(["PEEK_NEXT", "SWAP_ONE", "DOUBLE_PAYOUT", "DEALER_SECOND_CHANCE"]);
+  if (singleUsePerRound.has(input.id) && actor.usedThisRound?.[input.id]) {
+    return { state: s, error: "Already used this round." };
+  }
 
   const isOwnTurn = s.phase === "player_turns" && currentTurnSeatIndex(s) != null && s.seats[currentTurnSeatIndex(s)!]?.userId === userId;
-  const isBeforeDealerStands = s.phase === "player_turns" || s.phase === "dealer";
+  // "Anytime" magic cards are allowed any time before the end of the round:
+  // during player turns, dealer phase, and the dealer-window (but not after settling starts).
+  const isBeforeEndOfRound = s.phase === "player_turns" || s.phase === "dealer" || s.phase === "dealer_window";
 
   if (def.timing === "own_turn" && !isOwnTurn) return { state: s, error: "Only usable on your turn." };
   if (def.timing === "dealer_window" && s.phase !== "dealer_window") return { state: s, error: "Only usable after dealer stands." };
-  if (def.timing === "anytime" && !isBeforeDealerStands) return { state: s, error: "Only usable before dealer stands." };
+  if (def.timing === "anytime" && !isBeforeEndOfRound) return { state: s, error: "Only usable before the end of the round." };
 
   // Resolve target
   let targetSeat: PlayerSeat | null = null;
@@ -534,11 +610,18 @@ export function applySpecial(
     targetSeat = null;
     targetSeatIdx = null;
   } else {
-    const tuid = Number(input.targetUserId ?? userId);
-    const idx = s.seats.findIndex((p) => p?.userId === tuid);
-    if (idx < 0) return { state: s, error: "Target not seated." };
-    targetSeat = s.seats[idx]!;
-    targetSeatIdx = idx;
+    // Allow targeting dealer with a sentinel -1 from UI.
+    const tuidRaw = input.targetUserId ?? userId;
+    const tuid = Number(tuidRaw);
+    if (tuid === -1) {
+      targetSeat = null;
+      targetSeatIdx = null;
+    } else {
+      const idx = s.seats.findIndex((p) => p?.userId === tuid);
+      if (idx < 0) return { state: s, error: "Target not seated." };
+      targetSeat = s.seats[idx]!;
+      targetSeatIdx = idx;
+    }
   }
 
   // Apply effects
@@ -546,13 +629,8 @@ export function applySpecial(
     actor.bonusPoints += 2;
     const t = handTotal(actor.cards, actor.bonusPoints).total;
     if (t > 21) {
+      // Allow save cards before the turn is over.
       actor.busted = true;
-      actor.turnEnded = true;
-      actor.stood = true;
-      // action ends turn
-      actor.usedThisRound[input.id] = true;
-      actor.inventory[input.id] -= 1;
-      return { state: advanceTurn(s, now) };
     }
   } else if (input.id === "PEEK_NEXT") {
     const next = s.shoe[s.shoe.length - 1];
@@ -564,57 +642,59 @@ export function applySpecial(
     // swap the last card
     actor.cards[actor.cards.length - 1] = next;
     const t = handTotal(actor.cards, actor.bonusPoints).total;
-    if (t > 21) {
-      actor.busted = true;
-      actor.turnEnded = true;
-      actor.stood = true;
-      actor.usedThisRound[input.id] = true;
-      actor.inventory[input.id] -= 1;
-      return { state: advanceTurn(s, now) };
-    }
+    if (t > 21) actor.busted = true;
   } else if (input.id === "DOUBLE_PAYOUT") {
     actor.doublePayoutArmed = true;
   } else if (input.id === "ADD2_DEALER") {
     s.dealer.bonusPoints += 2;
   } else if (input.id === "DEALER_SECOND_CHANCE") {
     s.dealer.secondChanceArmed = true;
+  } else if (input.id === "ADD1_SELF") {
+    actor.bonusPoints += 1;
+    const t = handTotal(actor.cards, actor.bonusPoints).total;
+    if (t > 21) actor.busted = true;
   } else if (input.id === "ADD2_TARGET") {
-    if (!targetSeat) return { state: s, error: "Missing target." };
-    targetSeat.bonusPoints += 2;
-    const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
-    if (t > 21) {
-      targetSeat.busted = true;
-      targetSeat.turnEnded = true;
-      targetSeat.stood = true;
-      // If the targeted player was the current turn, advance.
-      if (s.phase === "player_turns" && targetSeatIdx != null && currentTurnSeatIndex(s) === targetSeatIdx) {
-        actor.usedThisRound[input.id] = true;
-        actor.inventory[input.id] = Math.max(0, (actor.inventory[input.id] ?? 0) - 1);
-        actor.lastSeenAt = now;
-        return { state: advanceTurn(s, now) };
-      }
+    if (!targetSeat) {
+      // dealer target
+      s.dealer.bonusPoints += 2;
+    } else {
+      targetSeat.bonusPoints += 2;
+      const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
+      if (t > 21) targetSeat.busted = true;
     }
   } else if (input.id === "FORCE_HIT_TARGET") {
-    if (!targetSeat) return { state: s, error: "Missing target." };
-    // Only makes sense while players are still acting; we allow during dealer too, but it will just add to a (likely ended) hand.
     const c = drawFromShoe(s);
     if (c == null) return { state: s, error: "Shoe empty." };
-    targetSeat.cards.push(c);
-    const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
-    if (t > 21) {
-      targetSeat.busted = true;
-      targetSeat.turnEnded = true;
-      targetSeat.stood = true;
-      if (s.phase === "player_turns" && targetSeatIdx != null && currentTurnSeatIndex(s) === targetSeatIdx) {
-        actor.usedThisRound[input.id] = true;
-        actor.inventory[input.id] = Math.max(0, (actor.inventory[input.id] ?? 0) - 1);
-        actor.lastSeenAt = now;
-        return { state: advanceTurn(s, now) };
-      }
+    if (!targetSeat) {
+      s.dealer.cards.push(c);
+    } else {
+      targetSeat.cards.push(c);
+      const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
+      if (t > 21) targetSeat.busted = true;
     }
+  } else if (input.id === "ADD1_MAGIC" || input.id === "ADD2_MAGIC") {
+    const delta = input.id === "ADD1_MAGIC" ? 1 : 2;
+    if (!targetSeat) {
+      s.dealer.bonusPoints += delta;
+    } else {
+      targetSeat.bonusPoints += delta;
+      const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
+      if (t > 21) targetSeat.busted = true;
+    }
+  } else if (
+    input.id === "SUB1_SELF" ||
+    input.id === "SUB2_SELF" ||
+    input.id === "SUB5_SELF" ||
+    input.id === "SUB10_SELF"
+  ) {
+    const delta =
+      input.id === "SUB1_SELF" ? -1 : input.id === "SUB2_SELF" ? -2 : input.id === "SUB5_SELF" ? -5 : -10;
+    actor.bonusPoints += delta;
+    const t = handTotal(actor.cards, actor.bonusPoints).total;
+    if (t <= 21) actor.busted = false;
   }
 
-  actor.usedThisRound[input.id] = true;
+  if (singleUsePerRound.has(input.id)) actor.usedThisRound[input.id] = true;
   actor.inventory[input.id] = Math.max(0, (actor.inventory[input.id] ?? 0) - 1);
   actor.lastSeenAt = now;
   s.lastActivityAt = now;

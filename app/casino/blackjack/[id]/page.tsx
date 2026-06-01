@@ -157,7 +157,8 @@ export default function BlackjackTablePage() {
   }, [state]);
 
   const canUseDealerSpecial = state?.phase === "dealer_window";
-  const canUseAnytimeSpecial = state?.phase === "player_turns" || state?.phase === "dealer";
+  const canUseAnytimeSpecial =
+    state?.phase === "player_turns" || state?.phase === "dealer" || state?.phase === "dealer_window";
 
   // Report wager/profit for stats once per round (so Games gallery updates per-game totals).
   useEffect(() => {
@@ -321,7 +322,7 @@ export default function BlackjackTablePage() {
 
                 <div className="mt-5">
                   <p className="text-xs font-medium text-white/70">Specials</p>
-                  <label className="mt-2 block text-[11px] text-white/55">Target (for rare “target” cards)</label>
+                  <label className="mt-2 block text-[11px] text-white/55">Target (for rare/magic cards)</label>
                   <select
                     className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/85 outline-none focus:border-white/20"
                     value={targetUserId ?? ""}
@@ -329,6 +330,7 @@ export default function BlackjackTablePage() {
                     disabled={!canUseAnytimeSpecial}
                   >
                     <option value="">(auto)</option>
+                    <option value={-1}>Dealer</option>
                     {state.seats
                       .filter(Boolean)
                       .map((p) => p!)
@@ -341,12 +343,11 @@ export default function BlackjackTablePage() {
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     {Object.entries(state.meInventory ?? {}).map(([k, v]) => (
                       (() => {
-                        const isDealerCard = k.includes("DEALER");
-                        const isTargetCard = k.includes("TARGET");
-                        const needsOwnTurn = !isDealerCard && !isTargetCard;
+                        const isDealerWindowCard = k.includes("DEALER") && !k.includes("TARGET") && !k.includes("MAGIC");
+                        const isAnytimeCard = k.includes("TARGET") || k.includes("MAGIC");
                         const enabled =
                           v > 0 &&
-                          (isDealerCard ? !!canUseDealerSpecial : isTargetCard ? !!canUseAnytimeSpecial : !!isMyTurn);
+                          (isDealerWindowCard ? !!canUseDealerSpecial : isAnytimeCard ? !!canUseAnytimeSpecial : !!isMyTurn);
                         return (
                       <button
                         key={k}
@@ -357,7 +358,7 @@ export default function BlackjackTablePage() {
                           post("action", {
                             type: "special",
                             specialId: k,
-                            targetUserId: isTargetCard ? targetUserId : null,
+                            targetUserId: isAnytimeCard ? targetUserId : null,
                           })
                         }
                         title="Use special"
@@ -370,19 +371,25 @@ export default function BlackjackTablePage() {
                     ))}
                   </div>
                   <div className="mt-2 text-[11px] text-white/50">
-                    Common cards usually work only on your turn. Rare “TARGET” cards can be played any time before the dealer stands.
-                    Stacking is allowed.
+                    Common cards usually work only on your turn. Rare “TARGET” / “MAGIC” cards can be played any time before the end of the round.
+                    Stacking is allowed. Use “-1/-2/-5/-10” on your turn to save yourself from bust before your turn ends.
                   </div>
                 </div>
 
                 {isMyTurn ? (
                   <div className="mt-5">
                     <p className="text-xs font-medium text-white/70">Your turn</p>
+                    {mySeat?.busted ? (
+                      <div className="mt-2 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-100">
+                        BUSTED — play a save card (-1/-2/-5/-10) before your turn ends, or Stand to accept bust.
+                      </div>
+                    ) : null}
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button
                         type="button"
                         className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
                         onClick={() => post("action", { type: "hit" })}
+                        disabled={!!mySeat?.busted}
                       >
                         Hit
                       </button>
