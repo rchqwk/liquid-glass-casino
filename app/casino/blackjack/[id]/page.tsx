@@ -92,7 +92,7 @@ type BJState = {
   dealer: { cards: number[]; bonusPoints: number };
   peekCard?: number | null;
   meSeatIndex?: number;
-  meInventory?: Record<string, number> | null;
+  meInventory?: any;
   lastResult?: { outcome: string; multiplier: number } | null;
 };
 
@@ -322,6 +322,25 @@ export default function BlackjackTablePage() {
 
                 <div className="mt-5">
                   <p className="text-xs font-medium text-white/70">Specials</p>
+                  {state.meInventory ? (
+                    <div className="mt-2 text-[11px] text-white/55">
+                      Hands played: <span className="font-mono text-white/80">{state.meInventory.handsPlayed ?? 0}</span>{" "}
+                      • Next box in{" "}
+                      <span className="font-mono text-white/80">
+                        {(() => {
+                          const hp = Number(state.meInventory.handsPlayed ?? 0);
+                          const rem = hp % 3;
+                          return rem === 0 ? 3 : 3 - rem;
+                        })()}
+                      </span>{" "}
+                      hands
+                    </div>
+                  ) : null}
+                  {Array.isArray(state.meInventory?.lastBox) && state.meInventory.lastBox.length ? (
+                    <div className="mt-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-100">
+                      Mystery Box: <span className="font-mono">{state.meInventory.lastBox.join(", ")}</span>
+                    </div>
+                  ) : null}
                   <label className="mt-2 block text-[11px] text-white/55">Target (for rare/magic cards)</label>
                   <select
                     className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/85 outline-none focus:border-white/20"
@@ -340,36 +359,80 @@ export default function BlackjackTablePage() {
                         </option>
                       ))}
                   </select>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    {Object.entries(state.meInventory ?? {}).map(([k, v]) => (
-                      (() => {
-                        const isDealerWindowCard = k.includes("DEALER") && !k.includes("TARGET") && !k.includes("MAGIC");
-                        const isAnytimeCard = k.includes("TARGET") || k.includes("MAGIC");
-                        const enabled =
-                          v > 0 &&
-                          (isDealerWindowCard ? !!canUseDealerSpecial : isAnytimeCard ? !!canUseAnytimeSpecial : !!isMyTurn);
-                        return (
-                      <button
-                        key={k}
-                        type="button"
-                        className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
-                        disabled={!enabled}
-                        onClick={() =>
-                          post("action", {
-                            type: "special",
-                            specialId: k,
-                            targetUserId: isAnytimeCard ? targetUserId : null,
-                          })
-                        }
-                        title="Use special"
-                      >
-                        <div className="font-semibold text-white">{k}</div>
-                        <div className="mt-1 text-white/60">x{v}</div>
-                      </button>
-                        );
-                      })()
-                    ))}
-                  </div>
+                  {(() => {
+                    const inv = state.meInventory;
+                    const cats = inv?.categories;
+                    const catOrder: Array<{ id: string; label: string }> = [
+                      { id: "boosts", label: "Boosts" },
+                      { id: "saves", label: "Saves" },
+                      { id: "utility", label: "Utility" },
+                      { id: "magic", label: "Magic" },
+                      { id: "dealer", label: "Dealer" },
+                    ];
+
+                    const groups: Array<{ label: string; items: Array<[string, number]> }> = [];
+
+                    if (cats && typeof cats === "object") {
+                      for (const c of catOrder) {
+                        const entries = Object.entries(cats[c.id] ?? {}).filter(([, v]: any) => Number(v) > 0) as Array<
+                          [string, number]
+                        >;
+                        if (entries.length) groups.push({ label: c.label, items: entries });
+                      }
+                    } else if (inv && typeof inv === "object") {
+                      const entries = Object.entries(inv)
+                        .filter(([, v]) => typeof v === "number" && v > 0)
+                        .map(([k, v]) => [k, v as number] as [string, number]);
+                      groups.push({ label: "Inventory", items: entries });
+                    }
+
+                    if (groups.length === 0) {
+                      return <div className="mt-2 text-xs text-white/50">No powerups yet.</div>;
+                    }
+
+                    return (
+                      <div className="mt-2 flex flex-col gap-3">
+                        {groups.map((g) => (
+                          <div key={g.label}>
+                            <div className="mb-2 text-[11px] font-semibold text-white/60">{g.label}</div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {g.items.map(([k, v]) => {
+                                const isDealerWindowCard =
+                                  k.includes("DEALER") && !k.includes("TARGET") && !k.includes("MAGIC");
+                                const isAnytimeCard = k.includes("TARGET") || k.includes("MAGIC");
+                                const enabled =
+                                  v > 0 &&
+                                  (isDealerWindowCard
+                                    ? !!canUseDealerSpecial
+                                    : isAnytimeCard
+                                      ? !!canUseAnytimeSpecial
+                                      : !!isMyTurn);
+                                return (
+                                  <button
+                                    key={k}
+                                    type="button"
+                                    className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
+                                    disabled={!enabled}
+                                    onClick={() =>
+                                      post("action", {
+                                        type: "special",
+                                        specialId: k,
+                                        targetUserId: isAnytimeCard ? targetUserId : null,
+                                      })
+                                    }
+                                    title="Use powerup"
+                                  >
+                                    <div className="font-semibold text-white">{k}</div>
+                                    <div className="mt-1 text-white/60">x{v}</div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   <div className="mt-2 text-[11px] text-white/50">
                     Common cards usually work only on your turn. Rare “TARGET” / “MAGIC” cards can be played any time before the end of the round.
                     Stacking is allowed. Use “-1/-2/-5/-10” on your turn to save yourself from bust before your turn ends.

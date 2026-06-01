@@ -1,7 +1,7 @@
 "server-only";
 
-export type Suit = "♠" | "♥" | "♦" | "♣";
-export type Rank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K";
+export type Suit = "♠" | "♥" | "♦" | "♣" | "★";
+export type Rank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K" | "JOKER";
 
 export type Card = { rank: Rank; suit: Suit; value: number }; // value for non-ace
 
@@ -27,9 +27,14 @@ export type SpecialId =
   | "SUB1_SELF"
   | "SUB2_SELF"
   | "SUB5_SELF"
-  | "SUB10_SELF";
+  | "SUB10_SELF"
+  | "MAGIC_ACE"
+  | "MAGIC_KING"
+  | "MAGIC_QUEEN"
+  | "MAGIC_JACK"
+  | "MAGIC_JOKER";
 
-export type SpecialRarity = "common" | "rare";
+export type SpecialRarity = "common" | "rare" | "legendary";
 export type SpecialTiming = "own_turn" | "dealer_window" | "anytime";
 
 export type SpecialDef = {
@@ -158,13 +163,123 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
     id: "SUB10_SELF",
     name: "-10 (Save)",
     desc: "Subtract 10 from your total. Very rare. Can save you from bust as long as your turn is not over.",
-    rarity: "rare",
+    rarity: "legendary",
     timing: "own_turn",
     target: "self",
   },
+  // Magic "rank" cards (summon a card into a hand)
+  MAGIC_ACE: {
+    id: "MAGIC_ACE",
+    name: "Magic Ace",
+    desc: "Summon an Ace into anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
+    rarity: "rare",
+    timing: "anytime",
+    target: "any",
+  },
+  MAGIC_KING: {
+    id: "MAGIC_KING",
+    name: "Magic King",
+    desc: "Summon a King into anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
+    rarity: "rare",
+    timing: "anytime",
+    target: "any",
+  },
+  MAGIC_QUEEN: {
+    id: "MAGIC_QUEEN",
+    name: "Magic Queen",
+    desc: "Summon a Queen into anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
+    rarity: "rare",
+    timing: "anytime",
+    target: "any",
+  },
+  MAGIC_JACK: {
+    id: "MAGIC_JACK",
+    name: "Magic Jack",
+    desc: "Summon a Jack into anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
+    rarity: "rare",
+    timing: "anytime",
+    target: "any",
+  },
+  MAGIC_JOKER: {
+    id: "MAGIC_JOKER",
+    name: "Magic Joker",
+    desc: "Summon a Joker into anybody’s hand (including dealer). Legendary magic. Joker counts as 0. Usable any time before end of round.",
+    rarity: "legendary",
+    timing: "anytime",
+    target: "any",
+  },
 };
 
-export type Inventory = Record<SpecialId, number>;
+export type InventoryCategoryId = "boosts" | "saves" | "utility" | "magic" | "dealer";
+
+export type Inventory = {
+  v: 2;
+  // How many hands this player has participated in at this table/session (persisted)
+  handsPlayed: number;
+  categories: Record<InventoryCategoryId, Partial<Record<SpecialId, number>>>;
+  // ephemeral (for UI): last box contents awarded
+  lastBox?: SpecialId[];
+};
+
+function classifySpecial(id: SpecialId): InventoryCategoryId {
+  if (id.startsWith("MAGIC_") || id.includes("_MAGIC")) return "magic";
+  if (id.startsWith("SUB")) return "saves";
+  if (id.includes("DEALER")) return "dealer";
+  if (id === "PEEK_NEXT" || id === "SWAP_ONE" || id === "FORCE_HIT_TARGET") return "utility";
+  return "boosts";
+}
+
+function normalizeInventory(raw: any): Inventory {
+  // Migration from the old flat object: {SPECIAL_ID: count}
+  if (raw && raw.v === 2 && raw.categories) {
+    return {
+      v: 2,
+      handsPlayed: Number(raw.handsPlayed ?? 0) || 0,
+      categories: raw.categories as Inventory["categories"],
+      lastBox: Array.isArray(raw.lastBox) ? (raw.lastBox as SpecialId[]) : undefined,
+    };
+  }
+
+  const inv: Inventory = {
+    v: 2,
+    handsPlayed: 0,
+    categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {} },
+  };
+
+  if (raw && typeof raw === "object") {
+    for (const [k, v] of Object.entries(raw)) {
+      const id = k as SpecialId;
+      if (!(id in SPECIALS)) continue;
+      const n = Number(v ?? 0);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      const cat = classifySpecial(id);
+      inv.categories[cat][id] = (inv.categories[cat][id] ?? 0) + n;
+    }
+  }
+  return inv;
+}
+
+export function ensureInventory(raw: any): Inventory {
+  return normalizeInventory(raw);
+}
+
+function invGet(inv: Inventory, id: SpecialId) {
+  const cat = classifySpecial(id);
+  return Number(inv.categories?.[cat]?.[id] ?? 0);
+}
+
+function invAdd(inv: Inventory, id: SpecialId, amount: number) {
+  const cat = classifySpecial(id);
+  const n = Number(amount ?? 0);
+  if (!Number.isFinite(n) || n === 0) return;
+  inv.categories[cat][id] = Math.max(0, (inv.categories[cat][id] ?? 0) + n);
+}
+
+function invConsume(inv: Inventory, id: SpecialId) {
+  if (invGet(inv, id) <= 0) return false;
+  invAdd(inv, id, -1);
+  return true;
+}
 
 export type PlayerSeat = {
   userId: number;
@@ -185,6 +300,7 @@ export type PlayerSeat = {
   turnEnded: boolean;
   doublePayoutArmed: boolean;
   usedThisRound: Partial<Record<SpecialId, boolean>>;
+  lastBox?: SpecialId[];
 };
 
 export type TableState = {
@@ -218,7 +334,30 @@ export type TableState = {
 
 const RANKS: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 
+const MAGIC_CARD_BASE = 1000;
+type MagicRank = "A" | "K" | "Q" | "J" | "JOKER";
+function magicRankCode(r: MagicRank) {
+  if (r === "JOKER") return 0;
+  if (r === "A") return 1;
+  if (r === "J") return 11;
+  if (r === "Q") return 12;
+  return 13; // K
+}
+function encodeMagicCard(rank: MagicRank, suitIdx: number) {
+  return MAGIC_CARD_BASE + suitIdx * 20 + magicRankCode(rank);
+}
+
 export function cardFromIndex(i: number): Card {
+  if (i >= MAGIC_CARD_BASE) {
+    const t = i - MAGIC_CARD_BASE;
+    const suitIdx = Math.floor(t / 20);
+    const code = t % 20;
+    if (code === 0) return { rank: "JOKER", suit: "★", value: 0 };
+    const suit = (["♠", "♥", "♦", "♣"] as const)[Math.max(0, Math.min(3, suitIdx))]!;
+    const rank = (code === 1 ? "A" : code === 11 ? "J" : code === 12 ? "Q" : "K") as Rank;
+    const value = rank === "A" ? 1 : 10;
+    return { rank, suit, value };
+  }
   const r = i % 13;
   const suitIdx = Math.floor(i / 13) % 4;
   const suit = (["♠", "♥", "♦", "♣"] as const)[suitIdx]!;
@@ -265,29 +404,52 @@ function shuffleDeck(seed: number) {
 }
 
 export function defaultInventory(): Inventory {
-  return {
-    ADD2_SELF: 1,
-    ADD1_SELF: 1,
-    PEEK_NEXT: 1,
-    DOUBLE_PAYOUT: 1,
-    SWAP_ONE: 0,
-    ADD2_DEALER: 0,
-    DEALER_SECOND_CHANCE: 0,
-    ADD2_TARGET: 0,
-    FORCE_HIT_TARGET: 0,
-    ADD1_MAGIC: 0,
-    ADD2_MAGIC: 0,
-    SUB1_SELF: 1,
-    SUB2_SELF: 0,
-    SUB5_SELF: 0,
-    SUB10_SELF: 0,
+  const inv: Inventory = {
+    v: 2,
+    handsPlayed: 0,
+    categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {} },
   };
+  // Small starter kit
+  invAdd(inv, "ADD2_SELF", 1);
+  invAdd(inv, "ADD1_SELF", 1);
+  invAdd(inv, "PEEK_NEXT", 1);
+  invAdd(inv, "DOUBLE_PAYOUT", 1);
+  invAdd(inv, "SUB1_SELF", 1);
+  return inv;
 }
 
 function randSpecial(seed: number, rarity: SpecialRarity): SpecialId {
   const pool = Object.values(SPECIALS).filter((s) => s.rarity === rarity).map((s) => s.id);
   const r = lcg(seed)();
   return pool[Math.floor(r * pool.length)] ?? "ADD2_SELF";
+}
+
+function rollMysteryBox(seed: number): SpecialId[] {
+  // Weighted by rarity: mostly common, some rare, very few legendary.
+  const weights: Record<SpecialRarity, number> = { common: 70, rare: 25, legendary: 5 };
+  const pool = Object.values(SPECIALS).map((s) => ({ id: s.id, w: weights[s.rarity] ?? 1 }));
+  const rand = lcg(seed);
+
+  const pickOne = (exclude: Set<SpecialId>) => {
+    let total = 0;
+    for (const p of pool) total += exclude.has(p.id) ? 0 : p.w;
+    let r = rand() * total;
+    for (const p of pool) {
+      if (exclude.has(p.id)) continue;
+      r -= p.w;
+      if (r <= 0) return p.id;
+    }
+    return "ADD2_SELF";
+  };
+
+  const out: SpecialId[] = [];
+  const used = new Set<SpecialId>();
+  for (let i = 0; i < 3; i++) {
+    const id = pickOne(used);
+    out.push(id);
+    used.add(id);
+  }
+  return out;
 }
 
 export function newTableState(input: { id: string; name: string; public: boolean; now: number }): TableState {
@@ -317,6 +479,12 @@ export function newTableState(input: { id: string; name: string; public: boolean
 
 export function tickTable(state: TableState, now: number): TableState {
   const s: TableState = { ...state, updatedAt: now };
+
+  // Inventory migration safety
+  for (const p of s.seats) {
+    if (!p) continue;
+    p.inventory = normalizeInventory(p.inventory);
+  }
 
   // Clean dead spectators (no-op for MVP)
 
@@ -381,6 +549,7 @@ function startBetting(state: TableState, now: number) {
   for (let i = 0; i < s.seats.length; i++) {
     const p = s.seats[i];
     if (!p) continue;
+    p.inventory = normalizeInventory(p.inventory);
     p.bet = 0;
     p.skipThisRound = false;
     p.cards = [];
@@ -390,6 +559,7 @@ function startBetting(state: TableState, now: number) {
     p.turnEnded = false;
     p.doublePayoutArmed = false;
     p.usedThisRound = {};
+    p.lastBox = undefined;
   }
   s.round += 1;
   return s;
@@ -582,9 +752,10 @@ export function applySpecial(
   const seatIdx = s.seats.findIndex((p) => p?.userId === userId);
   if (seatIdx < 0) return { state: s, error: "You are not seated." };
   const actor = s.seats[seatIdx]!;
+  actor.inventory = normalizeInventory(actor.inventory);
   const def = SPECIALS[input.id];
   if (!def) return { state: s, error: "Unknown special." };
-  if ((actor.inventory[input.id] ?? 0) <= 0) return { state: s, error: "No charges left." };
+  if (invGet(actor.inventory, input.id) <= 0) return { state: s, error: "No charges left." };
   // Some specials are limited to once per round; others can stack if you have charges.
   const singleUsePerRound = new Set<SpecialId>(["PEEK_NEXT", "SWAP_ONE", "DOUBLE_PAYOUT", "DEALER_SECOND_CHANCE"]);
   if (singleUsePerRound.has(input.id) && actor.usedThisRound?.[input.id]) {
@@ -632,6 +803,10 @@ export function applySpecial(
       // Allow save cards before the turn is over.
       actor.busted = true;
     }
+  } else if (input.id === "ADD1_SELF") {
+    actor.bonusPoints += 1;
+    const t = handTotal(actor.cards, actor.bonusPoints).total;
+    if (t > 21) actor.busted = true;
   } else if (input.id === "PEEK_NEXT") {
     const next = s.shoe[s.shoe.length - 1];
     s.peekByUserId[String(userId)] = typeof next === "number" ? next : null;
@@ -649,15 +824,12 @@ export function applySpecial(
     s.dealer.bonusPoints += 2;
   } else if (input.id === "DEALER_SECOND_CHANCE") {
     s.dealer.secondChanceArmed = true;
-  } else if (input.id === "ADD1_SELF") {
-    actor.bonusPoints += 1;
-    const t = handTotal(actor.cards, actor.bonusPoints).total;
-    if (t > 21) actor.busted = true;
   } else if (input.id === "ADD2_TARGET") {
     if (!targetSeat) {
       // dealer target
       s.dealer.bonusPoints += 2;
     } else {
+      targetSeat.inventory = normalizeInventory(targetSeat.inventory);
       targetSeat.bonusPoints += 2;
       const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
       if (t > 21) targetSeat.busted = true;
@@ -668,6 +840,7 @@ export function applySpecial(
     if (!targetSeat) {
       s.dealer.cards.push(c);
     } else {
+      targetSeat.inventory = normalizeInventory(targetSeat.inventory);
       targetSeat.cards.push(c);
       const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
       if (t > 21) targetSeat.busted = true;
@@ -677,7 +850,35 @@ export function applySpecial(
     if (!targetSeat) {
       s.dealer.bonusPoints += delta;
     } else {
+      targetSeat.inventory = normalizeInventory(targetSeat.inventory);
       targetSeat.bonusPoints += delta;
+      const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
+      if (t > 21) targetSeat.busted = true;
+    }
+  } else if (
+    input.id === "MAGIC_ACE" ||
+    input.id === "MAGIC_KING" ||
+    input.id === "MAGIC_QUEEN" ||
+    input.id === "MAGIC_JACK" ||
+    input.id === "MAGIC_JOKER"
+  ) {
+    const rank: MagicRank =
+      input.id === "MAGIC_ACE"
+        ? "A"
+        : input.id === "MAGIC_KING"
+          ? "K"
+          : input.id === "MAGIC_QUEEN"
+            ? "Q"
+            : input.id === "MAGIC_JACK"
+              ? "J"
+              : "JOKER";
+    const suitIdx = Math.floor(lcg(Math.floor(now / 1000) ^ (seatIdx * 1337) ^ (s.round * 4242))() * 4);
+    const magicCard = encodeMagicCard(rank, suitIdx);
+    if (!targetSeat) {
+      s.dealer.cards.push(magicCard);
+    } else {
+      targetSeat.inventory = normalizeInventory(targetSeat.inventory);
+      targetSeat.cards.push(magicCard);
       const t = handTotal(targetSeat.cards, targetSeat.bonusPoints).total;
       if (t > 21) targetSeat.busted = true;
     }
@@ -695,7 +896,7 @@ export function applySpecial(
   }
 
   if (singleUsePerRound.has(input.id)) actor.usedThisRound[input.id] = true;
-  actor.inventory[input.id] = Math.max(0, (actor.inventory[input.id] ?? 0) - 1);
+  if (!invConsume(actor.inventory, input.id)) return { state: s, error: "No charges left." };
   actor.lastSeenAt = now;
   s.lastActivityAt = now;
 
@@ -715,6 +916,7 @@ function settleRound(state: TableState, now: number): TableState {
   for (const seatIdx of s.participants) {
     const p = s.seats[seatIdx];
     if (!p) continue;
+    p.inventory = normalizeInventory(p.inventory);
     const pTotal = handTotal(p.cards, p.bonusPoints).total;
     let mult = 0;
     let outcome = "";
@@ -746,18 +948,18 @@ function settleRound(state: TableState, now: number): TableState {
 
     if (p.doublePayoutArmed && mult > 1) mult *= 2;
 
-    // Earn specials (MVP): everyone who participated earns 1 common; winners get extra roll and small rare chance.
-    const seed = Math.floor(now / 1000) ^ (s.round * 1103515245) ^ (p.userId * 2654435761);
-    const earnCommon = randSpecial(seed + 1, "common");
-    p.inventory[earnCommon] = (p.inventory[earnCommon] ?? 0) + 1;
-    if (mult > 1) {
-      const earn2 = randSpecial(seed + 2, "common");
-      p.inventory[earn2] = (p.inventory[earn2] ?? 0) + 1;
-      // 20% rare
-      if (lcg(seed + 3)() < 0.2) {
-        const rare = randSpecial(seed + 4, "rare");
-        p.inventory[rare] = (p.inventory[rare] ?? 0) + 1;
-      }
+    // Mystery box distribution:
+    // Every 3 hands played, award a box containing 3 powerups (weighted by rarity).
+    p.inventory.handsPlayed = Number(p.inventory.handsPlayed ?? 0) + 1;
+    if (p.inventory.handsPlayed % 3 === 0) {
+      const seed = Math.floor(now / 1000) ^ (s.round * 1103515245) ^ (p.userId * 2654435761);
+      const box = rollMysteryBox(seed);
+      p.lastBox = box;
+      p.inventory.lastBox = box;
+      for (const id of box) invAdd(p.inventory, id, 1);
+    } else {
+      p.lastBox = undefined;
+      p.inventory.lastBox = undefined;
     }
 
     results[String(p.userId)] = { outcome, multiplier: mult };

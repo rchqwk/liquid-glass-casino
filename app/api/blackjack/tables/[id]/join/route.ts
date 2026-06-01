@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackInventory, getBlackjackTable, upsertBlackjackInventory, upsertBlackjackTable } from "../../../../../lib/db";
-import { defaultInventory, safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { defaultInventory, ensureInventory, safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // spectate
     if (!state.spectators.includes(user.id)) state.spectators.push(user.id);
   } else {
-    const inv = (await getBlackjackInventory(user.id)) ?? defaultInventory();
+    const inv = ensureInventory((await getBlackjackInventory(user.id)) ?? defaultInventory());
     state.seats[seatOpen] = {
       userId: user.id,
       username: user.username,

@@ -7,7 +7,7 @@ import {
   upsertBlackjackInventory,
   getBlackjackInventory,
 } from "../../../lib/db";
-import { defaultInventory, newTableState, safePublicStateForUser, tickTable } from "../../../lib/blackjackMultiplayer";
+import { defaultInventory, ensureInventory, newTableState, safePublicStateForUser, tickTable } from "../../../lib/blackjackMultiplayer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
   const state = newTableState({ id, name, public: pub, now });
 
   // seat creator
-  const inv = (await getBlackjackInventory(user.id)) ?? defaultInventory();
+  const inv = ensureInventory((await getBlackjackInventory(user.id)) ?? defaultInventory());
   state.seats[0] = {
     userId: user.id,
     username: user.username,
