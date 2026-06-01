@@ -71,9 +71,11 @@ type Seat = {
   stood: boolean;
   busted: boolean;
   turnEnded: boolean;
+  extendUsedThisTurn?: boolean;
   inventory?: Record<string, number>;
   usedThisRound?: Record<string, boolean>;
   doublePayoutArmed?: boolean;
+  bjProtected?: boolean;
 };
 
 type BJState = {
@@ -473,6 +475,15 @@ export default function BlackjackTablePage() {
                         title="Skip the remaining turn timer"
                       >
                         Vote skip timer
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+                        onClick={() => post("action", { type: "extend_timer" })}
+                        disabled={!!mySeat?.extendUsedThisTurn}
+                        title="Extend your turn timer once"
+                      >
+                        Extend timer
                       </button>
                     </div>
                   </div>

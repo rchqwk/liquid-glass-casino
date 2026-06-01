@@ -321,6 +321,7 @@ export type PlayerSeat = {
   usedThisRound: Partial<Record<SpecialId, boolean>>;
   lastBox?: SpecialId[];
   bjProtected: boolean;
+  extendUsedThisTurn: boolean;
 };
 
 export type TableState = {
@@ -589,6 +590,7 @@ function startBetting(state: TableState, now: number) {
     p.usedThisRound = {};
     p.lastBox = undefined;
     p.bjProtected = false;
+    p.extendUsedThisTurn = false;
   }
   s.round += 1;
   return s;
@@ -651,6 +653,7 @@ function startRound(state: TableState, now: number) {
     p.usedThisRound = {};
     // Keep bjProtected if set during betting; otherwise false.
     p.bjProtected = !!p.bjProtected;
+    p.extendUsedThisTurn = false;
     const a = drawFromShoe(s);
     const b = drawFromShoe(s);
     if (a != null) p.cards.push(a);
@@ -701,6 +704,7 @@ function advanceTurn(state: TableState, now: number): TableState {
     }
     // found active player
     s.turnEndsAt = now + 20_000;
+    p.extendUsedThisTurn = false;
     return s;
   }
   // all done -> dealer phase
@@ -756,6 +760,8 @@ export function applyPlayerAction(
     const c = drawFromShoe(s);
     if (c != null) p.cards.push(c);
     s.lastActivityAt = now;
+    // Reset turn timer on irreversible action
+    s.turnEndsAt = now + 20_000;
     const t = handTotal(p.cards, p.bonusPoints).total;
     if (t > 21) {
       // Allow "save" cards (-1/-2/-5/-10) before the turn is over.
@@ -793,6 +799,26 @@ export function applyVoteSkipTurn(state: TableState, userId: number, now: number
   p.stood = true;
   s.lastActivityAt = now;
   return { state: advanceTurn(s, now) };
+}
+
+export function applyExtendTurnTimer(
+  state: TableState,
+  userId: number,
+  now: number,
+): { state: TableState; error?: string } {
+  const s = tickTable(state, now);
+  if (s.phase !== "player_turns") return { state: s, error: "No active turn timer." };
+  const turnSeatIdx = currentTurnSeatIndex(s);
+  if (turnSeatIdx == null) return { state: s, error: "No active turn." };
+  const p = s.seats[turnSeatIdx];
+  if (!p) return { state: s, error: "Turn seat empty." };
+  if (p.userId !== userId) return { state: s, error: "Not your turn." };
+  if (p.extendUsedThisTurn) return { state: s, error: "Extend already used this turn." };
+  p.extendUsedThisTurn = true;
+  // Add 15 seconds to current timer (or reset to now+15s if it already expired).
+  s.turnEndsAt = Math.max(s.turnEndsAt, now) + 15_000;
+  s.lastActivityAt = now;
+  return { state: { ...s, updatedAt: now } };
 }
 
 export function applySpecial(
@@ -962,6 +988,8 @@ export function applySpecial(
   if (!invConsume(actor.inventory, input.id)) return { state: s, error: "No charges left." };
   actor.lastSeenAt = now;
   s.lastActivityAt = now;
+  // Reset turn timer on irreversible action (using a powerup on your own turn).
+  if (isOwnTurn) s.turnEndsAt = now + 20_000;
 
   return { state: { ...s, updatedAt: now } };
 }
