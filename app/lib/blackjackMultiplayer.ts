@@ -415,6 +415,7 @@ function normalizeHandsForSeat(p: any) {
     h.turnEnded = !!h.turnEnded;
     h.doublePayoutArmed = !!h.doublePayoutArmed;
     h.usedThisRound = (h.usedThisRound ?? {}) as any;
+    h.effects = Array.isArray(h.effects) ? h.effects : [];
   }
 
   // Sync legacy fields from active hand (for UI compatibility)
@@ -467,6 +468,14 @@ export type PlayerSeat = {
     turnEnded: boolean;
     doublePayoutArmed: boolean;
     usedThisRound: Partial<Record<SpecialId, boolean>>;
+    effects?: Array<{
+      id: string;
+      at: number;
+      fromUserId: number;
+      fromUsername: string;
+      powerupId: SpecialId;
+      powerupName: string;
+    }>;
   }>;
   activeHandIndex: number;
 
@@ -498,6 +507,9 @@ export type TableState = {
   // Simple room chat (stored on the table state)
   chat?: Array<{ id: string; userId: number; username: string; text: string; at: number }>;
 
+  // Broadcast events for the table (used for toasts/alerts)
+  events?: Array<{ id: string; at: number; text: string }>;
+
   phase: Phase;
   round: number;
   bettingEndsAt: number; // epoch ms
@@ -511,7 +523,13 @@ export type TableState = {
   turnIndex: number; // index into participants
 
   shoe: number[]; // remaining cards (ints)
-  dealer: { cards: number[]; bonusPoints: number; secondChanceArmed: boolean; secondChanceUsed: boolean };
+  dealer: {
+    cards: number[];
+    bonusPoints: number;
+    secondChanceArmed: boolean;
+    secondChanceUsed: boolean;
+    effects?: Array<{ id: string; at: number; fromUserId: number; fromUsername: string; powerupId: SpecialId; powerupName: string }>;
+  };
   dealerBlackjack: boolean;
   peekByUserId: Record<string, number | null>; // userId -> cardIndex or null
   evictedInventories: Array<{ userId: number; inventory: Inventory }>;
@@ -686,6 +704,10 @@ function shortChatId() {
   return Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 10);
 }
 
+function shortEventId() {
+  return Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 10);
+}
+
 export function newTableState(input: { id: string; name: string; public: boolean; now: number }): TableState {
   return {
     id: input.id,
@@ -700,6 +722,7 @@ export function newTableState(input: { id: string; name: string; public: boolean
     password: null,
     afkKickEnabled: true,
     chat: [],
+    events: [],
     phase: "betting",
     round: 1,
     bettingEndsAt: input.now + 30_000,
@@ -710,7 +733,7 @@ export function newTableState(input: { id: string; name: string; public: boolean
     participants: [],
     turnIndex: 0,
     shoe: [],
-    dealer: { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false },
+    dealer: { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false, effects: [] },
     dealerBlackjack: false,
     peekByUserId: {},
     evictedInventories: [],
@@ -732,6 +755,8 @@ export function tickTable(state: TableState, now: number): TableState {
   if (!s.passwordEnabled) s.password = null;
   if (typeof s.afkKickEnabled !== "boolean") s.afkKickEnabled = true;
   if (!Array.isArray(s.chat)) s.chat = [];
+  if (!Array.isArray(s.events)) s.events = [];
+  s.dealer.effects = Array.isArray((s.dealer as any)?.effects) ? (s.dealer as any).effects : [];
 
   // Inventory migration safety
   for (const p of s.seats) {
@@ -806,11 +831,12 @@ function startBetting(state: TableState, now: number) {
   s.participants = [];
   s.turnIndex = 0;
   s.shoe = [];
-  s.dealer = { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false };
+  s.dealer = { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false, effects: [] };
   s.dealerBlackjack = false;
   s.peekByUserId = {};
   s.lastResults = s.lastResults ?? {};
   s.evictedInventories = s.evictedInventories ?? [];
+  s.events = Array.isArray(s.events) ? s.events : [];
 
   // Reset round-specific flags, keep inventory
   for (let i = 0; i < s.seats.length; i++) {
@@ -892,7 +918,7 @@ function startRound(state: TableState, now: number) {
   // new shoe each round (MVP)
   const seed = Math.floor(now / 1000) ^ (s.round * 2654435761);
   s.shoe = shuffleDeck(seed);
-  s.dealer = { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false };
+  s.dealer = { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false, effects: [] };
 
   // deal: each participant 2, dealer 2
   for (const idx of participants) {
@@ -1544,6 +1570,58 @@ export function applySpecial(
 
   if (singleUsePerRound.has(input.id)) actor.usedThisRound[input.id] = true;
   if (!invConsume(actor.inventory, input.id)) return { state: s, error: "No charges left." };
+
+  // Record a table-wide event + tag the affected hand/dealer with the powerup used.
+  s.events = Array.isArray(s.events) ? s.events : [];
+  const isDealerTarget = !targetSeat;
+  const targetLabel =
+    def.target === "self"
+      ? ""
+      : isDealerTarget
+        ? " on Dealer"
+        : targetSeat && targetSeat.userId === actor.userId
+          ? ""
+          : ` on ${targetSeat?.username ?? "player"}`;
+  s.events.push({
+    id: shortEventId(),
+    at: now,
+    text: `${actor.username} used ${def.name}${targetLabel}`,
+  });
+  if (s.events.length > 60) s.events = s.events.slice(s.events.length - 60);
+
+  const effect = {
+    id: shortEventId(),
+    at: now,
+    fromUserId: actor.userId,
+    fromUsername: actor.username,
+    powerupId: input.id,
+    powerupName: def.name,
+  };
+  if (input.id === "MYTHIC_COPY_HANDS") {
+    for (const other of s.seats) {
+      if (!other) continue;
+      normalizeHandsForSeat(other);
+      const th = other.hands?.[other.activeHandIndex ?? 0];
+      if (th) {
+        th.effects = Array.isArray(th.effects) ? th.effects : [];
+        th.effects.push(effect);
+        if (th.effects.length > 10) th.effects = th.effects.slice(th.effects.length - 10);
+      }
+    }
+  } else if (isDealerTarget) {
+    (s.dealer as any).effects = Array.isArray((s.dealer as any).effects) ? (s.dealer as any).effects : [];
+    (s.dealer as any).effects.push(effect);
+    if ((s.dealer as any).effects.length > 10) (s.dealer as any).effects = (s.dealer as any).effects.slice(-10);
+  } else if (targetSeat) {
+    normalizeHandsForSeat(targetSeat);
+    const th = targetSeat.hands?.[targetSeat.activeHandIndex ?? 0];
+    if (th) {
+      th.effects = Array.isArray(th.effects) ? th.effects : [];
+      th.effects.push(effect);
+      if (th.effects.length > 10) th.effects = th.effects.slice(th.effects.length - 10);
+    }
+  }
+
   actor.lastSeenAt = now;
   s.lastActivityAt = now;
   // Reset turn timer on irreversible action (using a powerup on your own turn).

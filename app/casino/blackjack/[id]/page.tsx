@@ -69,7 +69,6 @@ type Seat = {
   missedRounds: number;
   bet: number;
   cards: number[];
-  hands?: Array<{ cards: number[] }>;
   activeHandIndex?: number;
   bonusPoints: number;
   stood: boolean;
@@ -80,6 +79,8 @@ type Seat = {
   usedThisRound?: Record<string, boolean>;
   doublePayoutArmed?: boolean;
   bjProtected?: boolean;
+  // server now attaches per-hand effect tags
+  hands?: Array<{ cards: number[]; bonusPoints?: number; effects?: Array<{ id: string; at: number; fromUsername: string; powerupName: string }> }>;
 };
 
 type BJState = {
@@ -96,11 +97,12 @@ type BJState = {
   passwordEnabled?: boolean;
   afkKickEnabled?: boolean;
   chat?: Array<{ id: string; userId: number; username: string; text: string; at: number }>;
+  events?: Array<{ id: string; at: number; text: string }>;
   seats: Array<Seat | null>;
   spectators: number[];
   participants: number[];
   turnIndex: number;
-  dealer: { cards: number[]; bonusPoints: number };
+  dealer: { cards: number[]; bonusPoints: number; effects?: Array<{ id: string; at: number; fromUsername: string; powerupName: string }> };
   peekCard?: number | null;
   meSeatIndex?: number;
   meInventory?: any;
@@ -151,6 +153,8 @@ export default function BlackjackTablePage() {
     online: number;
     active1h: number;
   }>({ messages: [], online: 0, active1h: 0 });
+  const [powerupToasts, setPowerupToasts] = useState<Array<{ id: string; text: string }>>([]);
+  const [lastEventAt, setLastEventAt] = useState(0);
 
   const inviteUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -269,6 +273,24 @@ export default function BlackjackTablePage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatOpen, chatScope]);
+
+  // Table-wide powerup alerts (toast)
+  useEffect(() => {
+    const evs = state?.events ?? [];
+    if (!evs.length) return;
+    const fresh = evs.filter((e) => (Number(e.at) || 0) > lastEventAt);
+    if (!fresh.length) return;
+    const newestAt = fresh.reduce((a, b) => Math.max(a, Number(b.at) || 0), lastEventAt);
+    setLastEventAt(newestAt);
+    for (const e of fresh.slice(-6)) {
+      const id = String(e.id ?? `${e.at}-${Math.random()}`);
+      const text = String(e.text ?? "Powerup used");
+      setPowerupToasts((t) => [...t, { id, text }].slice(-4));
+      window.setTimeout(() => {
+        setPowerupToasts((t) => t.filter((x) => x.id !== id));
+      }, 3200);
+    }
+  }, [state?.events, lastEventAt]);
 
   const timerLabel =
     state?.phase === "betting"
@@ -484,6 +506,19 @@ export default function BlackjackTablePage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {powerupToasts.length ? (
+        <div className="pointer-events-none fixed top-24 left-1/2 z-[90] w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 space-y-2">
+          {powerupToasts.map((t) => (
+            <div
+              key={t.id}
+              className="glass-soft glass-shine rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/85 shadow-[0_18px_40px_rgba(0,0,0,.45)]"
+            >
+              {t.text}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {/* Host options (seat 1 only) */}
       {isHost ? (
         <div className="pointer-events-none fixed bottom-40 left-4 z-[65]">
@@ -1444,6 +1479,21 @@ export default function BlackjackTablePage() {
               <p className="mt-2 text-xs text-white/55">
                 Visible total: <span className="font-mono text-white/80">{dealerTotal}</span>
               </p>
+              {(state as any)?.dealer?.effects?.length ? (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {((state as any).dealer.effects as any[])
+                    .slice(-4)
+                    .map((e: any) => (
+                      <span
+                        key={String(e.id ?? `${e.at}-${e.powerupName}`)}
+                        className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70"
+                        title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
+                      >
+                        {String(e.powerupName ?? "Powerup")}
+                      </span>
+                    ))}
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-6">
@@ -1459,6 +1509,8 @@ export default function BlackjackTablePage() {
                   }
                   const hv = handValue(p.cards, p.bonusPoints);
                   const isTurn = state.phase === "player_turns" && myTurnSeat === i;
+                  const activeHand = (p as any)?.hands?.[(p as any)?.activeHandIndex ?? 0] ?? null;
+                  const effects = (activeHand?.effects ?? []) as any[];
                   return (
                     <div
                       key={i}
@@ -1486,6 +1538,19 @@ export default function BlackjackTablePage() {
                         {p.busted ? <span className="ml-2 text-rose-200">BUST</span> : null}
                         {p.stood ? <span className="ml-2 text-white/45">STAND</span> : null}
                       </div>
+                      {effects.length ? (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {effects.slice(-4).map((e: any) => (
+                            <span
+                              key={String(e.id ?? `${e.at}-${e.powerupName}`)}
+                              className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70"
+                              title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
+                            >
+                              {String(e.powerupName ?? "Powerup")}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
