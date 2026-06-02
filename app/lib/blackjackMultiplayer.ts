@@ -752,8 +752,18 @@ export function tickTable(state: TableState, now: number): TableState {
     if (now >= s.turnEndsAt) {
       const seat = s.seats[curSeatIdx];
       if (seat) {
+        // Timer expiry => auto-stand the ACTIVE hand.
+        normalizeHandsForSeat(seat);
+        const hi = Math.max(0, Math.min((seat.activeHandIndex ?? 0) as any, (seat.hands?.length ?? 1) - 1));
+        const h = seat.hands?.[hi];
+        if (h) {
+          h.stood = true;
+          h.turnEnded = true;
+        }
+        // keep legacy/summary flags in sync
         seat.stood = true;
         seat.turnEnded = true;
+        normalizeHandsForSeat(seat);
       }
       return advanceTurn(s, now);
     }
