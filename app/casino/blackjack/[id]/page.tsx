@@ -1495,6 +1495,10 @@ export default function BlackjackTablePage() {
           </div>
         </div>
       )}
+
+      <div className="mt-4 text-center text-xs text-white/45">
+        Arcade Blackjack game mode inspired by <span className="font-semibold text-white/60">xyzzy’s blackjack</span>
+      </div>
     </div>
   );
 }
