@@ -101,9 +101,9 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   DOUBLE_PAYOUT: {
     id: "DOUBLE_PAYOUT",
     name: "Double Payout",
-    desc: "If you win this round, double your payout multiplier. Only usable on your turn.",
+    desc: "If you win this round, double your payout multiplier. Only usable during betting phase.",
     rarity: "common",
-    timing: "own_turn",
+    timing: "betting",
     target: "self",
   },
   ADD2_DEALER: {
@@ -925,6 +925,7 @@ function startRound(state: TableState, now: number) {
     const p = s.seats[idx]!;
     const bet = Number(p.hands?.[0]?.bet ?? p.bet ?? 0) || 0;
     const prevNonces = Array.isArray(p.hands?.[0]?.nonces) ? (p.hands[0]!.nonces as number[]) : [];
+    const prevDoublePayout = !!(p.hands?.[0]?.doublePayoutArmed ?? p.doublePayoutArmed);
     p.hands = [
       {
         bet,
@@ -937,7 +938,7 @@ function startRound(state: TableState, now: number) {
         stood: false,
         busted: false,
         turnEnded: false,
-        doublePayoutArmed: false,
+        doublePayoutArmed: prevDoublePayout,
         usedThisRound: {},
       },
     ];
