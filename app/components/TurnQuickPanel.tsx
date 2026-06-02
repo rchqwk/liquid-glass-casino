@@ -24,6 +24,28 @@ function cardFromIndex(i: number): Card {
   return { rank: RANKS[r]!, suit };
 }
 
+function handTotal(cards: number[], bonusPoints = 0): { total: number; soft: boolean } {
+  let total = 0;
+  let aces = 0;
+  for (const idx of cards) {
+    if (idx < 0) continue;
+    const c = cardFromIndex(idx);
+    const rank = c.rank;
+    if (rank === "A") aces += 1;
+    else if (rank === "J" || rank === "Q" || rank === "K") total += 10;
+    else if (rank === "JOKER") total += 0;
+    else total += Number(rank) || 0;
+  }
+  total += aces; // all aces as 1
+  let soft = false;
+  if (aces > 0 && total + 10 <= 21) {
+    total += 10;
+    soft = true;
+  }
+  total += Number(bonusPoints) || 0;
+  return { total, soft };
+}
+
 function CardPip({ idx }: { idx: number }) {
   if (idx < 0) {
     return <div className="h-10 w-7 rounded-xl border border-white/15 bg-white/10" title="Hidden" />;
@@ -49,7 +71,7 @@ export function TurnQuickPanel(props: {
   myBet: number;
   handIndex: number; // 0-based
   handCount: number;
-  hands?: Array<{ stood?: boolean; busted?: boolean; turnEnded?: boolean; cards?: number[] }>;
+  hands?: Array<{ stood?: boolean; busted?: boolean; turnEnded?: boolean; cards?: number[]; bonusPoints?: number }>;
   timerLabel?: string;
   timerSeconds?: number;
   canSplit: boolean;
@@ -63,7 +85,9 @@ export function TurnQuickPanel(props: {
   onSplit: () => void;
   onExtend?: () => void;
   dealerCards: number[];
+  dealerBonusPoints?: number;
   myCards: number[];
+  myBonusPoints?: number;
 }) {
   const [open, setOpen] = useState(false);
   if (!props.show) return null;
@@ -166,7 +190,15 @@ export function TurnQuickPanel(props: {
 
             <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                <div className="text-xs font-semibold text-white/80">Dealer</div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold text-white/80">Dealer</div>
+                  <div className="text-[11px] text-white/60">
+                    Total:{" "}
+                    <span className="font-mono text-white/85">
+                      {handTotal(props.dealerCards, props.dealerBonusPoints ?? 0).total}
+                    </span>
+                  </div>
+                </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {props.dealerCards.map((c, i) => (
                     <CardPip key={`${c}-${i}`} idx={c} />
@@ -175,13 +207,60 @@ export function TurnQuickPanel(props: {
               </div>
 
               <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                <div className="text-xs font-semibold text-white/80">You</div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {props.myCards.map((c, i) => (
-                    <CardPip key={`${c}-${i}`} idx={c} />
-                  ))}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold text-white/80">You</div>
+                  <div className="text-[11px] text-white/60">
+                    Total:{" "}
+                    <span className="font-mono text-white/85">
+                      {handTotal(props.myCards, props.myBonusPoints ?? 0).total}
+                    </span>
+                  </div>
                 </div>
-                <HandBadges />
+
+                {(props.hands?.length ?? 0) > 1 ? (
+                  <div className="mt-3 flex flex-col gap-3">
+                    {(props.hands ?? []).map((h, i) => {
+                      const cards = (h?.cards?.length ? h.cards : i === props.handIndex ? props.myCards : []) ?? [];
+                      const bonus = Number(h?.bonusPoints ?? (i === props.handIndex ? props.myBonusPoints : 0) ?? 0) || 0;
+                      const hv = handTotal(cards, bonus);
+                      const active = i === props.handIndex;
+                      const status = h?.busted ? "BUST" : h?.turnEnded ? "DONE" : active ? "ACTIVE" : "WAIT";
+                      return (
+                        <div
+                          key={i}
+                          className={`rounded-3xl border border-white/10 bg-black/10 p-3 ${active ? "ring-2 ring-emerald-300/30" : ""}`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/60">
+                            <div className="font-semibold text-white/80">
+                              Hand {i + 1}{" "}
+                              <span className="ml-2 font-mono text-white/60">{status}</span>
+                            </div>
+                            <div>
+                              Total: <span className="font-mono text-white/85">{hv.total}</span>
+                              {hv.soft ? <span className="ml-2 text-white/45">(soft)</span> : null}
+                              {bonus ? <span className="ml-2 text-amber-200">(+{bonus})</span> : null}
+                            </div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {cards.map((c, idx) => (
+                              <CardPip key={`${c}-${idx}`} idx={c} />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <HandBadges />
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {props.myCards.map((c, i) => (
+                        <CardPip key={`${c}-${i}`} idx={c} />
+                      ))}
+                    </div>
+                    <HandBadges />
+                  </>
+                )}
               </div>
             </div>
 

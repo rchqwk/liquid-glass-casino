@@ -949,7 +949,9 @@ export default function BlackjackTablePage() {
         }}
         onExtend={() => post("action", { type: "extend_timer" })}
         dealerCards={state?.dealer?.cards ?? []}
+        dealerBonusPoints={Number((state as any)?.dealer?.bonusPoints ?? 0)}
         myCards={mySeat?.cards ?? []}
+        myBonusPoints={Number((myHands as any)?.[myHandIndex]?.bonusPoints ?? (mySeat as any)?.bonusPoints ?? 0)}
       />
       <div className="glass glass-shine rounded-3xl p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
