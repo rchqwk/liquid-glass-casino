@@ -175,49 +175,102 @@ export default function DiscordBlackjackEntryPage() {
   }, [clientId, redirectUri, channelId]);
 
   return (
-    <div className="min-h-[100dvh] w-full bg-slate-950/95 px-4 py-10 text-white">
-      <div className="mx-auto flex min-h-[60vh] max-w-3xl items-center justify-center">
-        <div className="glass glass-shine w-full max-w-[620px] rounded-3xl border border-white/10 p-6 text-white">
-        <div className="text-base font-semibold text-white">Launching Discord Blackjack…</div>
-        <div className="mt-2 text-sm text-white/70">{stageLabel}</div>
+    <div
+      style={{
+        minHeight: "100dvh",
+        width: "100%",
+        background: "radial-gradient(1200px 600px at 50% -10%, rgba(168,85,247,.22), transparent 60%), linear-gradient(#05070f, #070a14)",
+        padding: "40px 16px",
+        color: "white",
+        fontFamily:
+          'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"',
+      }}
+    >
+      <style>{`
+        @keyframes lgc-spin { to { transform: rotate(360deg); } }
+        .lgc-card {
+          width: 100%;
+          max-width: 620px;
+          border-radius: 24px;
+          border: 1px solid rgba(255,255,255,.12);
+          background: rgba(255,255,255,.06);
+          box-shadow: 0 22px 60px rgba(0,0,0,.45);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          padding: 20px;
+        }
+        .lgc-subtle { color: rgba(255,255,255,.70); }
+        .lgc-tiny { color: rgba(255,255,255,.55); font-size: 12px; }
+        .lgc-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+        .lgc-progress-track { height: 8px; width: 100%; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); overflow: hidden; }
+        .lgc-progress-bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #34d399, #d946ef); transition: width 500ms ease; }
+        .lgc-spinner { width: 32px; height: 32px; border-radius: 999px; border: 2px solid rgba(255,255,255,.22); border-top-color: #6ee7b7; animation: lgc-spin 900ms linear infinite; }
+        .lgc-link { color: rgba(255,255,255,.92); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: rgba(255,255,255,.28); }
+      `}</style>
 
-        <div className="mt-4">
-          <div className="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5">
+      <div style={{ margin: "0 auto", maxWidth: 900, minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="lgc-card">
+          <div style={{ fontSize: 16, fontWeight: 700 }}>Launching Discord Blackjack…</div>
+          <div className="lgc-subtle" style={{ marginTop: 8, fontSize: 14 }}>
+            {stageLabel}
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <div className="lgc-progress-track">
+              <div className="lgc-progress-bar" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
+            </div>
+            <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12 }}>
+              <div className="lgc-spinner" />
+              <div className="lgc-subtle" style={{ fontSize: 14 }}>
+                Loading… <span className="lgc-mono" style={{ color: "rgba(255,255,255,.60)" }}>{elapsed}s</span>
+              </div>
+            </div>
+            <div className="lgc-tiny" style={{ marginTop: 8 }}>
+              {progress}% • <span className="lgc-mono">{stage}</span>
+            </div>
+          </div>
+
+          {err ? (
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-fuchsia-400 transition-[width] duration-500"
-              style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
-            />
-          </div>
-          <div className="mt-4 flex items-center gap-3">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-emerald-300" />
-            <div className="text-sm text-white/70">Loading… <span className="font-mono text-white/60">{elapsed}s</span></div>
-          </div>
-          <div className="mt-2 text-[11px] text-white/60">
-            {progress}% • <span className="font-mono">{stage}</span>
+              style={{
+                marginTop: 16,
+                borderRadius: 16,
+                border: "1px solid rgba(251,113,133,.25)",
+                background: "rgba(244,63,94,.12)",
+                padding: "10px 12px",
+                color: "rgba(255,228,230,.95)",
+                fontSize: 14,
+              }}
+            >
+              {err}
+            </div>
+          ) : null}
+
+          {stage === "init" && elapsed >= 2 && oauthAuthorizeUrl ? (
+            <div
+              style={{
+                marginTop: 16,
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,.12)",
+                background: "rgba(255,255,255,.06)",
+                padding: "10px 12px",
+                color: "rgba(255,255,255,.78)",
+                fontSize: 14,
+              }}
+            >
+              If this stays stuck, click{" "}
+              <a className="lgc-link" href={oauthAuthorizeUrl}>
+                Authorize with Discord
+              </a>{" "}
+              to continue.
+            </div>
+          ) : null}
+
+          <div className="lgc-tiny" style={{ marginTop: 16 }}>
+            Tip: launch this as a Discord Activity from within a voice call. (For local testing you can pass{" "}
+            <span className="lgc-mono">?channel_id=...</span>.)
           </div>
         </div>
-
-        {err ? (
-          <div className="mt-4 rounded-2xl border border-rose-300/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
-            {err}
-          </div>
-        ) : null}
-
-        {stage === "init" && elapsed >= 2 && oauthAuthorizeUrl ? (
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75">
-            If this stays stuck, click{" "}
-            <a className="underline decoration-white/30 underline-offset-4 hover:text-white" href={oauthAuthorizeUrl}>
-              Authorize with Discord
-            </a>{" "}
-            to continue.
-          </div>
-        ) : null}
-
-        <div className="mt-4 text-[11px] text-white/50">
-          Tip: launch this as a Discord Activity from within a voice call. (For local testing you can pass{" "}
-          <span className="font-mono text-white/70">?channel_id=...</span>.)
-        </div>
-      </div>
       </div>
     </div>
   );
