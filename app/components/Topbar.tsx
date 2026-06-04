@@ -9,6 +9,7 @@ export function Topbar() {
   const { balance, deposit, reset, refill5000AvailableAt, refill100AvailableAt } = useWallet();
   const { user, loading } = useAuth();
   const role = user?.role_level ?? 0;
+  const [barOpen, setBarOpen] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [broadcast, setBroadcast] = useState<string | null>(null);
   const [displayBalance, setDisplayBalance] = useState(balance);
@@ -109,115 +110,122 @@ export function Topbar() {
   }, [refill100CooldownMs, role]);
 
   return (
-    <header className="sticky top-0 z-20 px-4 pt-4 sm:px-6">
-      <div className="glass glass-shine flex items-center justify-between gap-3 rounded-3xl px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/casino"
-            className="glass-soft inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/10"
-            title="Home"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinejoin="round"
-              />
-            </svg>
-            Home
-          </Link>
-          <span className="hidden text-xs text-white/55 sm:inline">
-            Play-money prototype
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Link
-            className="hidden rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white sm:inline"
-            href="/casino/leaderboard"
-          >
-            Leaderboard
-          </Link>
-          <Link
-            className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
-            href="/casino/profile"
-          >
-            {loading ? "…" : user ? `@${user.username}` : "Sign in"}
-          </Link>
-          <div className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80">
-            Balance{" "}
-            <span className="ml-2 font-semibold text-white">
-              {displayBalance.toFixed(2)} ⓒ
-            </span>
-          </div>
-          <button
-            className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
-            onClick={() => {
-              setMsg(null);
-              if (!canRefill) {
-                setMsg("Sign in to refill.");
-                return;
-              }
-              const res = deposit(100, { bypassCooldown: role >= 1 });
-              if (!res.ok) {
-                setMsg(
-                  res.nextAvailableAt
-                    ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 1000)}s.`
-                    : res.error,
-                );
-              }
-            }}
-            disabled={!canRefill || (role < 1 && refill100CooldownMs > 0)}
-            type="button"
-          >
-            {refill100Label}
-          </button>
-          <button
-            className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
-            onClick={() => {
-              setMsg(null);
-              if (!canRefill) {
-                setMsg("Sign in to refill.");
-                return;
-              }
-              const res = deposit(5000, { bypassCooldown: role >= 1 });
-              if (!res.ok) {
-                setMsg(
-                  res.nextAvailableAt
-                    ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 60000)} min.`
-                    : res.error,
-                );
-              }
-            }}
-            disabled={!canRefill || (role < 1 && refillCooldownMs > 0)}
-            type="button"
-            title={role < 1 ? "Standard users: one +5000 refill every 15 minutes" : "Admin: unlimited refills"}
-          >
-            {refillLabel}
-          </button>
-          {role >= 1 ? (
-            <button
-              className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
-              onClick={reset}
-              type="button"
-              title="Reset wallet + RNG seeds"
-            >
-              Reset
-            </button>
-          ) : null}
-        </div>
+    <>
+      {/* Floating balance bubble (always visible) */}
+      <div className="fixed top-3 right-3 z-[75]">
+        <button
+          type="button"
+          className="glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
+          onClick={() => setBarOpen((v) => !v)}
+          title="Toggle top bar"
+        >
+          <div className="text-[11px] text-white/60">Balance</div>
+          <div className="mt-0.5 font-mono text-sm font-semibold text-white/90">{displayBalance.toFixed(2)} ⓒ</div>
+        </button>
       </div>
-      {msg ? (
-        <div className="px-1 pt-2 text-xs text-white/60">{msg}</div>
-      ) : null}
-      {broadcast ? (
-        <div className="px-1 pt-2">
-          <div className="glass-soft glass-shine rounded-2xl border border-white/10 px-3 py-2 text-xs text-white/80">
-            {broadcast}
+
+      {barOpen ? (
+        <header className="sticky top-0 z-20 px-4 pt-4 sm:px-6">
+          <div className="glass glass-shine flex items-center justify-between gap-3 rounded-3xl px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Link
+                href="/casino"
+                className="glass-soft inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/10"
+                title="Home"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Home
+              </Link>
+              <span className="hidden text-xs text-white/55 sm:inline">Play-money prototype</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Link
+                className="hidden rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white sm:inline"
+                href="/casino/leaderboard"
+              >
+                Leaderboard
+              </Link>
+              <Link
+                className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
+                href="/casino/profile"
+              >
+                {loading ? "…" : user ? `@${user.username}` : "Sign in"}
+              </Link>
+              <button
+                className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
+                onClick={() => {
+                  setMsg(null);
+                  if (!canRefill) {
+                    setMsg("Sign in to refill.");
+                    return;
+                  }
+                  const res = deposit(100, { bypassCooldown: role >= 1 });
+                  if (!res.ok) {
+                    setMsg(
+                      res.nextAvailableAt
+                        ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 1000)}s.`
+                        : res.error,
+                    );
+                  }
+                }}
+                disabled={!canRefill || (role < 1 && refill100CooldownMs > 0)}
+                type="button"
+              >
+                {refill100Label}
+              </button>
+              <button
+                className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
+                onClick={() => {
+                  setMsg(null);
+                  if (!canRefill) {
+                    setMsg("Sign in to refill.");
+                    return;
+                  }
+                  const res = deposit(5000, { bypassCooldown: role >= 1 });
+                  if (!res.ok) {
+                    setMsg(
+                      res.nextAvailableAt
+                        ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 60000)} min.`
+                        : res.error,
+                    );
+                  }
+                }}
+                disabled={!canRefill || (role < 1 && refillCooldownMs > 0)}
+                type="button"
+                title={role < 1 ? "Standard users: one +5000 refill every 15 minutes" : "Admin: unlimited refills"}
+              >
+                {refillLabel}
+              </button>
+              {role >= 1 ? (
+                <button
+                  className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
+                  onClick={reset}
+                  type="button"
+                  title="Reset wallet + RNG seeds"
+                >
+                  Reset
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
+          {msg ? <div className="px-1 pt-2 text-xs text-white/60">{msg}</div> : null}
+          {broadcast ? (
+            <div className="px-1 pt-2">
+              <div className="glass-soft glass-shine rounded-2xl border border-white/10 px-3 py-2 text-xs text-white/80">
+                {broadcast}
+              </div>
+            </div>
+          ) : null}
+        </header>
       ) : null}
-    </header>
+    </>
   );
 }

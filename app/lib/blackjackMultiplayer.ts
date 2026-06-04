@@ -1825,6 +1825,11 @@ function settleRound(state: TableState, now: number): TableState {
           mult += bonus;
           outcome += ` +${bonus.toFixed(0)}x (cards)`;
         }
+        // Extra bonus: 5+ cards AND exactly 21 => additional 2:1 (profit), i.e. +2x return.
+        if (mult > 1 && cards >= 5 && pTotal === 21) {
+          mult += 2;
+          outcome += ` +2x (21)`;
+        }
         if (cards >= 7 && mult >= 1) anySevenCardWinOrPush = true;
       }
 
