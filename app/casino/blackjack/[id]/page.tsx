@@ -1521,53 +1521,57 @@ export default function BlackjackTablePage() {
                     }
 
                     return (
-                      <div className="mt-2 flex flex-col gap-3">
-                        {groups.map((g) => (
-                          <div key={g.label}>
-                            <div className="mb-2 text-[11px] font-semibold text-white/60">{g.label}</div>
-                            <div className="grid grid-cols-2 gap-2">
-                              {g.items.map(([k, v]) => {
-                                const isDealerWindowCard =
-                                  k.includes("DEALER") && !k.includes("TARGET") && !k.includes("MAGIC");
-                                const isAnytimeCard = k.includes("TARGET") || k.includes("MAGIC") || k.includes("MYTHIC");
-                                const isBettingCard = k === "BJ_PROTECTOR" || k === "DOUBLE_PAYOUT";
-                                const enabled =
-                                  v > 0 &&
-                                  (isDealerWindowCard
-                                    ? !!canUseDealerSpecial
-                                    : isAnytimeCard
-                                      ? !!canUseAnytimeSpecial
-                                      : isBettingCard
-                                        ? state?.phase === "betting"
-                                        : !!isMyTurn);
-                                return (
-                                  <button
-                                    key={k}
-                                    type="button"
-                                    className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
-                                    disabled={!enabled}
-                                    onClick={() => {
-                                      if (isAnytimeCard) {
-                                        // Force explicit target choice via popup.
-                                        setTargetPopup({ open: true, specialId: k, target: null });
-                                        return;
-                                      }
-                                      void post("action", {
-                                        type: "special",
-                                        specialId: k,
-                                        targetUserId: null,
-                                      });
-                                    }}
-                                    title={k}
-                                  >
-                                    <div className="font-semibold text-white">{powerupLabel(k)}</div>
-                                    <div className="mt-0.5 text-white/60">x{v}</div>
-                                  </button>
-                                );
-                              })}
+                      <div className="mt-3 overflow-x-auto pb-1">
+                        <div className="flex min-w-max gap-3">
+                          {groups.map((g) => (
+                            <div key={g.label} className="min-w-[140px] max-w-[180px]">
+                              <div className="mb-2 text-[11px] font-semibold text-white/60">{g.label}</div>
+                              <div className="flex flex-col gap-2">
+                                {g.items.map(([k, v]) => {
+                                  const isDealerWindowCard =
+                                    k.includes("DEALER") && !k.includes("TARGET") && !k.includes("MAGIC");
+                                  const isAnytimeCard = k.includes("TARGET") || k.includes("MAGIC") || k.includes("MYTHIC");
+                                  const isBettingCard = k === "BJ_PROTECTOR" || k === "DOUBLE_PAYOUT";
+                                  const enabled =
+                                    v > 0 &&
+                                    (isDealerWindowCard
+                                      ? !!canUseDealerSpecial
+                                      : isAnytimeCard
+                                        ? !!canUseAnytimeSpecial
+                                        : isBettingCard
+                                          ? state?.phase === "betting"
+                                          : !!isMyTurn);
+                                  return (
+                                    <button
+                                      key={k}
+                                      type="button"
+                                      className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
+                                      disabled={!enabled}
+                                      onClick={() => {
+                                        if (isAnytimeCard) {
+                                          // Force explicit target choice via popup.
+                                          setTargetPopup({ open: true, specialId: k, target: null });
+                                          return;
+                                        }
+                                        void post("action", {
+                                          type: "special",
+                                          specialId: k,
+                                          targetUserId: null,
+                                        });
+                                      }}
+                                      title={k}
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="font-semibold text-white">{powerupLabel(k)}</div>
+                                        <div className="text-white/60">x{v}</div>
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     );
                   })()}
