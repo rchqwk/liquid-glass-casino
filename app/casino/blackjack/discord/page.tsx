@@ -27,6 +27,14 @@ export default function DiscordBlackjackEntryPage() {
 
   // If we initiated OAuth ourselves, we store channel id in `state`.
   const channelId = channelIdFromQuery ?? oauthStateFromQuery;
+  const rawQueryString = useMemo(() => {
+    try {
+      if (typeof window === "undefined") return "";
+      return window.location.search || "";
+    } catch {
+      return "";
+    }
+  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
@@ -263,6 +271,30 @@ export default function DiscordBlackjackEntryPage() {
                 Authorize with Discord
               </a>{" "}
               to continue.
+            </div>
+          ) : null}
+
+          {!hasFrameId && !oauthCodeFromQuery ? (
+            <div
+              style={{
+                marginTop: 16,
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,.12)",
+                background: "rgba(255,255,255,.06)",
+                padding: "10px 12px",
+                color: "rgba(255,255,255,.78)",
+                fontSize: 13,
+                lineHeight: 1.45,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: "rgba(255,255,255,.92)" }}>Not embedded yet (missing frame_id)</div>
+              <div style={{ marginTop: 6 }}>
+                This usually means Discord is opening this as a normal web page instead of an Activity iframe. Start it from a
+                voice channel: <span className="lgc-mono">Rocket (Activities) → your app → Start</span>.
+              </div>
+              <div style={{ marginTop: 8 }} className="lgc-tiny">
+                Debug: <span className="lgc-mono">{rawQueryString || "(no query params)"}</span>
+              </div>
             </div>
           ) : null}
 
