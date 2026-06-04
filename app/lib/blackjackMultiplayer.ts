@@ -43,16 +43,23 @@ export type SpecialTiming = "betting" | "own_turn" | "dealer_window" | "anytime"
 export type SpecialDef = {
   id: SpecialId;
   name: string;
+  shortName?: string;
   desc: string;
   rarity: SpecialRarity;
   timing: SpecialTiming;
   target: "self" | "dealer" | "any";
 };
 
+export function specialLabel(id: SpecialId): string {
+  const d = SPECIALS[id];
+  return (d?.shortName ?? d?.name ?? String(id)).slice(0, 12);
+}
+
 export const SPECIALS: Record<SpecialId, SpecialDef> = {
   ADD2_SELF: {
     id: "ADD2_SELF",
     name: "+2 (You)",
+    shortName: "+2",
     desc: "Add +2 to your hand total. Only usable on your turn.",
     rarity: "common",
     timing: "own_turn",
@@ -61,6 +68,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   ADD1_SELF: {
     id: "ADD1_SELF",
     name: "+1 (You)",
+    shortName: "+1",
     desc: "Add +1 to your hand total. Only usable on your turn.",
     rarity: "common",
     timing: "own_turn",
@@ -69,6 +77,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   PEEK_NEXT: {
     id: "PEEK_NEXT",
     name: "Peek",
+    shortName: "👁",
     desc: "Peek the next card on top of the shoe. Only usable on your turn.",
     rarity: "common",
     timing: "own_turn",
@@ -77,6 +86,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   BJ_PROTECTOR: {
     id: "BJ_PROTECTOR",
     name: "BJ Protector",
+    shortName: "BJ🛡",
     desc: "Protect yourself from dealer blackjack this round (push instead of lose). Only usable during betting phase.",
     rarity: "rare",
     timing: "betting",
@@ -85,6 +95,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   FREE_SPLIT: {
     id: "FREE_SPLIT",
     name: "Free Split",
+    shortName: "SPLIT",
     desc: "Legendary: allows you to split ANY starting 2 cards (even if ranks don't match). Consumed when you split.",
     rarity: "legendary",
     timing: "anytime",
@@ -93,6 +104,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   SWAP_ONE: {
     id: "SWAP_ONE",
     name: "Swap",
+    shortName: "SWAP",
     desc: "Swap one of your cards with the next card from the shoe. Only usable on your turn.",
     rarity: "rare",
     timing: "own_turn",
@@ -101,6 +113,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   DOUBLE_PAYOUT: {
     id: "DOUBLE_PAYOUT",
     name: "Double Payout",
+    shortName: "x2",
     desc: "If you win this round, double your payout multiplier. Only usable during betting phase.",
     rarity: "common",
     timing: "betting",
@@ -109,6 +122,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   ADD2_DEALER: {
     id: "ADD2_DEALER",
     name: "+2 (Dealer)",
+    shortName: "D+2",
     desc: "Add +2 to the dealer total. Usable after dealer stands and before next round.",
     rarity: "rare",
     timing: "dealer_window",
@@ -117,6 +131,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   DEALER_SECOND_CHANCE: {
     id: "DEALER_SECOND_CHANCE",
     name: "Dealer Second Chance",
+    shortName: "2nd",
     desc: "If dealer busts, reduce dealer total by 10 once. Usable after dealer stands.",
     rarity: "rare",
     timing: "dealer_window",
@@ -125,6 +140,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   ADD2_TARGET: {
     id: "ADD2_TARGET",
     name: "+2 (Target)",
+    shortName: "+2",
     desc: "Add +2 to any player's hand total. Rare. Can be used even when it's not your turn (before dealer stands).",
     rarity: "rare",
     timing: "anytime",
@@ -133,6 +149,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   FORCE_HIT_TARGET: {
     id: "FORCE_HIT_TARGET",
     name: "Force Hit",
+    shortName: "HIT",
     desc: "Force any player to draw 1 card immediately. Rare. Can be used even when it's not your turn (before dealer stands).",
     rarity: "rare",
     timing: "anytime",
@@ -141,6 +158,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   ADD1_MAGIC: {
     id: "ADD1_MAGIC",
     name: "+1 Magic",
+    shortName: "+1★",
     desc: "Add +1 to anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
     rarity: "rare",
     timing: "anytime",
@@ -149,6 +167,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   ADD2_MAGIC: {
     id: "ADD2_MAGIC",
     name: "+2 Magic",
+    shortName: "+2★",
     desc: "Add +2 to anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
     rarity: "rare",
     timing: "anytime",
@@ -157,6 +176,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   SUB1_SELF: {
     id: "SUB1_SELF",
     name: "-1 (Save)",
+    shortName: "-1",
     desc: "Subtract 1 from your total. Can save you from bust as long as your turn is not over.",
     rarity: "common",
     timing: "own_turn",
@@ -165,6 +185,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   SUB2_SELF: {
     id: "SUB2_SELF",
     name: "-2 (Save)",
+    shortName: "-2",
     desc: "Subtract 2 from your total. Can save you from bust as long as your turn is not over.",
     rarity: "common",
     timing: "own_turn",
@@ -173,6 +194,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   SUB5_SELF: {
     id: "SUB5_SELF",
     name: "-5 (Save)",
+    shortName: "-5",
     desc: "Subtract 5 from your total. Rare. Can save you from bust as long as your turn is not over.",
     rarity: "rare",
     timing: "own_turn",
@@ -181,6 +203,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   SUB10_SELF: {
     id: "SUB10_SELF",
     name: "-10 (Save)",
+    shortName: "-10",
     desc: "Subtract 10 from your total. Very rare. Can save you from bust as long as your turn is not over.",
     rarity: "legendary",
     timing: "own_turn",
@@ -190,6 +213,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   MAGIC_ACE: {
     id: "MAGIC_ACE",
     name: "Magic Ace",
+    shortName: "A★",
     desc: "Summon an Ace into anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
     rarity: "rare",
     timing: "anytime",
@@ -198,6 +222,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   MAGIC_KING: {
     id: "MAGIC_KING",
     name: "Magic King",
+    shortName: "K★",
     desc: "Summon a King into anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
     rarity: "rare",
     timing: "anytime",
@@ -206,6 +231,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   MAGIC_QUEEN: {
     id: "MAGIC_QUEEN",
     name: "Magic Queen",
+    shortName: "Q★",
     desc: "Summon a Queen into anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
     rarity: "rare",
     timing: "anytime",
@@ -214,6 +240,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   MAGIC_JACK: {
     id: "MAGIC_JACK",
     name: "Magic Jack",
+    shortName: "J★",
     desc: "Summon a Jack into anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
     rarity: "rare",
     timing: "anytime",
@@ -222,6 +249,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   MAGIC_JOKER: {
     id: "MAGIC_JOKER",
     name: "Magic Joker",
+    shortName: "🃏★",
     desc: "Summon a Joker into anybody’s hand (including dealer). Legendary magic. Joker counts as 0. Usable any time before end of round.",
     rarity: "legendary",
     timing: "anytime",
@@ -230,6 +258,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   MYTHIC_COPY_HANDS: {
     id: "MYTHIC_COPY_HANDS",
     name: "Mythic: Copy Hands",
+    shortName: "COPY",
     desc: "MYTHIC: Copy a chosen player's current hand to EVERYONE (except dealer). Usable any time before end of round.",
     rarity: "mythic",
     timing: "anytime",
@@ -1586,7 +1615,7 @@ export function applySpecial(
   s.events.push({
     id: shortEventId(),
     at: now,
-    text: `${actor.username} used ${def.name}${targetLabel}`,
+    text: `${actor.username} used ${specialLabel(input.id)}${targetLabel}`,
   });
   if (s.events.length > 60) s.events = s.events.slice(s.events.length - 60);
 
@@ -1596,7 +1625,7 @@ export function applySpecial(
     fromUserId: actor.userId,
     fromUsername: actor.username,
     powerupId: input.id,
-    powerupName: def.name,
+    powerupName: specialLabel(input.id),
   };
   if (input.id === "MYTHIC_COPY_HANDS") {
     for (const other of s.seats) {

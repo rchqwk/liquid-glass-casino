@@ -256,6 +256,35 @@ export default function BlackjackTablePage() {
 
   const isSpectator = !!user && !!state && Array.isArray(state.spectators) && state.spectators.includes(user.id);
 
+  const powerupLabel = (id: string) => {
+    const m: Record<string, string> = {
+      ADD2_SELF: "+2",
+      ADD1_SELF: "+1",
+      PEEK_NEXT: "👁",
+      BJ_PROTECTOR: "BJ🛡",
+      FREE_SPLIT: "SPLIT",
+      SWAP_ONE: "SWAP",
+      DOUBLE_PAYOUT: "x2",
+      ADD2_DEALER: "D+2",
+      DEALER_SECOND_CHANCE: "2nd",
+      ADD2_TARGET: "+2",
+      FORCE_HIT_TARGET: "HIT",
+      ADD1_MAGIC: "+1★",
+      ADD2_MAGIC: "+2★",
+      SUB1_SELF: "-1",
+      SUB2_SELF: "-2",
+      SUB5_SELF: "-5",
+      SUB10_SELF: "-10",
+      MAGIC_ACE: "A★",
+      MAGIC_KING: "K★",
+      MAGIC_QUEEN: "Q★",
+      MAGIC_JACK: "J★",
+      MAGIC_JOKER: "🃏★",
+      MYTHIC_COPY_HANDS: "COPY",
+    };
+    return (m[id] ?? id).slice(0, 12);
+  };
+
   const TableSeat = ({
     seatIndex,
     p,
@@ -314,7 +343,7 @@ export default function BlackjackTablePage() {
                     className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-white/70"
                     title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
                   >
-                    {String(e.powerupName ?? "Powerup")}
+                              {String(e.powerupName ?? "Powerup")}
                   </span>
                 ))}
               </div>
@@ -1073,7 +1102,9 @@ export default function BlackjackTablePage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-white">Choose target</div>
-                <div className="mt-1 text-xs text-white/60 font-mono">{targetPopup.specialId}</div>
+                <div className="mt-1 text-xs text-white/60 font-mono">
+                  {targetPopup.specialId ? powerupLabel(targetPopup.specialId) : ""}
+                </div>
               </div>
               <button
                 type="button"
@@ -1499,7 +1530,7 @@ export default function BlackjackTablePage() {
                                 const isDealerWindowCard =
                                   k.includes("DEALER") && !k.includes("TARGET") && !k.includes("MAGIC");
                                 const isAnytimeCard = k.includes("TARGET") || k.includes("MAGIC") || k.includes("MYTHIC");
-                                const isBettingCard = k === "BJ_PROTECTOR";
+                                const isBettingCard = k === "BJ_PROTECTOR" || k === "DOUBLE_PAYOUT";
                                 const enabled =
                                   v > 0 &&
                                   (isDealerWindowCard
@@ -1527,9 +1558,9 @@ export default function BlackjackTablePage() {
                                         targetUserId: null,
                                       });
                                     }}
-                                    title="Use powerup"
+                                    title={k}
                                   >
-                                    <div className="font-semibold text-white">{k}</div>
+                                    <div className="font-semibold text-white">{powerupLabel(k)}</div>
                                     <div className="mt-1 text-white/60">x{v}</div>
                                   </button>
                                 );
