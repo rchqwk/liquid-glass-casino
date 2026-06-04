@@ -14,6 +14,10 @@ type OpenResp =
   | { ok: true; unopened: number; box: { id: string; tier?: string; contents: string[]; rarity: string[] } }
   | { error: string };
 
+type OpenAllResp =
+  | { ok: true; unopened: number; openedCount: number; rewards: Array<{ id: string; rarity: string }> }
+  | { error: string };
+
 function rarityClass(r: string) {
   if (r === "mythic") return "ring-2 ring-cyan-300/70 shadow-[0_0_34px_rgba(34,211,238,.25)]";
   if (r === "legendary") return "ring-2 ring-yellow-300/70 shadow-[0_0_30px_rgba(250,204,21,.35)]";
@@ -38,6 +42,7 @@ export function MysteryBoxTab() {
   const [opening, setOpening] = useState(false);
   const [revealStep, setRevealStep] = useState(0);
   const [lastOpened, setLastOpened] = useState<{ contents: string[]; rarity: string[] } | null>(null);
+  const [lastOpenedAll, setLastOpenedAll] = useState<{ openedCount: number; rewards: Array<{ id: string; rarity: string }> } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const unopened = data?.unopened ?? 0;
@@ -82,6 +87,7 @@ export function MysteryBoxTab() {
     setOpening(true);
     setRevealStep(0);
     setLastOpened(null);
+    setLastOpenedAll(null);
     try {
       const res = await fetch("/api/blackjack/boxes", {
         method: "POST",
@@ -108,6 +114,34 @@ export function MysteryBoxTab() {
     window.setTimeout(() => setRevealStep(2), 1400);
     window.setTimeout(() => setRevealStep(3), 2000);
     window.setTimeout(() => setOpening(false), 2400);
+  };
+
+  const openAllBoxes = async () => {
+    if (opening) return;
+    setErr(null);
+    setOpening(true);
+    setRevealStep(0);
+    setLastOpened(null);
+    setLastOpenedAll(null);
+    try {
+      const res = await fetch("/api/blackjack/boxes", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
+      const j = (await res.json()) as OpenAllResp;
+      if (!res.ok || "error" in j) throw new Error("error" in j ? j.error : "Failed");
+      setData((d) => (d ? { ...d, unopened: j.unopened } : d));
+
+      window.setTimeout(() => {
+        setLastOpenedAll({ openedCount: j.openedCount ?? 0, rewards: j.rewards ?? [] });
+        setRevealStep(3);
+        setOpening(false);
+      }, 600);
+    } catch (e: any) {
+      setErr(String(e?.message ?? "Failed"));
+      setOpening(false);
+    }
   };
 
   const tradeBox = async (toTier: "rare" | "legendary" | "mythic") => {
@@ -248,6 +282,15 @@ export function MysteryBoxTab() {
                 >
                   {opening ? "Opening…" : unopened > 0 ? "Open next box" : "No boxes"}
                 </button>
+                <button
+                  type="button"
+                  disabled={unopened <= 0 || opening}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10 disabled:opacity-40"
+                  onClick={openAllBoxes}
+                  title="Opens all unopened boxes and adds rewards to your inventory"
+                >
+                  {opening ? "Opening…" : `Open all (${unopened})`}
+                </button>
                 <div className="mt-3 text-[11px] text-white/50">
                   Tip: Rare/legendary items reveal slower and glow.
                 </div>
@@ -269,7 +312,26 @@ export function MysteryBoxTab() {
                   </div>
                 </div>
 
-                {lastOpened ? (
+                {lastOpenedAll ? (
+                  <>
+                    <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white/90">
+                      Opened {lastOpenedAll.openedCount} boxes
+                    </div>
+                    <div className="mt-4 max-h-[320px] overflow-y-auto pr-1">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        {lastOpenedAll.rewards.map((it, i) => {
+                          const r = it.rarity ?? "common";
+                          return (
+                            <div key={`${it.id}-${i}`} className={`rounded-3xl border border-white/10 bg-white/5 p-4 ${rarityClass(r)}`}>
+                              <div className="text-[11px] font-semibold text-white/70">{rarityLabel(r)}</div>
+                              <div className="mt-2 font-mono text-sm font-semibold text-white">{it.id}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                ) : lastOpened ? (
                   <>
                     {hasMythic ? (
                       <div className="mt-4 animate-[mb-fanfare_.35s_ease-out] rounded-3xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-center text-sm font-semibold text-cyan-100 shadow-[0_0_44px_rgba(34,211,238,.18)]">
