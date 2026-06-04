@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "../lib/wallet";
 import { useAuth } from "../lib/authClient";
 
@@ -11,6 +11,8 @@ export function Topbar() {
   const role = user?.role_level ?? 0;
   const [msg, setMsg] = useState<string | null>(null);
   const [broadcast, setBroadcast] = useState<string | null>(null);
+  const [displayBalance, setDisplayBalance] = useState(balance);
+  const displayBalanceRef = useRef(displayBalance);
   const [afterId, setAfterId] = useState<number>(() => {
     try {
       const raw = localStorage.getItem("lgc.ann.afterId");
@@ -25,6 +27,32 @@ export function Topbar() {
     const id = window.setInterval(() => forceTick((x) => (x + 1) % 1000000), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    displayBalanceRef.current = displayBalance;
+  }, [displayBalance]);
+
+  // Animate balance changes to count up/down smoothly.
+  useEffect(() => {
+    const target = Number(balance ?? 0);
+    if (!Number.isFinite(target)) return;
+    // jump on first render
+    setDisplayBalance((prev) => (prev == null ? target : prev));
+    let raf = 0;
+    const start = performance.now();
+    const from = Number(displayBalanceRef.current ?? target);
+    const duration = 650; // ms
+    const step = (t: number) => {
+      const p = Math.min(1, (t - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+      const v = from + (target - from) * eased;
+      setDisplayBalance(Math.round(v * 100) / 100);
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [balance]);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,7 +148,7 @@ export function Topbar() {
           <div className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80">
             Balance{" "}
             <span className="ml-2 font-semibold text-white">
-              {balance.toFixed(2)} ⓒ
+              {displayBalance.toFixed(2)} ⓒ
             </span>
           </div>
           <button
