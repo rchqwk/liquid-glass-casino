@@ -98,7 +98,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const sp = new URLSearchParams(search);
           const hasFrameId = sp.has("frame_id");
           if (!hasFrameId) {
-            setDiscordError("Discord embed params are missing (frame_id). Re-launch the Activity.");
+            // Some Discord contexts (notably iOS/webview) may omit `frame_id`, which prevents the Embedded App SDK
+            // from initializing. In that case, fall back to the dedicated Discord entry page which provides an
+            // OAuth authorize link and can still complete login with `code` + `channel_id`.
+            try {
+              const path = window.location.pathname || "";
+              if (!path.startsWith("/casino/blackjack/discord")) {
+                window.location.replace(`/casino/blackjack/discord${search || ""}`);
+                return;
+              }
+            } catch {
+              // ignore
+            }
+            setDiscordError("Discord embed params are missing (frame_id). Tap Retry to use OAuth sign-in.");
           } else {
             const clientId =
               process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ??
