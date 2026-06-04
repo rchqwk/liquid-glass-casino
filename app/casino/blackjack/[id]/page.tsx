@@ -260,8 +260,8 @@ export default function BlackjackTablePage() {
     const m: Record<string, string> = {
       ADD2_SELF: "+2",
       ADD1_SELF: "+1",
-      PEEK_NEXT: "👁",
-      BJ_PROTECTOR: "BJ🛡",
+      PEEK_NEXT: "👀➡️",
+      BJ_PROTECTOR: "BJ🚫",
       FREE_SPLIT: "SPLIT",
       SWAP_ONE: "SWAP",
       DOUBLE_PAYOUT: "x2",
@@ -314,16 +314,16 @@ export default function BlackjackTablePage() {
       return (
         <div className={className}>
           <div className={`${isTurn ? "drop-shadow-[0_0_18px_rgba(52,211,153,.25)]" : ""}`}>
-            <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-white/80">
-              <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 font-semibold text-white/85">
+            <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px] text-white/80">
+              <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 font-semibold text-white/85">
                 {p.username}
               </span>
               {p.bet ? (
-                <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-white/70">
+                <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
                   Bet <span className="font-mono text-white/80">{Number(p.bet).toFixed(2)}</span>
                 </span>
               ) : null}
-              <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-white/70">
+              <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
                 <span className="font-mono text-white/85">{hv.total}</span>
                 {p.bonusPoints ? <span className="ml-1 text-amber-200">(+{p.bonusPoints})</span> : null}
               </span>
@@ -340,7 +340,7 @@ export default function BlackjackTablePage() {
                 {effects.slice(-3).map((e: any) => (
                   <span
                     key={String(e.id ?? `${e.at}-${e.powerupName}`)}
-                    className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-white/70"
+                    className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-[10px] text-white/70"
                     title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
                   >
                               {String(e.powerupName ?? "Powerup")}
@@ -377,11 +377,11 @@ export default function BlackjackTablePage() {
           {effects.length ? (
             <div className="mt-2 flex flex-wrap gap-1">
               {effects.slice(-4).map((e: any) => (
-                <span
-                  key={String(e.id ?? `${e.at}-${e.powerupName}`)}
-                  className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70"
-                  title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
-                >
+                          <span
+                            key={String(e.id ?? `${e.at}-${e.powerupName}`)}
+                            className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/70"
+                            title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
+                          >
                   {String(e.powerupName ?? "Powerup")}
                 </span>
               ))}
@@ -1544,7 +1544,7 @@ export default function BlackjackTablePage() {
                                   <button
                                     key={k}
                                     type="button"
-                                    className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
+                                    className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
                                     disabled={!enabled}
                                     onClick={() => {
                                       if (isAnytimeCard) {
@@ -1561,7 +1561,7 @@ export default function BlackjackTablePage() {
                                     title={k}
                                   >
                                     <div className="font-semibold text-white">{powerupLabel(k)}</div>
-                                    <div className="mt-1 text-white/60">x{v}</div>
+                                    <div className="mt-0.5 text-white/60">x{v}</div>
                                   </button>
                                 );
                               })}
@@ -1733,7 +1733,7 @@ export default function BlackjackTablePage() {
                     .map((e: any) => (
                       <span
                         key={String(e.id ?? `${e.at}-${e.powerupName}`)}
-                        className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70"
+                        className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/70"
                         title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
                       >
                         {String(e.powerupName ?? "Powerup")}

@@ -77,7 +77,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   PEEK_NEXT: {
     id: "PEEK_NEXT",
     name: "Peek",
-    shortName: "👁",
+    shortName: "👀➡️",
     desc: "Peek the next card on top of the shoe. Only usable on your turn.",
     rarity: "common",
     timing: "own_turn",
@@ -86,7 +86,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
   BJ_PROTECTOR: {
     id: "BJ_PROTECTOR",
     name: "BJ Protector",
-    shortName: "BJ🛡",
+    shortName: "BJ🚫",
     desc: "Protect yourself from dealer blackjack this round (push instead of lose). Only usable during betting phase.",
     rarity: "rare",
     timing: "betting",
