@@ -158,6 +158,13 @@ export default function BlackjackTablePage() {
   const [powerupToasts, setPowerupToasts] = useState<Array<{ id: string; text: string }>>([]);
   const [lastEventAt, setLastEventAt] = useState(0);
   const [discordAutoJoinTried, setDiscordAutoJoinTried] = useState(false);
+  const [tableView, setTableView] = useState<"table" | "list">(() => {
+    try {
+      return (localStorage.getItem("lgc.bj.tableView") as any) === "list" ? "list" : "table";
+    } catch {
+      return "table";
+    }
+  });
 
   const inviteUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -221,6 +228,10 @@ export default function BlackjackTablePage() {
   }, [safeTableId, tick]);
 
   const now = Date.now();
+  const isMobile = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia?.("(max-width: 640px)")?.matches ?? false;
+  }, []);
   const bettingLeft = Math.max(0, Math.ceil(((state?.bettingEndsAt ?? 0) - now) / 1000));
   const turnLeft = Math.max(0, Math.ceil(((state?.turnEndsAt ?? 0) - now) / 1000));
   const dealerLeft = Math.max(0, Math.ceil(((state?.dealerWindowEndsAt ?? 0) - now) / 1000));
@@ -244,6 +255,72 @@ export default function BlackjackTablePage() {
   }, [chatMessages, chatLastReadAt, chatOpen]);
 
   const isSpectator = !!user && !!state && Array.isArray(state.spectators) && state.spectators.includes(user.id);
+
+  const TableSeat = ({
+    seatIndex,
+    p,
+    className,
+  }: {
+    seatIndex: number;
+    p: any | null;
+    className: string;
+  }) => {
+    if (!p) {
+      return (
+        <div className={className}>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/50">
+            Seat {seatIndex + 1}
+            <div className="mt-1 text-[11px] text-white/40">empty</div>
+          </div>
+        </div>
+      );
+    }
+    const hv = handValue(p.cards, p.bonusPoints);
+    const isTurn = state?.phase === "player_turns" && myTurnSeat === seatIndex;
+    const activeHand = (p as any)?.hands?.[(p as any)?.activeHandIndex ?? 0] ?? null;
+    const effects = (activeHand?.effects ?? []) as any[];
+    return (
+      <div className={className}>
+        <div
+          className={`rounded-2xl border border-white/10 bg-white/5 p-3 ${isTurn ? "ring-2 ring-emerald-300/50" : ""}`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-semibold text-white">
+              {p.username} <span className="text-xs text-white/50">#{seatIndex + 1}</span>
+            </div>
+            <div className="text-xs text-white/60">
+              Bet: <span className="font-mono text-white/80">{p.bet.toFixed(2)}</span>
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {p.cards.map((c: number, idx: number) => (
+              <CardView key={idx} idx={c} />
+            ))}
+          </div>
+          <div className="mt-2 text-xs text-white/60">
+            Total: <span className="font-mono text-white/80">{hv.total}</span>
+            {hv.soft ? <span className="ml-2 text-white/45">(soft)</span> : null}
+            {p.bonusPoints ? <span className="ml-2 text-amber-200">(+{p.bonusPoints})</span> : null}
+            {p.busted ? <span className="ml-2 text-rose-200">BUST</span> : null}
+            {p.stood ? <span className="ml-2 text-white/45">STAND</span> : null}
+          </div>
+          {effects.length ? (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {effects.slice(-4).map((e: any) => (
+                <span
+                  key={String(e.id ?? `${e.at}-${e.powerupName}`)}
+                  className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70"
+                  title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
+                >
+                  {String(e.powerupName ?? "Powerup")}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
 
   // Discord mode: auto-join the call table when you land on it.
   useEffect(() => {
@@ -1533,6 +1610,39 @@ export default function BlackjackTablePage() {
 
           <div className="glass-soft glass-shine rounded-3xl p-5">
             <p className="text-sm font-medium text-white">Table</p>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="text-xs text-white/55">View</div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className={`rounded-2xl px-3 py-1.5 text-xs ${
+                    tableView === "table" ? "bg-white/10 text-white" : "text-white/60 hover:text-white/80"
+                  }`}
+                  onClick={() => {
+                    try {
+                      localStorage.setItem("lgc.bj.tableView", "table");
+                    } catch {}
+                    setTableView("table");
+                  }}
+                >
+                  Table
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-2xl px-3 py-1.5 text-xs ${
+                    tableView === "list" ? "bg-white/10 text-white" : "text-white/60 hover:text-white/80"
+                  }`}
+                  onClick={() => {
+                    try {
+                      localStorage.setItem("lgc.bj.tableView", "list");
+                    } catch {}
+                    setTableView("list");
+                  }}
+                >
+                  List
+                </button>
+              </div>
+            </div>
 
             <div className="mt-4">
               <p className="text-xs text-white/60">Dealer</p>
@@ -1563,63 +1673,59 @@ export default function BlackjackTablePage() {
 
             <div className="mt-6">
               <p className="text-xs text-white/60">Seats</p>
-              <div className="mt-2 grid grid-cols-1 gap-3">
-                {state.seats.map((p, i) => {
-                  if (!p) {
-                    return (
-                      <div key={i} className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/50">
-                        Seat {i + 1}: empty
-                      </div>
-                    );
-                  }
-                  const hv = handValue(p.cards, p.bonusPoints);
-                  const isTurn = state.phase === "player_turns" && myTurnSeat === i;
-                  const activeHand = (p as any)?.hands?.[(p as any)?.activeHandIndex ?? 0] ?? null;
-                  const effects = (activeHand?.effects ?? []) as any[];
-                  return (
-                    <div
-                      key={i}
-                      className={`rounded-2xl border border-white/10 bg-white/5 p-3 ${isTurn ? "ring-2 ring-emerald-300/50" : ""}`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm font-semibold text-white">
-                          {p.username} <span className="text-xs text-white/50">#{i + 1}</span>
-                        </div>
-                        <div className="text-xs text-white/60">
-                          Bet: <span className="font-mono text-white/80">{p.bet.toFixed(2)}</span>
-                        </div>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {p.cards.map((c, idx) => (
-                          <CardView key={idx} idx={c} />
-                        ))}
-                      </div>
-                      <div className="mt-2 text-xs text-white/60">
-                        Total: <span className="font-mono text-white/80">{hv.total}</span>
-                        {hv.soft ? <span className="ml-2 text-white/45">(soft)</span> : null}
-                        {p.bonusPoints ? (
-                          <span className="ml-2 text-amber-200">(+{p.bonusPoints})</span>
-                        ) : null}
-                        {p.busted ? <span className="ml-2 text-rose-200">BUST</span> : null}
-                        {p.stood ? <span className="ml-2 text-white/45">STAND</span> : null}
-                      </div>
-                      {effects.length ? (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {effects.slice(-4).map((e: any) => (
-                            <span
-                              key={String(e.id ?? `${e.at}-${e.powerupName}`)}
-                              className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70"
-                              title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
-                            >
-                              {String(e.powerupName ?? "Powerup")}
-                            </span>
+              {tableView === "list" || isMobile ? (
+                <div className="mt-2 grid grid-cols-1 gap-3">
+                  {state.seats.map((p, i) => (
+                    <TableSeat key={i} seatIndex={i} p={p as any} className="" />
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3">
+                  <div className="relative mx-auto w-full max-w-[640px]">
+                    <div className="mx-auto h-[420px] w-full rounded-[48px] border border-white/10 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-black/20 shadow-[0_40px_120px_rgba(0,0,0,.45)]" />
+                    <div className="pointer-events-none absolute inset-0 rounded-[48px] ring-1 ring-white/10" />
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <div className="h-[320px] w-[520px] rounded-[999px] border border-white/10 bg-gradient-to-b from-emerald-500/12 to-black/20" />
+                    </div>
+
+                    {/* Dealer (top center) */}
+                    <div className="absolute left-1/2 top-3 w-[260px] -translate-x-1/2">
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <div className="text-xs font-semibold text-white/80">Dealer</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {state.dealer.cards.map((c, i) => (
+                            <CardView key={i} idx={c} hidden={c < 0} />
                           ))}
                         </div>
-                      ) : null}
+                        <div className="mt-2 text-xs text-white/60">
+                          Visible total: <span className="font-mono text-white/80">{dealerTotal}</span>
+                        </div>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+
+                    {/* Seats arranged around */}
+                    {(() => {
+                      const pos = [
+                        "left-1/2 -translate-x-1/2 bottom-2 w-[260px]", // 1 bottom center
+                        "right-8 bottom-14 w-[240px]", // 2 bottom right
+                        "right-2 top-44 w-[240px]", // 3 mid right
+                        "right-10 top-16 w-[240px]", // 4 top right
+                        "left-1/2 -translate-x-1/2 top-24 w-[240px]", // 5 upper mid
+                        "left-10 top-16 w-[240px]", // 6 top left
+                        "left-2 top-44 w-[240px]", // 7 mid left
+                        "left-8 bottom-14 w-[240px]", // 8 bottom left
+                        "left-1/2 -translate-x-1/2 bottom-40 w-[240px]", // 9 mid bottom
+                        "left-1/2 -translate-x-1/2 top-60 w-[240px]", // 10 center
+                      ];
+                      return state.seats.map((p, i) => (
+                        <div key={i} className={`absolute ${pos[i] ?? "left-4 top-4 w-[240px]"}`}>
+                          <TableSeat seatIndex={i} p={p as any} className="" />
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
               <div className="mt-3 text-xs text-white/55">
                 Spectators: <span className="font-mono">{state.spectators.length}</span>
               </div>
