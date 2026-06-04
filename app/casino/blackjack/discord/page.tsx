@@ -190,6 +190,27 @@ export default function DiscordBlackjackEntryPage() {
     return url.toString();
   }, [clientId, redirectUri, channelId]);
 
+  // iOS Discord sometimes fails to launch Activities with `frame_id`. When that happens,
+  // automatically fall back to OAuth so users aren't stuck on the "missing frame_id" screen.
+  useEffect(() => {
+    if (hasFrameId) return;
+    if (oauthCodeFromQuery) return;
+    if (!oauthAuthorizeUrl) return;
+    // We need a channel id to know which table to join after OAuth.
+    if (!channelId) return;
+    try {
+      const key = "lgc.discord.oauthAutoRedirected";
+      if (sessionStorage.getItem(key) === "1") return;
+      sessionStorage.setItem(key, "1");
+      const t = window.setTimeout(() => {
+        window.location.href = oauthAuthorizeUrl;
+      }, 700);
+      return () => window.clearTimeout(t);
+    } catch {
+      // ignore
+    }
+  }, [hasFrameId, oauthCodeFromQuery, oauthAuthorizeUrl, channelId]);
+
   return (
     <div
       style={{
