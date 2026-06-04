@@ -8,7 +8,7 @@ export default function Home({
 }) {
   // If Discord launches the Activity at the site root (recommended), it will append
   // Embedded App query params like `frame_id`. Detect that and forward into the
-  // Discord blackjack entry route while preserving query params.
+  // casino experience while preserving query params.
   const hasDiscordParams =
     !!searchParams?.frame_id ||
     !!searchParams?.instance_id ||
@@ -21,7 +21,7 @@ export default function Home({
       if (Array.isArray(v)) v.forEach((vv) => vv != null && sp.append(k, String(vv)));
       else if (v != null) sp.set(k, String(v));
     }
-    redirect(`/casino/blackjack/discord${sp.toString() ? `?${sp.toString()}` : ""}`);
+    redirect(`/casino${sp.toString() ? `?${sp.toString()}` : ""}`);
   }
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-12">
