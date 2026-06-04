@@ -1772,32 +1772,34 @@ export default function BlackjackTablePage() {
               </div>
             </div>
 
-            <div className="mt-4">
-              <p className="text-xs text-white/60">Dealer</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {state.dealer.cards.map((c, i) => (
-                  <CardView key={i} idx={c} hidden={c < 0} />
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-white/55">
-                Visible total: <span className="font-mono text-white/80">{dealerTotal}</span>
-              </p>
-              {(state as any)?.dealer?.effects?.length ? (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {((state as any).dealer.effects as any[])
-                    .slice(-4)
-                    .map((e: any) => (
-                      <span
-                        key={String(e.id ?? `${e.at}-${e.powerupName}`)}
-                        className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/70"
-                        title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
-                      >
-                        {String(e.powerupName ?? "Powerup")}
-                      </span>
-                    ))}
+            {tableView === "list" ? (
+              <div className="mt-4">
+                <p className="text-xs text-white/60">Dealer</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {state.dealer.cards.map((c, i) => (
+                    <CardView key={i} idx={c} hidden={c < 0} />
+                  ))}
                 </div>
-              ) : null}
-            </div>
+                <p className="mt-2 text-xs text-white/55">
+                  Visible total: <span className="font-mono text-white/80">{dealerTotal}</span>
+                </p>
+                {(state as any)?.dealer?.effects?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {((state as any).dealer.effects as any[])
+                      .slice(-4)
+                      .map((e: any) => (
+                        <span
+                          key={String(e.id ?? `${e.at}-${e.powerupName}`)}
+                          className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/70"
+                          title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
+                        >
+                          {String(e.powerupName ?? "Powerup")}
+                        </span>
+                      ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="mt-6">
               <p className="text-xs text-white/60">Seats</p>
@@ -1819,22 +1821,7 @@ export default function BlackjackTablePage() {
                       <div className="h-[480px] w-[320px] rounded-[999px] border border-white/10 bg-gradient-to-b from-emerald-500/12 to-black/20" />
                     </div>
 
-                    {/* Dealer (top center) */}
-                    <div className="absolute left-1/2 top-4 w-[320px] -translate-x-1/2">
-                      <div className="mb-2 flex items-center gap-2 text-[11px] text-white/80">
-                        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 font-semibold text-white/85">
-                          Dealer
-                        </span>
-                        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-white/70">
-                          Visible <span className="font-mono text-white/85">{dealerTotal}</span>
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {state.dealer.cards.map((c, i) => (
-                          <CardView key={i} idx={c} hidden={c < 0} />
-                        ))}
-                      </div>
-                    </div>
+                    {/* Dealer hand hidden in table view */}
 
                     {/* Seats on the sides (no center seats) */}
                     {(() => {
