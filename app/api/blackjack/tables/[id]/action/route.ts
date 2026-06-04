@@ -22,6 +22,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         type?: "hit" | "stand" | "double_down" | "split" | "special" | "vote_skip" | "extend_timer";
         specialId?: string;
         targetUserId?: number | null;
+        cardIndex?: number | null;
         betNonce?: number | null;
       }
     | null;
@@ -42,7 +43,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   } else if (body?.type === "extend_timer") {
     res = applyExtendTurnTimer(base, user.id, now);
   } else if (body?.type === "special") {
-    res = applySpecial(base, user.id, { id: body.specialId as any, targetUserId: body.targetUserId ?? null }, now);
+    res = applySpecial(
+      base,
+      user.id,
+      { id: body.specialId as any, targetUserId: body.targetUserId ?? null, cardIndex: body.cardIndex ?? null },
+      now,
+    );
   } else {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }

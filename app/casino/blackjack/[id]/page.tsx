@@ -136,6 +136,10 @@ export default function BlackjackTablePage() {
     specialId: null,
     target: null,
   });
+  const [removeCardPopup, setRemoveCardPopup] = useState<{ open: boolean; specialId: string | null }>({
+    open: false,
+    specialId: null,
+  });
   const [betPending, setBetPending] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
@@ -265,6 +269,8 @@ export default function BlackjackTablePage() {
       FREE_SPLIT: "SPLIT",
       SWAP_ONE: "SWAP",
       DOUBLE_PAYOUT: "x2",
+      REMOVE_RANDOM_SELF: "DEL🎲",
+      REMOVE_CARD_SELF: "DEL🎯",
       ADD2_DEALER: "D+2",
       DEALER_SECOND_CHANCE: "2nd",
       ADD2_TARGET: "+2",
@@ -1162,6 +1168,53 @@ export default function BlackjackTablePage() {
           </div>
         </div>
       ) : null}
+
+      {removeCardPopup.open && state ? (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 p-4">
+          <div className="glass glass-shine w-full max-w-[520px] rounded-3xl border border-white/10 p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">Remove a card</div>
+                <div className="mt-1 text-xs text-white/60">
+                  Select a card from your current hand to remove.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
+                onClick={() => setRemoveCardPopup({ open: false, specialId: null })}
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {(((mySeat as any)?.hands?.[(mySeat as any)?.activeHandIndex ?? 0]?.cards ?? mySeat?.cards) as number[] | undefined)?.map(
+                (c, idx) => (
+                  <button
+                    key={`${c}-${idx}`}
+                    type="button"
+                    className="rounded-2xl border border-white/10 bg-white/5 p-2 hover:bg-white/10"
+                    onClick={() => {
+                      if (!removeCardPopup.specialId) return;
+                      void post("action", {
+                        type: "special",
+                        specialId: removeCardPopup.specialId,
+                        targetUserId: null,
+                        cardIndex: idx,
+                      });
+                      setRemoveCardPopup({ open: false, specialId: null });
+                    }}
+                    title="Remove this card"
+                  >
+                    <CardView idx={c} />
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <TurnQuickPanel
         show={!!state && !!mySeat}
         isMyTurn={!!isMyTurn}
@@ -1548,6 +1601,10 @@ export default function BlackjackTablePage() {
                                       className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
                                       disabled={!enabled}
                                       onClick={() => {
+                                      if (k === "REMOVE_CARD_SELF") {
+                                        setRemoveCardPopup({ open: true, specialId: k });
+                                        return;
+                                      }
                                         if (isAnytimeCard) {
                                           // Force explicit target choice via popup.
                                           setTargetPopup({ open: true, specialId: k, target: null });
@@ -1557,6 +1614,7 @@ export default function BlackjackTablePage() {
                                           type: "special",
                                           specialId: k,
                                           targetUserId: null,
+                                        cardIndex: null,
                                         });
                                       }}
                                       title={k}

@@ -20,6 +20,8 @@ export type SpecialId =
   | "FREE_SPLIT"
   | "SWAP_ONE"
   | "DOUBLE_PAYOUT"
+  | "REMOVE_CARD_SELF"
+  | "REMOVE_RANDOM_SELF"
   | "ADD2_DEALER"
   | "DEALER_SECOND_CHANCE"
   | "ADD2_TARGET"
@@ -117,6 +119,24 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
     desc: "If you win this round, double your payout multiplier. Only usable during betting phase.",
     rarity: "common",
     timing: "betting",
+    target: "self",
+  },
+  REMOVE_RANDOM_SELF: {
+    id: "REMOVE_RANDOM_SELF",
+    name: "Remove Random",
+    shortName: "DEL🎲",
+    desc: "Remove a random card from your current hand. Rare. Only usable on your turn.",
+    rarity: "rare",
+    timing: "own_turn",
+    target: "self",
+  },
+  REMOVE_CARD_SELF: {
+    id: "REMOVE_CARD_SELF",
+    name: "Remove Card",
+    shortName: "DEL🎯",
+    desc: "Choose and remove a specific card from your current hand. Legendary. Only usable on your turn.",
+    rarity: "legendary",
+    timing: "own_turn",
     target: "self",
   },
   ADD2_DEALER: {
@@ -286,6 +306,7 @@ export type Inventory = {
 function classifySpecial(id: SpecialId): InventoryCategoryId {
   if (SPECIALS[id]?.rarity === "mythic") return "mythic";
   if (id.startsWith("MAGIC_") || id.includes("_MAGIC")) return "magic";
+  if (id.startsWith("REMOVE_")) return "utility";
   if (id.startsWith("SUB")) return "saves";
   if (id.includes("DEALER")) return "dealer";
   if (
@@ -1389,7 +1410,7 @@ export function applyExtendTurnTimer(
 export function applySpecial(
   state: TableState,
   userId: number,
-  input: { id: SpecialId; targetUserId?: number | null },
+  input: { id: SpecialId; targetUserId?: number | null; cardIndex?: number | null },
   now: number,
 ): { state: TableState; error?: string } {
   const s = tickTable(state, now);
@@ -1487,6 +1508,23 @@ export function applySpecial(
   } else if (input.id === "DOUBLE_PAYOUT") {
     const h = actor.hands[actor.activeHandIndex]!;
     h.doublePayoutArmed = true;
+  } else if (input.id === "REMOVE_RANDOM_SELF") {
+    const h = actor.hands[actor.activeHandIndex]!;
+    if (!Array.isArray(h.cards) || h.cards.length === 0) return { state: s, error: "No cards to remove." };
+    const idx = Math.floor(lcg(Math.floor(now / 1000) ^ (seatIdx * 1337) ^ (s.round * 4242))() * h.cards.length);
+    h.cards.splice(Math.max(0, Math.min(h.cards.length - 1, idx)), 1);
+    const t = handTotal(h.cards, h.bonusPoints).total;
+    if (t <= 21) h.busted = false;
+  } else if (input.id === "REMOVE_CARD_SELF") {
+    const h = actor.hands[actor.activeHandIndex]!;
+    if (!Array.isArray(h.cards) || h.cards.length === 0) return { state: s, error: "No cards to remove." };
+    const idx = Number(input.cardIndex);
+    if (!Number.isFinite(idx) || idx < 0 || idx >= h.cards.length) {
+      return { state: s, error: "Choose a card to remove." };
+    }
+    h.cards.splice(idx, 1);
+    const t = handTotal(h.cards, h.bonusPoints).total;
+    if (t <= 21) h.busted = false;
   } else if (input.id === "ADD2_DEALER") {
     s.dealer.bonusPoints += 2;
   } else if (input.id === "DEALER_SECOND_CHANCE") {
