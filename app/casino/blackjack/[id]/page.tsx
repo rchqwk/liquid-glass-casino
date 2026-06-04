@@ -236,7 +236,7 @@ export default function BlackjackTablePage() {
     return window.matchMedia?.("(max-width: 640px)")?.matches ?? false;
   }, []);
 
-  const bettingControlsRef = useRef<HTMLDivElement | null>(null);
+  const roundControlsRef = useRef<HTMLDivElement | null>(null);
   const tableViewRef = useRef<HTMLDivElement | null>(null);
   const dealerPowerupsRef = useRef<HTMLDivElement | null>(null);
   const bettingLeft = Math.max(0, Math.ceil(((state?.bettingEndsAt ?? 0) - now) / 1000));
@@ -1246,7 +1246,7 @@ export default function BlackjackTablePage() {
             el.scrollIntoView({ behavior: "smooth", block: "start" });
           };
           if (phase === "betting") {
-            scroll(bettingControlsRef.current);
+            scroll(roundControlsRef.current);
             return;
           }
           if (phase === "dealer_window") {
@@ -1423,7 +1423,7 @@ export default function BlackjackTablePage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
-          <div className="glass-soft glass-shine rounded-3xl p-5">
+          <div ref={roundControlsRef} className="glass-soft glass-shine rounded-3xl p-5">
             <p className="text-sm font-medium text-white">Round controls</p>
             <div className="mt-3 text-xs text-white/60">
             {state.phase === "betting" ? (
@@ -1456,7 +1456,7 @@ export default function BlackjackTablePage() {
                   disabled={state.phase !== "betting"}
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
                 />
-                <div ref={bettingControlsRef} className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
                     disabled={state.phase !== "betting" || betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
