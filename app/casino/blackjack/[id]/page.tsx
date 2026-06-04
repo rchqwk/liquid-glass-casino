@@ -454,6 +454,24 @@ export default function BlackjackTablePage() {
   }, [chatMessages, chatLastReadAt, chatOpen]);
 
   const isSpectator = !!user && !!state && Array.isArray(state.spectators) && state.spectators.includes(user.id);
+  const gameActive = !!state && (!!mySeat || isSpectator);
+
+  // Provide blackjack context to the global top bar.
+  useEffect(() => {
+    try {
+      window.dispatchEvent(
+        new CustomEvent("lgc:blackjackCtx", {
+          detail: {
+            active: gameActive,
+            tableId: safeTableId,
+            inviteUrl,
+          },
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  }, [gameActive, safeTableId, inviteUrl]);
 
   const powerupLabel = (id: string) => {
     const m: Record<string, string> = {
@@ -842,6 +860,29 @@ export default function BlackjackTablePage() {
     if (data?.state) setState(data.state);
     return { ok: !!res.ok, data };
   };
+
+  // Allow the global top bar to trigger in-game actions.
+  useEffect(() => {
+    const onInvite = () => setInviteOpen(true);
+    const onLeave = () => {
+      void post("leave");
+    };
+    try {
+      window.addEventListener("lgc:blackjackInvite", onInvite as any);
+      window.addEventListener("lgc:blackjackLeave", onLeave as any);
+    } catch {
+      // ignore
+    }
+    return () => {
+      try {
+        window.removeEventListener("lgc:blackjackInvite", onInvite as any);
+        window.removeEventListener("lgc:blackjackLeave", onLeave as any);
+      } catch {
+        // ignore
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeTableId]);
 
   const placeBetWithWallet = async () => {
     if (state?.phase !== "betting") return;

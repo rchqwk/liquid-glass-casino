@@ -12,6 +12,7 @@ export function Topbar() {
   const [barOpen, setBarOpen] = useState(false);
   const autoHideTimerRef = useRef<number | null>(null);
   const [prestigeBusy, setPrestigeBusy] = useState(false);
+  const [bjCtx, setBjCtx] = useState<{ active: boolean; tableId?: string; inviteUrl?: string } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [broadcast, setBroadcast] = useState<string | null>(null);
   const [displayBalance, setDisplayBalance] = useState(balance);
@@ -58,6 +59,31 @@ export function Topbar() {
       autoHideTimerRef.current = null;
     };
   }, [barOpen]);
+
+  // Blackjack page can provide context so top bar can show in-game actions.
+  useEffect(() => {
+    const handler = (e: any) => {
+      const d = e?.detail ?? null;
+      if (!d) return;
+      setBjCtx({
+        active: !!d.active,
+        tableId: d.tableId ? String(d.tableId) : undefined,
+        inviteUrl: d.inviteUrl ? String(d.inviteUrl) : undefined,
+      });
+    };
+    try {
+      window.addEventListener("lgc:blackjackCtx", handler as any);
+    } catch {
+      // ignore
+    }
+    return () => {
+      try {
+        window.removeEventListener("lgc:blackjackCtx", handler as any);
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
 
   // Expose topbar open/closed state globally so pages can synchronize secondary headers.
   useEffect(() => {
@@ -224,6 +250,42 @@ export function Topbar() {
             </div>
 
             <div className="flex items-center gap-2">
+              {bjCtx?.active ? (
+                <>
+                  <Link
+                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
+                    href="/casino/blackjack"
+                  >
+                    Back to lobby
+                  </Link>
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
+                    onClick={() => {
+                      try {
+                        window.dispatchEvent(new CustomEvent("lgc:blackjackInvite"));
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                  >
+                    Invite players
+                  </button>
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
+                    onClick={() => {
+                      try {
+                        window.dispatchEvent(new CustomEvent("lgc:blackjackLeave"));
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                  >
+                    Leave
+                  </button>
+                </>
+              ) : null}
               <Link
                 className="hidden rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white sm:inline"
                 href="/casino/leaderboard"
