@@ -20,6 +20,22 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
 
   const blocked = !isAllowed && !loading && !user;
 
+  // iOS Discord sometimes opens the app without `frame_id`, which prevents the Embedded App SDK.
+  // If that happens, automatically fall back to our OAuth-based Discord entry page.
+  useEffect(() => {
+    if (!discordMode) return;
+    if (!discordError) return;
+    if (!discordError.includes("frame_id")) return;
+    try {
+      const key = "lgc.discord.fallback.tried";
+      if (sessionStorage.getItem(key) === "1") return;
+      sessionStorage.setItem(key, "1");
+      window.setTimeout(() => retryDiscord(), 50);
+    } catch {
+      // ignore
+    }
+  }, [discordMode, discordError, retryDiscord]);
+
   useEffect(() => {
     if (discordMode) return;
     const clientId =
