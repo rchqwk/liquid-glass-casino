@@ -75,6 +75,13 @@ export default function DiscordBlackjackEntryPage() {
           });
           const loginJson = (await loginRes.json().catch(() => ({}))) as any;
           if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
+          if (loginJson?.session_token) {
+            try {
+              localStorage.setItem("lgc.session", String(loginJson.session_token));
+            } catch {
+              // ignore
+            }
+          }
 
           setStage("ensuring_table");
           const ensureRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(channelId)}/ensure`, { method: "POST" });
@@ -96,7 +103,7 @@ export default function DiscordBlackjackEntryPage() {
         // If we're on iOS, prefer the OAuth flow (Discord iOS can hang on the embedded handshake).
         if (isIOS && !oauthCodeFromQuery) {
           if (!channelId) throw new Error("Missing channel id (channel_id or state). Re-open from the voice call.");
-          // Let the iOS OAuth auto-redirect effect handle it; keep stage at init.
+          // Keep stage at init; user can tap the OAuth button below.
           return;
         }
 
@@ -132,6 +139,13 @@ export default function DiscordBlackjackEntryPage() {
         });
         const loginJson = (await loginRes.json().catch(() => ({}))) as any;
         if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
+        if (loginJson?.session_token) {
+          try {
+            localStorage.setItem("lgc.session", String(loginJson.session_token));
+          } catch {
+            // ignore
+          }
+        }
 
         const accessToken = String(loginJson?.access_token ?? "");
         if (accessToken) {
@@ -210,6 +224,7 @@ export default function DiscordBlackjackEntryPage() {
   // iOS Discord sometimes fails to launch Activities with `frame_id`. When that happens,
   // automatically fall back to OAuth so users aren't stuck on the "missing frame_id" screen.
   useEffect(() => {
+    if (isIOS) return; // on iOS, require user interaction (auto-redirect can loop)
     if (hasFrameId) return;
     if (oauthCodeFromQuery) return;
     if (!oauthAuthorizeUrl) return;
@@ -227,26 +242,6 @@ export default function DiscordBlackjackEntryPage() {
       // ignore
     }
   }, [hasFrameId, oauthCodeFromQuery, oauthAuthorizeUrl, channelId]);
-
-  // iOS Discord often hangs on the Embedded App SDK handshake even when `frame_id` exists.
-  // Prefer OAuth on iOS whenever possible.
-  useEffect(() => {
-    if (!isIOS) return;
-    if (oauthCodeFromQuery) return;
-    if (!oauthAuthorizeUrl) return;
-    if (!channelId) return;
-    try {
-      const key = "lgc.discord.iosOauthAutoRedirected";
-      if (sessionStorage.getItem(key) === "1") return;
-      sessionStorage.setItem(key, "1");
-      const t = window.setTimeout(() => {
-        window.location.href = oauthAuthorizeUrl;
-      }, 700);
-      return () => window.clearTimeout(t);
-    } catch {
-      // ignore
-    }
-  }, [isIOS, oauthCodeFromQuery, oauthAuthorizeUrl, channelId]);
 
   return (
     <div
@@ -332,11 +327,33 @@ export default function DiscordBlackjackEntryPage() {
                 fontSize: 14,
               }}
             >
-              If this stays stuck, click{" "}
-              <a className="lgc-link" href={oauthAuthorizeUrl}>
-                Authorize with Discord
-              </a>{" "}
-              to continue.
+              {isIOS ? (
+                <>
+                  iOS: tap{" "}
+                  <button
+                    type="button"
+                    className="lgc-link"
+                    onClick={() => {
+                      try {
+                        window.location.href = oauthAuthorizeUrl;
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                  >
+                    Authorize with Discord
+                  </button>{" "}
+                  to continue (auto-redirect can loop on iOS).
+                </>
+              ) : (
+                <>
+                  If this stays stuck, click{" "}
+                  <a className="lgc-link" href={oauthAuthorizeUrl}>
+                    Authorize with Discord
+                  </a>{" "}
+                  to continue.
+                </>
+              )}
             </div>
           ) : null}
 

@@ -24,10 +24,20 @@ function getDeviceId() {
   }
 }
 
+function getSessionTokenClient() {
+  try {
+    return localStorage.getItem("lgc.session") || "";
+  } catch {
+    return "";
+  }
+}
+
 async function fetchWithDevice(input: RequestInfo, init?: RequestInit) {
   const headers = new Headers(init?.headers ?? {});
   const id = getDeviceId();
   if (id) headers.set("x-lgc-device", id);
+  const sess = getSessionTokenClient();
+  if (sess && !headers.has("x-lgc-session")) headers.set("x-lgc-session", sess);
   return fetch(input, { ...init, headers });
 }
 
@@ -79,6 +89,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
+        // Patch global fetch to always include the session token header if present.
+        // This makes the whole app work in environments where cookies are blocked (Discord iOS).
+        try {
+          const w = window as any;
+          if (!w.__lgcFetchWrapped) {
+            w.__lgcFetchWrapped = true;
+            const orig = window.fetch.bind(window);
+            window.fetch = (input: any, init?: any) => {
+              try {
+                const sess = getSessionTokenClient();
+                if (sess) {
+                  const headers = new Headers(init?.headers ?? {});
+                  if (!headers.has("x-lgc-session")) headers.set("x-lgc-session", sess);
+                  init = { ...(init ?? {}), headers };
+                }
+              } catch {
+                // ignore
+              }
+              return orig(input, init);
+            };
+          }
+        } catch {
+          // ignore
+        }
+
         // Detect Discord embedded environment (frame_id etc). If present, persist for later navigation.
         let isDiscord = false;
         let search = "";
@@ -182,6 +217,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 });
                 const loginJson = (await loginRes.json().catch(() => ({}))) as any;
                 if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
+                if (loginJson?.session_token) {
+                  try {
+                    localStorage.setItem("lgc.session", String(loginJson.session_token));
+                  } catch {
+                    // ignore
+                  }
+                }
                 if (loginJson?.user) setUser(loginJson.user as UserWithRole);
               } catch (e: any) {
                 const msg = String(e?.message ?? "Discord sign-in failed.");
@@ -238,6 +280,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           await fetchWithDevice("/api/auth", { method: "DELETE" });
         } finally {
+          try {
+            localStorage.removeItem("lgc.session");
+          } catch {
+            // ignore
+          }
           setUser(null);
         }
       },

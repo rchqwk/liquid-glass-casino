@@ -1,9 +1,20 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getUserBySessionToken } from "./db";
 
 const COOKIE_NAME = "lgc_session";
 
 export async function getSessionToken() {
+  // Support header-based session tokens for environments where third-party cookies are blocked
+  // (notably Discord iOS in an embedded webview).
+  try {
+    const h = await headers();
+    const token = h.get("x-lgc-session") || "";
+    if (token) return token;
+    const auth = h.get("authorization") || "";
+    if (auth.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim() || null;
+  } catch {
+    // ignore
+  }
   const c = await cookies();
   return c.get(COOKIE_NAME)?.value ?? null;
 }

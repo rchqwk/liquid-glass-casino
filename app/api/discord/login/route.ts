@@ -80,6 +80,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     access_token: accessToken,
+    session_token: sessionToken,
     user: linked,
     discord: { id: me.id, username: me.username, global_name: me.global_name ?? null },
   });
