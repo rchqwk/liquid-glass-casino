@@ -159,7 +159,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
     id: "ADD1_MAGIC",
     name: "+1 Magic",
     shortName: "+1★",
-    desc: "Add +1 to anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
+    desc: "Summon 1 random card into a selected hand (including dealer). Rare magic. Usable any time before the end of the round.",
     rarity: "rare",
     timing: "anytime",
     target: "any",
@@ -168,7 +168,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
     id: "ADD2_MAGIC",
     name: "+2 Magic",
     shortName: "+2★",
-    desc: "Add +2 to anybody’s hand (including dealer). Rare magic. Usable any time before the end of the round.",
+    desc: "Summon 2 random cards into a selected hand (including dealer). Rare magic. Usable any time before the end of the round.",
     rarity: "rare",
     timing: "anytime",
     target: "any",
@@ -1517,14 +1517,18 @@ export function applySpecial(
       if (t > 21) th.busted = true;
     }
   } else if (input.id === "ADD1_MAGIC" || input.id === "ADD2_MAGIC") {
-    const delta = input.id === "ADD1_MAGIC" ? 1 : 2;
+    // Magic cards should add ACTUAL cards (not just bonus points) so they can enable
+    // 5-card tricks and rare patterns like 777.
+    const count = input.id === "ADD1_MAGIC" ? 1 : 2;
+    const rand = lcg(Math.floor(now / 1000) ^ (seatIdx * 1337) ^ (s.round * 4242));
+    const pull = () => Math.floor(rand() * 52); // normal card index 0..51
     if (!targetSeat) {
-      s.dealer.bonusPoints += delta;
+      for (let i = 0; i < count; i += 1) s.dealer.cards.push(pull());
     } else {
       targetSeat.inventory = normalizeInventory(targetSeat.inventory);
       normalizeHandsForSeat(targetSeat);
       const th = targetSeat.hands[targetSeat.activeHandIndex]!;
-      th.bonusPoints += delta;
+      for (let i = 0; i < count; i += 1) th.cards.push(pull());
       const t = handTotal(th.cards, th.bonusPoints).total;
       if (t > 21) th.busted = true;
     }
