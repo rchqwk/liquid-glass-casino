@@ -88,17 +88,54 @@ export default function DiscordBlackjackEntryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const progress = useMemo(() => {
+    if (stage === "init") return 8;
+    if (stage === "authorizing") return 30;
+    if (stage === "logging_in") return 55;
+    if (stage === "ensuring_table") return 78;
+    if (stage === "redirecting") return 95;
+    if (stage === "error") return 100;
+    return 10;
+  }, [stage]);
+
+  const stageLabel = useMemo(() => {
+    if (stage === "init") return "Connecting to Discord…";
+    if (stage === "authorizing") return "Authorizing…";
+    if (stage === "logging_in") return "Signing you in…";
+    if (stage === "ensuring_table") return "Creating / joining table…";
+    if (stage === "redirecting") return "Loading table…";
+    return "Error";
+  }, [stage]);
+
   return (
-    <div className="glass glass-shine rounded-3xl border border-white/10 p-6 text-white/80">
-      <div className="text-base font-semibold text-white">Launching Discord Blackjack…</div>
-      <div className="mt-2 text-sm text-white/60">
-        Stage: <span className="font-mono text-white/80">{stage}</span>
-      </div>
-      {err ? <div className="mt-4 text-sm text-rose-200">{err}</div> : null}
-      <div className="mt-4 text-[11px] text-white/50">
-        Tip: this page should be launched as a Discord Activity from within a voice call.
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="glass glass-shine w-full max-w-[620px] rounded-3xl border border-white/10 p-6 text-white">
+        <div className="text-base font-semibold text-white">Launching Discord Blackjack…</div>
+        <div className="mt-2 text-sm text-white/70">{stageLabel}</div>
+
+        <div className="mt-4">
+          <div className="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-fuchsia-400 transition-[width] duration-500"
+              style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+            />
+          </div>
+          <div className="mt-2 text-[11px] text-white/60">
+            {progress}% • <span className="font-mono">{stage}</span>
+          </div>
+        </div>
+
+        {err ? (
+          <div className="mt-4 rounded-2xl border border-rose-300/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+            {err}
+          </div>
+        ) : null}
+
+        <div className="mt-4 text-[11px] text-white/50">
+          Tip: launch this as a Discord Activity from within a voice call. (For local testing you can pass{" "}
+          <span className="font-mono text-white/70">?channel_id=...</span>.)
+        </div>
       </div>
     </div>
   );
 }
-
