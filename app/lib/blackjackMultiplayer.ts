@@ -1690,9 +1690,19 @@ function settleRound(state: TableState, now: number): TableState {
       } else if (dBJ && pBJ) {
         mult = 1;
         outcome = "Push (both blackjack)";
+      } else if (
+        !isDealerBJ &&
+        pTotal === 21 &&
+        h.cards.length === 3 &&
+        h.cards.every((ci) => cardFromIndex(ci).rank === "7")
+      ) {
+        // Special win: Triple 7 pays 7:1 (profit), i.e. 8x return including stake.
+        mult = 8;
+        outcome = "Triple 7 (7:1)";
       } else if (pBJ) {
-        mult = 2.5;
-        outcome = "Blackjack (3:2)";
+        // Blackjack pays 2:1 (profit), i.e. 3x return including stake.
+        mult = 3;
+        outcome = "Blackjack (2:1)";
       } else if (dTotal > 21) {
         mult = 2;
         outcome = `Dealer bust (${dTotal})`;
