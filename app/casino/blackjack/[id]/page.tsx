@@ -385,6 +385,34 @@ export default function BlackjackTablePage() {
   const roundControlsRef = useRef<HTMLDivElement | null>(null);
   const tableViewRef = useRef<HTMLDivElement | null>(null);
   const dealerPowerupsRef = useRef<HTMLDivElement | null>(null);
+  const [topbarOpen, setTopbarOpen] = useState<boolean>(() => {
+    try {
+      return (document?.documentElement?.dataset?.lgcTopbarOpen ?? "0") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      const open = !!e?.detail?.open;
+      setTopbarOpen(open);
+    };
+    try {
+      window.addEventListener("lgc:topbar", handler as any);
+      // sync on mount
+      setTopbarOpen((document?.documentElement?.dataset?.lgcTopbarOpen ?? "0") === "1");
+    } catch {
+      // ignore
+    }
+    return () => {
+      try {
+        window.removeEventListener("lgc:topbar", handler as any);
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
 
   const nameClass = (p: Seat) => {
     const effective = p.userId === user?.id ? (((user as any)?.name_color ?? null) as any) : p.nameColor;
@@ -1453,39 +1481,44 @@ export default function BlackjackTablePage() {
         myCards={mySeat?.cards ?? []}
         myBonusPoints={Number((myHands as any)?.[myHandIndex]?.bonusPoints ?? (mySeat as any)?.bonusPoints ?? 0)}
       />
-      <div className="glass glass-shine rounded-3xl p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold text-white">{state?.name ?? "Blackjack Table"}</h2>
-            <p className="mt-1 text-sm text-white/60">
-              Table: <span className="font-mono">{safeTableId ?? "-"}</span> • Round{" "}
-              <span className="font-mono">{state?.round ?? "-"}</span> • Phase{" "}
-              <span className="font-mono">{state?.phase ?? "-"}</span>
-            </p>
+      {state && (mySeat || isSpectator) && topbarOpen ? (
+        <div className="glass glass-shine rounded-3xl p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-white">{state?.name ?? "Blackjack Table"}</h2>
+              <p className="mt-1 text-sm text-white/60">
+                Table: <span className="font-mono">{safeTableId ?? "-"}</span> • Round{" "}
+                <span className="font-mono">{state?.round ?? "-"}</span> • Phase{" "}
+                <span className="font-mono">{state?.phase ?? "-"}</span>
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/casino/blackjack"
+                className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
+              >
+                Back to lobby
+              </Link>
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
+                onClick={() => setInviteOpen(true)}
+                title="Share a link to join this table"
+              >
+                Invite players
+              </button>
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
+                onClick={() => post("leave")}
+              >
+                Leave
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/casino/blackjack" className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10">
-              Back to lobby
-            </Link>
-            <button
-              type="button"
-              className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
-              onClick={() => setInviteOpen(true)}
-              title="Share a link to join this table"
-            >
-              Invite players
-            </button>
-            <button
-              type="button"
-              className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
-              onClick={() => post("leave")}
-            >
-              Leave
-            </button>
-          </div>
+          {err ? <div className="mt-3 text-sm text-rose-200">{err}</div> : null}
         </div>
-        {err ? <div className="mt-3 text-sm text-rose-200">{err}</div> : null}
-      </div>
+      ) : null}
 
       {/* Top-of-page turn actions (non-popup) */}
       {state && mySeat && isMyTurn ? (

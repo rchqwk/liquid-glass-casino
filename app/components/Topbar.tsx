@@ -59,6 +59,18 @@ export function Topbar() {
     };
   }, [barOpen]);
 
+  // Expose topbar open/closed state globally so pages can synchronize secondary headers.
+  useEffect(() => {
+    try {
+      if (typeof document === "undefined") return;
+      const v = barOpen ? "1" : "0";
+      document.documentElement.dataset.lgcTopbarOpen = v;
+      window.dispatchEvent(new CustomEvent("lgc:topbar", { detail: { open: barOpen } }));
+    } catch {
+      // ignore
+    }
+  }, [barOpen]);
+
   // Animate balance changes to count up/down smoothly.
   useEffect(() => {
     const target = Number(balance ?? 0);
