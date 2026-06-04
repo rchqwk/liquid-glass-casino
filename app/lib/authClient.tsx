@@ -3,7 +3,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 type User = { id: number; username: string };
-type UserWithRole = { id: number; username: string; role_level: number };
+type UserWithRole = {
+  id: number;
+  username: string;
+  role_level: number;
+  prestige_level?: number;
+  name_color?: string | null;
+};
 
 function getDeviceId() {
   try {
@@ -31,6 +37,7 @@ type AuthContextValue = {
   discordMode: boolean;
   discordError: string | null;
   retryDiscord: () => void;
+  refresh: () => Promise<void>;
   signIn: (
     username: string,
   ) => Promise<
@@ -49,6 +56,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [discordMode, setDiscordMode] = useState(false);
   const [discordError, setDiscordError] = useState<string | null>(null);
   const [discordAttempted, setDiscordAttempted] = useState(false);
+
+  const refresh = async () => {
+    try {
+      const res = await fetchWithDevice("/api/auth", { cache: "no-store" });
+      const data = (await res.json()) as { user: UserWithRole | null };
+      setUser(data.user ?? null);
+    } catch {
+      // ignore
+    }
+  };
 
   const retryDiscord = () => {
     try {
@@ -182,6 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       discordMode,
       discordError,
       retryDiscord,
+      refresh,
       signIn: async (username) => {
         try {
           const res = await fetchWithDevice("/api/auth", {

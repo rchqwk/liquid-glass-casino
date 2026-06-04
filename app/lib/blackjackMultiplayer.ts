@@ -485,6 +485,8 @@ function normalizeHandsForSeat(p: any) {
 export type PlayerSeat = {
   userId: number;
   username: string;
+  prestigeLevel?: number;
+  nameColor?: string | null;
   joinedAt: number;
   lastSeenAt: number;
   missedRounds: number;

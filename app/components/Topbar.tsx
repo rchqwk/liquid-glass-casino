@@ -7,10 +7,11 @@ import { useAuth } from "../lib/authClient";
 
 export function Topbar() {
   const { balance, deposit, reset, refill5000AvailableAt, refill100AvailableAt } = useWallet();
-  const { user, loading } = useAuth();
+  const { user, loading, refresh } = useAuth();
   const role = user?.role_level ?? 0;
   const [barOpen, setBarOpen] = useState(false);
   const autoHideTimerRef = useRef<number | null>(null);
+  const [prestigeBusy, setPrestigeBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [broadcast, setBroadcast] = useState<string | null>(null);
   const [displayBalance, setDisplayBalance] = useState(balance);
@@ -116,6 +117,8 @@ export function Topbar() {
   const refillCooldownMs = Math.max(0, refill5000AvailableAt - now);
   const refill100CooldownMs = Math.max(0, refill100AvailableAt - now);
   const canRefill = !loading && !!user;
+  const prestigeLevel = Number((user as any)?.prestige_level ?? 0);
+  const canClaimPrestige1 = !!user && Number(balance ?? 0) >= 1_000_000_000 && prestigeLevel < 1;
   const refillLabel = useMemo(() => {
     if (role >= 1) return "+5000";
     if (refillCooldownMs <= 0) return "+5000";
@@ -136,6 +139,41 @@ export function Topbar() {
 
   return (
     <>
+      {/* Prestige bubble (shows when eligible) */}
+      {!barOpen && canClaimPrestige1 ? (
+        <div className="fixed top-3 left-3 z-[75]">
+          <button
+            type="button"
+            disabled={prestigeBusy}
+            className="glass glass-shine rounded-3xl border border-yellow-300/25 bg-yellow-500/10 px-4 py-3 text-left text-xs text-yellow-100 shadow-[0_0_30px_rgba(250,204,21,.18)] hover:bg-yellow-500/15 disabled:opacity-40"
+            onClick={async () => {
+              if (prestigeBusy) return;
+              setPrestigeBusy(true);
+              setMsg(null);
+              try {
+                const res = await fetch("/api/customizations", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ claimPrestige1: true }),
+                });
+                const j = (await res.json().catch(() => ({}))) as any;
+                if (!res.ok) throw new Error(j?.error ?? "Failed");
+                await refresh();
+                setMsg("Prestige 1 unlocked.");
+              } catch (e: any) {
+                setMsg(String(e?.message ?? "Failed"));
+              } finally {
+                setPrestigeBusy(false);
+              }
+            }}
+            title="Unlock Prestige 1"
+          >
+            <div className="text-[11px] text-yellow-200/80">Prestige ready</div>
+            <div className="mt-0.5 text-sm font-semibold">Prestige 1 ★</div>
+          </button>
+        </div>
+      ) : null}
+
       {/* Floating balance bubble (always visible) */}
       {!barOpen ? (
         <div className="fixed top-3 right-3 z-[75]">
@@ -179,6 +217,12 @@ export function Topbar() {
                 href="/casino/leaderboard"
               >
                 Leaderboard
+              </Link>
+              <Link
+                className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
+                href="/casino/customizations"
+              >
+                Customizations
               </Link>
               <Link
                 className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"

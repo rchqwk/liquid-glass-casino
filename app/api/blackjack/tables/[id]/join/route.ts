@@ -44,6 +44,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     state.seats[seatOpen] = {
       userId: user.id,
       username: user.username,
+      prestigeLevel: Number((user as any).prestige_level ?? 0),
+      nameColor: ((user as any).name_color ?? null) as any,
       joinedAt: now,
       lastSeenAt: now,
       missedRounds: 0,

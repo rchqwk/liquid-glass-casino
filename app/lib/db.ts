@@ -4,7 +4,13 @@ import "server-only";
 import { neon } from "@neondatabase/serverless";
 
 export type AuthedUser = { id: number; username: string };
-export type AuthedUserWithRole = { id: number; username: string; role_level: number };
+export type AuthedUserWithRole = {
+  id: number;
+  username: string;
+  role_level: number;
+  prestige_level?: number;
+  name_color?: string | null;
+};
 
 export function normalizeUsername(raw: string) {
   return raw.trim().toLowerCase().replace(/\s+/g, "_");
@@ -16,6 +22,8 @@ type Store = {
     id: number;
     username: string;
     role_level: number;
+    prestige_level?: number;
+    name_color?: string | null;
     created_at: number;
     fingerprint?: string;
     active_session_token?: string | null;
@@ -253,6 +261,8 @@ async function ensureSchema() {
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_signout BIGINT NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_baseline DOUBLE PRECISION NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_baseline_ts BIGINT NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS prestige_level INT NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS name_color TEXT`;
 
   await sql`ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`;
   schemaReady = true;
@@ -607,6 +617,7 @@ export async function getUserBySessionToken(token: string): Promise<AuthedUserWi
     const rows =
       (await sql`
         SELECT u.id as id, u.username as username, u.role_level as role_level
+             , u.prestige_level as prestige_level, u.name_color as name_color
         FROM sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.token = ${token}
@@ -624,7 +635,13 @@ export async function getUserBySessionToken(token: string): Promise<AuthedUserWi
     if (!sess) return null;
     const user = s.users.find((u) => u.id === sess.user_id);
     if (!user) return null;
-    return { id: user.id, username: user.username, role_level: user.role_level ?? 0 };
+    return {
+      id: user.id,
+      username: user.username,
+      role_level: user.role_level ?? 0,
+      prestige_level: Number((user as any).prestige_level ?? 0),
+      name_color: ((user as any).name_color ?? null) as any,
+    };
   });
 }
 
@@ -658,6 +675,7 @@ export async function loginUsernameWithToken(input: {
     const urows =
       (await sql`
         SELECT id, username, role_level, fingerprint, active_session_token, last_signout
+             , prestige_level, name_color
         FROM users WHERE username = ${username}
       `) as any[];
     const user = urows[0];
@@ -703,7 +721,13 @@ export async function loginUsernameWithToken(input: {
     const inactivePrompt = !!l && (l.active === false);
 
     return {
-      user: { id: user.id, username: user.username, role_level: user.role_level as number },
+      user: {
+        id: user.id,
+        username: user.username,
+        role_level: user.role_level as number,
+        prestige_level: Number(user.prestige_level ?? 0),
+        name_color: (user.name_color ?? null) as any,
+      },
       inactivePrompt,
     };
   }
@@ -738,8 +762,64 @@ export async function loginUsernameWithToken(input: {
     const l = s.leaderboard.find((x) => x.user_id === user.id) as any;
     const inactivePrompt = !!l && l.active === false;
     return {
-      user: { id: user.id, username: user.username, role_level: user.role_level ?? 0 },
+      user: {
+        id: user.id,
+        username: user.username,
+        role_level: user.role_level ?? 0,
+        prestige_level: Number((user as any).prestige_level ?? 0),
+        name_color: ((user as any).name_color ?? null) as any,
+      },
       inactivePrompt,
+    };
+  });
+}
+
+export async function updateUserCustomizations(input: {
+  userId: number;
+  prestige_level?: number;
+  name_color?: string | null;
+}): Promise<AuthedUserWithRole | null> {
+  const sql = getSql();
+  const now = Date.now();
+  if (sql) {
+    await ensureSchema();
+    const uid = Number(input.userId);
+    if (!Number.isFinite(uid) || uid <= 0) return null;
+    if (typeof input.prestige_level === "number") {
+      await sql`UPDATE users SET prestige_level = GREATEST(prestige_level, ${Math.floor(input.prestige_level)}) WHERE id = ${uid}`;
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "name_color")) {
+      await sql`UPDATE users SET name_color = ${input.name_color ?? null} WHERE id = ${uid}`;
+    }
+    const rows =
+      (await sql`SELECT id, username, role_level, prestige_level, name_color FROM users WHERE id = ${uid}`) as any[];
+    const u = rows[0] ?? null;
+    if (!u) return null;
+    await sql`UPDATE users SET last_seen = ${now} WHERE id = ${uid}`;
+    return {
+      id: Number(u.id),
+      username: String(u.username),
+      role_level: Number(u.role_level ?? 0),
+      prestige_level: Number(u.prestige_level ?? 0),
+      name_color: (u.name_color ?? null) as any,
+    };
+  }
+
+  return withStore((s) => {
+    const u = s.users.find((x) => x.id === input.userId);
+    if (!u) return null;
+    if (typeof input.prestige_level === "number") {
+      (u as any).prestige_level = Math.max(Number((u as any).prestige_level ?? 0), Math.floor(input.prestige_level));
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "name_color")) {
+      (u as any).name_color = input.name_color ?? null;
+    }
+    return {
+      id: u.id,
+      username: u.username,
+      role_level: u.role_level ?? 0,
+      prestige_level: Number((u as any).prestige_level ?? 0),
+      name_color: ((u as any).name_color ?? null) as any,
     };
   });
 }

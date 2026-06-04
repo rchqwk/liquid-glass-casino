@@ -1,0 +1,116 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../../lib/authClient";
+
+type ApiResp =
+  | { ok: true; user?: any; prestige_level?: number; name_color?: string | null }
+  | { error: string };
+
+export default function CustomizationsPage() {
+  const { user, loading, refresh } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [nameColor, setNameColor] = useState<string | null>(null);
+
+  const prestige = Number((user as any)?.prestige_level ?? 0);
+  const unlockedBrown = prestige >= 1;
+
+  useEffect(() => {
+    setNameColor(((user as any)?.name_color ?? null) as any);
+  }, [user?.id, (user as any)?.name_color]);
+
+  const saveColor = async (next: string | null) => {
+    if (saving) return;
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/customizations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name_color: next ?? "default" }),
+      });
+      const j = (await res.json().catch(() => ({}))) as ApiResp;
+      if (!res.ok || "error" in j) throw new Error("error" in j ? j.error : "Failed");
+      setNameColor(next);
+      await refresh();
+      setMsg("Saved.");
+    } catch (e: any) {
+      setMsg(String(e?.message ?? "Failed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const title = useMemo(() => {
+    if (loading) return "Customizations";
+    if (!user) return "Sign in required";
+    return `Customizations @${user.username}`;
+  }, [loading, user]);
+
+  return (
+    <div className="mx-auto w-full max-w-[820px] px-4 py-6 sm:px-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-white">{title}</h1>
+          <div className="mt-1 text-xs text-white/60">
+            Prestige: <span className="font-mono text-white/80">{prestige}</span>
+          </div>
+        </div>
+        <Link
+          href="/casino"
+          className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
+        >
+          Back
+        </Link>
+      </div>
+
+      {!user && !loading ? (
+        <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-white/70">
+          Please sign in to edit customizations.
+        </div>
+      ) : null}
+
+      {user ? (
+        <div className="mt-6 grid gap-4">
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+            <div className="text-sm font-semibold text-white">Name color</div>
+            <div className="mt-1 text-xs text-white/60">Controls how your name appears at the Blackjack table.</div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={saving}
+                className={`rounded-2xl border px-3 py-2 text-xs ${
+                  !nameColor
+                    ? "border-white/20 bg-white/15 text-white"
+                    : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                }`}
+                onClick={() => void saveColor(null)}
+              >
+                Default
+              </button>
+              <button
+                type="button"
+                disabled={saving || !unlockedBrown}
+                className={`rounded-2xl border px-3 py-2 text-xs ${
+                  nameColor === "brown"
+                    ? "border-yellow-300/30 bg-yellow-500/10 text-yellow-100"
+                    : "border-white/10 bg-white/5 text-white/70 hover:text-white disabled:opacity-40"
+                }`}
+                onClick={() => void saveColor("brown")}
+                title={unlockedBrown ? "Prestige 1 unlocked" : "Unlock by reaching Prestige 1"}
+              >
+                Brown (Prestige)
+              </button>
+            </div>
+
+            {msg ? <div className="mt-3 text-xs text-white/60">{msg}</div> : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+

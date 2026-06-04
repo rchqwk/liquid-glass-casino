@@ -67,6 +67,8 @@ function CardView({ idx, hidden }: { idx: number; hidden?: boolean }) {
 type Seat = {
   userId: number;
   username: string;
+  prestigeLevel?: number;
+  nameColor?: string | null;
   missedRounds: number;
   bet: number;
   cards: number[];
@@ -383,6 +385,24 @@ export default function BlackjackTablePage() {
   const roundControlsRef = useRef<HTMLDivElement | null>(null);
   const tableViewRef = useRef<HTMLDivElement | null>(null);
   const dealerPowerupsRef = useRef<HTMLDivElement | null>(null);
+
+  const nameClass = (p: Seat) => {
+    const effective = p.userId === user?.id ? (((user as any)?.name_color ?? null) as any) : p.nameColor;
+    if (effective === "brown") return "text-amber-700";
+    return "text-white/85";
+  };
+
+  const NameBadge = ({ p }: { p: Seat }) => {
+    const effectivePrestige =
+      p.userId === user?.id ? Number((user as any)?.prestige_level ?? 0) : Number(p.prestigeLevel ?? 0);
+    const prestige = effectivePrestige;
+    return (
+      <span className={`inline-flex items-center gap-1 font-semibold ${nameClass(p)}`}>
+        <span>{p.username}</span>
+        {prestige >= 1 ? <span className="text-yellow-300">★</span> : null}
+      </span>
+    );
+  };
   const bettingLeft = Math.max(0, Math.ceil(((state?.bettingEndsAt ?? 0) - now) / 1000));
   const turnLeft = Math.max(0, Math.ceil(((state?.turnEndsAt ?? 0) - now) / 1000));
   const dealerLeft = Math.max(0, Math.ceil(((state?.dealerWindowEndsAt ?? 0) - now) / 1000));
@@ -469,7 +489,7 @@ export default function BlackjackTablePage() {
           <div className={`${isTurn ? "drop-shadow-[0_0_18px_rgba(52,211,153,.25)]" : ""}`}>
             <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px] text-white/80">
               <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 font-semibold text-white/85">
-                {p.username}
+                <NameBadge p={p} />
               </span>
               {p.bet ? (
                 <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
@@ -510,7 +530,9 @@ export default function BlackjackTablePage() {
       <div className={className}>
         <div className={`rounded-2xl border border-white/10 bg-white/5 p-3 ${isTurn ? "ring-2 ring-emerald-300/50" : ""}`}>
           <div className="flex items-center justify-between gap-2">
-            <div className="text-sm font-semibold text-white">{p.username}</div>
+            <div className="text-sm font-semibold">
+              <NameBadge p={p} />
+            </div>
             <div className="text-xs text-white/60">
               Bet: <span className="font-mono text-white/80">{p.bet.toFixed(2)}</span>
             </div>
