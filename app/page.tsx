@@ -1,6 +1,28 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
-export default function Home() {
+export default function Home({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
+  // If Discord launches the Activity at the site root (recommended), it will append
+  // Embedded App query params like `frame_id`. Detect that and forward into the
+  // Discord blackjack entry route while preserving query params.
+  const hasDiscordParams =
+    !!searchParams?.frame_id ||
+    !!searchParams?.instance_id ||
+    !!searchParams?.platform ||
+    !!searchParams?.guild_id ||
+    !!searchParams?.channel_id;
+  if (hasDiscordParams) {
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries(searchParams ?? {})) {
+      if (Array.isArray(v)) v.forEach((vv) => vv != null && sp.append(k, String(vv)));
+      else if (v != null) sp.set(k, String(v));
+    }
+    redirect(`/casino/blackjack/discord${sp.toString() ? `?${sp.toString()}` : ""}`);
+  }
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-12">
       <main className="glass glass-shine w-full max-w-3xl rounded-3xl p-8 sm:p-10">
