@@ -20,6 +20,7 @@ export default function DiscordBlackjackEntryPage() {
     return new URL(window.location.href).searchParams;
   }, []);
 
+  const hasFrameId = useMemo(() => !!qs?.get("frame_id"), [qs]);
   const channelIdFromQuery = useMemo(() => qs?.get("channel_id") ?? null, [qs]);
   const oauthCodeFromQuery = useMemo(() => qs?.get("code") ?? null, [qs]);
   const oauthStateFromQuery = useMemo(() => qs?.get("state") ?? null, [qs]);
@@ -38,6 +39,13 @@ export default function DiscordBlackjackEntryPage() {
       try {
         setErr(null);
         if (!clientId) throw new Error("Missing NEXT_PUBLIC_DISCORD_CLIENT_ID");
+
+        // If Discord didn't provide the Embedded App params, don't attempt to load the SDK
+        // (it will throw: "frame_id query param is not defined"). Show the OAuth fallback.
+        if (!hasFrameId && !oauthCodeFromQuery) {
+          // Stay in init so the page shows the fallback authorize link after a few seconds.
+          return;
+        }
 
         // Fallback path: if we already have an OAuth code in the URL, we can complete login
         // without waiting for the Embedded SDK handshake.
@@ -195,9 +203,9 @@ export default function DiscordBlackjackEntryPage() {
           </div>
         ) : null}
 
-        {stage === "init" && elapsed >= 10 && oauthAuthorizeUrl ? (
+        {stage === "init" && elapsed >= 2 && oauthAuthorizeUrl ? (
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75">
-            Still connecting. If this stays stuck, click{" "}
+            If this stays stuck, click{" "}
             <a className="underline decoration-white/30 underline-offset-4 hover:text-white" href={oauthAuthorizeUrl}>
               Authorize with Discord
             </a>{" "}
