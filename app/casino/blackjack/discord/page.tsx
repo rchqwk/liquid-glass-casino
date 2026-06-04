@@ -112,7 +112,7 @@ export default function DiscordBlackjackEntryPage() {
           client_id: clientId,
           response_type: "code",
           prompt: "none",
-          scope: ["identify"],
+          scope: ["identify", "rpc.activities.write"],
         });
         const code = String(authz?.code ?? "");
         if (!code) throw new Error("Discord authorize did not return a code.");
@@ -185,7 +185,7 @@ export default function DiscordBlackjackEntryPage() {
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("redirect_uri", redirectUri);
-    url.searchParams.set("scope", "identify");
+    url.searchParams.set("scope", "identify rpc.activities.write");
     if (state) url.searchParams.set("state", state);
     return url.toString();
   }, [clientId, redirectUri, channelId]);

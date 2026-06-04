@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   client_id: clientId,
                   response_type: "code",
                   prompt: "none",
-                  scope: ["identify"],
+                  scope: ["identify", "rpc.activities.write"],
                 });
                 const code = String(authz?.code ?? "");
                 if (!code) throw new Error("Discord authorize did not return a code.");

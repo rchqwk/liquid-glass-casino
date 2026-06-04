@@ -123,12 +123,156 @@ export default function BlackjackTablePage() {
   const tableId =
     typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params?.id?.[0] : undefined;
   const safeTableId = tableId && tableId !== "undefined" ? tableId : null;
+  const rpLastRef = useRef<string>("");
   const [state, setState] = useState<BJState | null>(null);
+  const stateRef = useRef<BJState | null>(null);
   const [betAmount, setBetAmount] = useState(10);
   const [ppAmount, setPpAmount] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [reportedKey, setReportedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  // Discord Rich Presence + Join button support (Embedded App SDK).
+  useEffect(() => {
+    if (!discordMode) return;
+    if (!safeTableId) return;
+
+    let cancelled = false;
+    let sdk: any = null;
+    let intervalId: number | null = null;
+
+    const getJoinSecretFromPayload = (p: any): string => {
+      return String(
+        p?.secret ??
+          p?.join_secret ??
+          p?.joinSecret ??
+          p?.data?.secret ??
+          p?.data?.join_secret ??
+          p?.data?.joinSecret ??
+          "",
+      );
+    };
+
+    const navToTable = (id: string) => {
+      if (!id) return;
+      try {
+        const qs = window.location.search || "";
+        if (window.location.pathname !== `/casino/blackjack/${id}`) {
+          window.location.href = `/casino/blackjack/${id}${qs}`;
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    // If Discord passed a join secret as a query param, honor it.
+    try {
+      const sp = new URLSearchParams(window.location.search || "");
+      const join = sp.get("join") || sp.get("join_secret") || "";
+      if (join && join !== safeTableId) {
+        navToTable(join);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+
+    (async () => {
+      try {
+        const clientId =
+          (process as any)?.env?.NEXT_PUBLIC_DISCORD_CLIENT_ID ??
+          (process as any)?.env?.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ??
+          "";
+        if (!clientId) return;
+        const { DiscordSDK } = await import("@discord/embedded-app-sdk");
+        // eslint-disable-next-line new-cap
+        sdk = new DiscordSDK(clientId);
+        await Promise.race([
+          sdk.ready(),
+          new Promise((_, reject) =>
+            window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), 9000),
+          ),
+        ]);
+        if (cancelled) return;
+
+        // Subscribe to join events (Discord will send the join secret).
+        const subscribe = async (evt: string) => {
+          try {
+            await sdk.subscribe(evt, (payload: any) => {
+              const secret = getJoinSecretFromPayload(payload);
+              if (secret) navToTable(secret);
+            });
+          } catch {
+            // ignore unknown events
+          }
+        };
+        void subscribe("ACTIVITY_JOIN");
+        void subscribe("ACTIVITY_JOIN_REQUEST");
+
+        const origin = window.location.origin;
+        const large = (process as any)?.env?.NEXT_PUBLIC_DISCORD_RP_LARGE_IMAGE_URL ?? `${origin}/window.svg`;
+        const small = (process as any)?.env?.NEXT_PUBLIC_DISCORD_RP_SMALL_IMAGE_URL ?? `${origin}/globe.svg`;
+
+        const pushPresence = async () => {
+          const cur = stateRef.current;
+          const count = cur?.seats?.filter(Boolean).length ?? 1;
+          const phase = String(cur?.phase ?? "");
+          const round = Number(cur?.round ?? 0) || 0;
+          const payload = JSON.stringify({ id: safeTableId, count, phase, round });
+          if (payload === rpLastRef.current) return;
+          rpLastRef.current = payload;
+          try {
+            await sdk.commands.setActivity({
+              activity: {
+                type: 0,
+                details: "Blackjack",
+                state: phase ? `${phase.replaceAll("_", " ")} · R${round}` : `Table ${safeTableId}`,
+                assets: {
+                  large_image: large,
+                  large_text: "Liquid Glass Casino",
+                  small_image: small,
+                  small_text: `Table ${safeTableId}`,
+                },
+                party: {
+                  size: [Math.max(1, Math.min(10, count)), 10],
+                },
+                secrets: {
+                  join: safeTableId,
+                },
+              },
+            });
+          } catch {
+            // ignore
+          }
+        };
+
+        // Initial and periodic presence updates (in case state doesn't change for a while).
+        await pushPresence();
+        intervalId = window.setInterval(() => void pushPresence(), 5000) as any;
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (intervalId) window.clearInterval(intervalId);
+      intervalId = null;
+      try {
+        if (sdk) {
+          void sdk.unsubscribe("ACTIVITY_JOIN");
+          void sdk.unsubscribe("ACTIVITY_JOIN_REQUEST");
+        }
+      } catch {
+        // ignore
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordMode, safeTableId]);
 
   const [targetPopup, setTargetPopup] = useState<{ open: boolean; specialId: string | null; target: number | null }>({
     open: false,
