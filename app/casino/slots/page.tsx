@@ -532,14 +532,14 @@ export default function SlotsPage() {
             <button
               type="button"
               className="glass-soft rounded-2xl bg-indigo-500/15 px-3 py-2 text-xs font-medium text-indigo-100 transition hover:bg-indigo-500/20 disabled:opacity-40"
-              disabled={spinning || freeSpinsLeft > 0 || holdSpinSteps != null || balance < wager * 150}
+              disabled={spinning || freeSpinsLeft > 0 || holdSpinSteps != null || balance < wager * 500}
               onClick={() => {
                 if (spinning) return;
-                if (balance < wager * 150) return;
-                // Buy bonus: pay 150× bet to start Hold&Spin immediately.
+                if (balance < wager * 500) return;
+                // Buy bonus: pay 500× bet to start Hold&Spin immediately.
                 const buy = placeBet({
                   game: "EMOJI Hold and Win Buy Bonus",
-                  wager: wager * 150,
+                  wager: wager * 500,
                   resolve: (rng) => {
                     const spinRes = spinSlots243Ways({
                       rngFloat: rng.float,
@@ -551,17 +551,17 @@ export default function SlotsPage() {
                     return { multiplier: spinRes.winMultiplier, outcome: "Bought Hold&Spin" };
                   },
                 });
-                setLast({ profit: buy.profit, outcome: "Bought Hold&Spin (150× bet)", multiplier: buy.multiplier });
+                setLast({ profit: buy.profit, outcome: "Bought Hold&Spin (500× bet)", multiplier: buy.multiplier });
                 void reportResult({
                   game: "EMOJI Hold and Win Buy Bonus",
                   profit: buy.profit,
-                  wager: wager * 150,
+                  wager: wager * 500,
                   balance: buy.balanceAfter,
                 });
               }}
-              title="Pay 150× bet to start Hold&Spin bonus"
+              title="Pay 500× bet to start Hold&Spin bonus"
             >
-              Buy Bonus (150×)
+              Buy Bonus (500×)
             </button>
           </div>
 
