@@ -93,6 +93,13 @@ export default function DiscordBlackjackEntryPage() {
           return;
         }
 
+        // If we're on iOS, prefer the OAuth flow (Discord iOS can hang on the embedded handshake).
+        if (isIOS && !oauthCodeFromQuery) {
+          if (!channelId) throw new Error("Missing channel id (channel_id or state). Re-open from the voice call.");
+          // Let the iOS OAuth auto-redirect effect handle it; keep stage at init.
+          return;
+        }
+
         // Dynamic import so local dev / non-discord environments don't crash bundling.
         const { DiscordSDK } = await import("@discord/embedded-app-sdk");
         // eslint-disable-next-line new-cap
@@ -100,7 +107,7 @@ export default function DiscordBlackjackEntryPage() {
         // In some Discord contexts the handshake can hang; show feedback + allow OAuth fallback.
         await Promise.race([
           discordSdk.ready(),
-          new Promise((_, reject) => window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), 9000)),
+          new Promise((_, reject) => window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), 20000)),
         ]);
 
         const sdkChannelId = (discordSdk as any).channelId as string | undefined;
@@ -190,6 +197,16 @@ export default function DiscordBlackjackEntryPage() {
     return url.toString();
   }, [clientId, redirectUri, channelId]);
 
+  const isIOS = useMemo(() => {
+    try {
+      if (typeof navigator === "undefined") return false;
+      const ua = navigator.userAgent ?? "";
+      return /iPhone|iPad|iPod/i.test(ua);
+    } catch {
+      return false;
+    }
+  }, []);
+
   // iOS Discord sometimes fails to launch Activities with `frame_id`. When that happens,
   // automatically fall back to OAuth so users aren't stuck on the "missing frame_id" screen.
   useEffect(() => {
@@ -210,6 +227,26 @@ export default function DiscordBlackjackEntryPage() {
       // ignore
     }
   }, [hasFrameId, oauthCodeFromQuery, oauthAuthorizeUrl, channelId]);
+
+  // iOS Discord often hangs on the Embedded App SDK handshake even when `frame_id` exists.
+  // Prefer OAuth on iOS whenever possible.
+  useEffect(() => {
+    if (!isIOS) return;
+    if (oauthCodeFromQuery) return;
+    if (!oauthAuthorizeUrl) return;
+    if (!channelId) return;
+    try {
+      const key = "lgc.discord.iosOauthAutoRedirected";
+      if (sessionStorage.getItem(key) === "1") return;
+      sessionStorage.setItem(key, "1");
+      const t = window.setTimeout(() => {
+        window.location.href = oauthAuthorizeUrl;
+      }, 700);
+      return () => window.clearTimeout(t);
+    } catch {
+      // ignore
+    }
+  }, [isIOS, oauthCodeFromQuery, oauthAuthorizeUrl, channelId]);
 
   return (
     <div
