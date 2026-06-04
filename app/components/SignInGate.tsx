@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "../lib/authClient";
 
@@ -10,6 +10,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   const [username, setUsername] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [discordUrl, setDiscordUrl] = useState<string | null>(null);
 
   const isAllowed = useMemo(() => {
     // Always allow the dedicated profile page so users can manage sign-in/out.
@@ -18,6 +19,24 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   const blocked = !isAllowed && !loading && !user;
+
+  useEffect(() => {
+    if (discordMode) return;
+    const clientId =
+      process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ?? "";
+    if (!clientId) return;
+    const redirectUri =
+      process.env.NEXT_PUBLIC_DISCORD_WEB_REDIRECT_URI ??
+      "https://rchqwk-liquid-glass-casino.vercel.app/discord/callback";
+    const returnTo = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/";
+    const url = new URL("https://discord.com/oauth2/authorize");
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("scope", "identify");
+    url.searchParams.set("state", returnTo);
+    setDiscordUrl(url.toString());
+  }, [discordMode]);
 
   return (
     <div className="relative">
@@ -56,6 +75,18 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                   <p className="mt-2 text-sm leading-6 text-white/70">
                     Choose a username to start playing. (Prototype only — no passwords.)
                   </p>
+
+                  {discordUrl ? (
+                    <>
+                      <a
+                        className="mt-4 inline-flex items-center justify-center rounded-2xl border border-white/10 bg-indigo-500/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500/30"
+                        href={discordUrl}
+                      >
+                        Sign in with Discord
+                      </a>
+                      <div className="mt-3 text-[11px] text-white/50">or continue with a local username</div>
+                    </>
+                  ) : null}
 
                   <label className="mt-4 block text-xs font-medium text-white/70">Username</label>
                   <input
