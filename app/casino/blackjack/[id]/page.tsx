@@ -260,34 +260,75 @@ export default function BlackjackTablePage() {
     seatIndex,
     p,
     className,
+    variant,
   }: {
     seatIndex: number;
     p: any | null;
     className: string;
+    variant: "list" | "table";
   }) => {
     if (!p) {
+      if (variant === "table") return <div className={className} />;
       return (
         <div className={className}>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/50">
-            Seat {seatIndex + 1}
-            <div className="mt-1 text-[11px] text-white/40">empty</div>
-          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/50">Empty seat</div>
         </div>
       );
     }
+
     const hv = handValue(p.cards, p.bonusPoints);
     const isTurn = state?.phase === "player_turns" && myTurnSeat === seatIndex;
     const activeHand = (p as any)?.hands?.[(p as any)?.activeHandIndex ?? 0] ?? null;
     const effects = (activeHand?.effects ?? []) as any[];
+
+    if (variant === "table") {
+      return (
+        <div className={className}>
+          <div className={`${isTurn ? "drop-shadow-[0_0_18px_rgba(52,211,153,.25)]" : ""}`}>
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-white/80">
+              <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 font-semibold text-white/85">
+                {p.username}
+              </span>
+              {p.bet ? (
+                <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-white/70">
+                  Bet <span className="font-mono text-white/80">{Number(p.bet).toFixed(2)}</span>
+                </span>
+              ) : null}
+              <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-white/70">
+                <span className="font-mono text-white/85">{hv.total}</span>
+                {p.bonusPoints ? <span className="ml-1 text-amber-200">(+{p.bonusPoints})</span> : null}
+              </span>
+              {p.busted ? <span className="text-rose-200">BUST</span> : null}
+              {p.stood ? <span className="text-white/50">STAND</span> : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {p.cards.map((c: number, idx: number) => (
+                <CardView key={idx} idx={c} />
+              ))}
+            </div>
+            {effects.length ? (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {effects.slice(-3).map((e: any) => (
+                  <span
+                    key={String(e.id ?? `${e.at}-${e.powerupName}`)}
+                    className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-white/70"
+                    title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
+                  >
+                    {String(e.powerupName ?? "Powerup")}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className={className}>
-        <div
-          className={`rounded-2xl border border-white/10 bg-white/5 p-3 ${isTurn ? "ring-2 ring-emerald-300/50" : ""}`}
-        >
+        <div className={`rounded-2xl border border-white/10 bg-white/5 p-3 ${isTurn ? "ring-2 ring-emerald-300/50" : ""}`}>
           <div className="flex items-center justify-between gap-2">
-            <div className="text-sm font-semibold text-white">
-              {p.username} <span className="text-xs text-white/50">#{seatIndex + 1}</span>
-            </div>
+            <div className="text-sm font-semibold text-white">{p.username}</div>
             <div className="text-xs text-white/60">
               Bet: <span className="font-mono text-white/80">{p.bet.toFixed(2)}</span>
             </div>
@@ -1673,57 +1714,61 @@ export default function BlackjackTablePage() {
 
             <div className="mt-6">
               <p className="text-xs text-white/60">Seats</p>
-              {tableView === "list" || isMobile ? (
+              {tableView === "list" ? (
                 <div className="mt-2 grid grid-cols-1 gap-3">
                   {state.seats.map((p, i) => (
-                    <TableSeat key={i} seatIndex={i} p={p as any} className="" />
+                    <TableSeat key={i} seatIndex={i} p={p as any} className="" variant="list" />
                   ))}
                 </div>
               ) : (
                 <div className="mt-3">
-                  <div className="relative mx-auto w-full max-w-[640px]">
-                    <div className="mx-auto h-[420px] w-full rounded-[48px] border border-white/10 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-black/20 shadow-[0_40px_120px_rgba(0,0,0,.45)]" />
+                  <div
+                    className={`relative mx-auto w-full max-w-[640px] ${isMobile ? "origin-top scale-[0.88]" : ""}`}
+                  >
+                    <div className="mx-auto h-[560px] w-full rounded-[48px] border border-white/10 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-black/25 shadow-[0_40px_120px_rgba(0,0,0,.45)]" />
                     <div className="pointer-events-none absolute inset-0 rounded-[48px] ring-1 ring-white/10" />
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                      <div className="h-[320px] w-[520px] rounded-[999px] border border-white/10 bg-gradient-to-b from-emerald-500/12 to-black/20" />
+                      {/* Rotate 90° for a portrait-friendly felt oval */}
+                      <div className="h-[480px] w-[320px] rounded-[999px] border border-white/10 bg-gradient-to-b from-emerald-500/12 to-black/20" />
                     </div>
 
                     {/* Dealer (top center) */}
-                    <div className="absolute left-1/2 top-3 w-[260px] -translate-x-1/2">
-                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-xs font-semibold text-white/80">Dealer</div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {state.dealer.cards.map((c, i) => (
-                            <CardView key={i} idx={c} hidden={c < 0} />
-                          ))}
-                        </div>
-                        <div className="mt-2 text-xs text-white/60">
-                          Visible total: <span className="font-mono text-white/80">{dealerTotal}</span>
-                        </div>
+                    <div className="absolute left-1/2 top-4 w-[320px] -translate-x-1/2">
+                      <div className="mb-2 flex items-center gap-2 text-[11px] text-white/80">
+                        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 font-semibold text-white/85">
+                          Dealer
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-white/70">
+                          Visible <span className="font-mono text-white/85">{dealerTotal}</span>
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {state.dealer.cards.map((c, i) => (
+                          <CardView key={i} idx={c} hidden={c < 0} />
+                        ))}
                       </div>
                     </div>
 
-                    {/* Seats arranged around */}
+                    {/* Seats on the sides (no center seats) */}
                     {(() => {
-                      const pos = [
-                        "left-1/2 -translate-x-1/2 bottom-2 w-[260px]", // 1 bottom center
-                        "right-8 bottom-14 w-[240px]", // 2 bottom right
-                        "right-2 top-44 w-[240px]", // 3 mid right
-                        "right-10 top-16 w-[240px]", // 4 top right
-                        "left-1/2 -translate-x-1/2 top-24 w-[240px]", // 5 upper mid
-                        "left-10 top-16 w-[240px]", // 6 top left
-                        "left-2 top-44 w-[240px]", // 7 mid left
-                        "left-8 bottom-14 w-[240px]", // 8 bottom left
-                        "left-1/2 -translate-x-1/2 bottom-40 w-[240px]", // 9 mid bottom
-                        "left-1/2 -translate-x-1/2 top-60 w-[240px]", // 10 center
-                      ];
-                      return state.seats.map((p, i) => (
-                        <div key={i} className={`absolute ${pos[i] ?? "left-4 top-4 w-[240px]"}`}>
-                          <TableSeat seatIndex={i} p={p as any} className="" />
-                        </div>
-                      ));
+                      const leftTops = [120, 210, 300, 390, 480]; // px
+                      const rightTops = [120, 210, 300, 390, 480];
+                      return state.seats.map((p, i) => {
+                        const isLeft = i < 5;
+                        const topPx = isLeft ? leftTops[i] : rightTops[i - 5];
+                        return (
+                          <div
+                            key={i}
+                            className={`absolute ${isLeft ? "left-4" : "right-4"} w-[260px]`}
+                            style={{ top: topPx }}
+                          >
+                            <TableSeat seatIndex={i} p={p as any} className="" variant="table" />
+                          </div>
+                        );
+                      });
                     })()}
                   </div>
+                  {isMobile ? <div className="mt-2 text-[11px] text-white/45">Tip: switch to List view if this feels too small.</div> : null}
                 </div>
               )}
               <div className="mt-3 text-xs text-white/55">
