@@ -108,8 +108,9 @@ export default function DiscordBlackjackEntryPage() {
   }, [stage]);
 
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="glass glass-shine w-full max-w-[620px] rounded-3xl border border-white/10 p-6 text-white">
+    <div className="min-h-[100dvh] w-full bg-slate-950/95 px-4 py-10 text-white">
+      <div className="mx-auto flex min-h-[60vh] max-w-3xl items-center justify-center">
+        <div className="glass glass-shine w-full max-w-[620px] rounded-3xl border border-white/10 p-6 text-white">
         <div className="text-base font-semibold text-white">Launching Discord Blackjack…</div>
         <div className="mt-2 text-sm text-white/70">{stageLabel}</div>
 
@@ -119,6 +120,10 @@ export default function DiscordBlackjackEntryPage() {
               className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-fuchsia-400 transition-[width] duration-500"
               style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
             />
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-emerald-300" />
+            <div className="text-sm text-white/70">Loading…</div>
           </div>
           <div className="mt-2 text-[11px] text-white/60">
             {progress}% • <span className="font-mono">{stage}</span>
@@ -135,6 +140,7 @@ export default function DiscordBlackjackEntryPage() {
           Tip: launch this as a Discord Activity from within a voice call. (For local testing you can pass{" "}
           <span className="font-mono text-white/70">?channel_id=...</span>.)
         </div>
+      </div>
       </div>
     </div>
   );
