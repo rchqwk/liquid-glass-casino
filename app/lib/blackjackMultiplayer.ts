@@ -658,8 +658,14 @@ function lcg(seed: number) {
 }
 
 function shuffleDeck(seed: number) {
+  // House shoe: 4 decks + 8 jokers.
   const rand = lcg(seed);
-  const d = Array.from({ length: 52 }, (_, i) => i);
+  const d: number[] = [];
+  for (let deck = 0; deck < 4; deck += 1) {
+    for (let i = 0; i < 52; i += 1) d.push(i);
+  }
+  // 8 jokers (represented using the magic-card encoding).
+  for (let i = 0; i < 8; i += 1) d.push(encodeMagicCard("JOKER", i % 4));
   for (let i = d.length - 1; i > 0; i -= 1) {
     const j = Math.floor(rand() * (i + 1));
     [d[i], d[j]] = [d[j]!, d[i]!];
@@ -1760,6 +1766,7 @@ function settleRound(state: TableState, now: number): TableState {
     const settlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }> = [];
     const ppSettlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }> = [];
     let anySevenCardWinOrPush = false;
+    let rareBoxesEarned = 0;
 
     // Evaluate each hand vs dealer; choose the best multiplier for player reporting.
     for (const h of p.hands ?? []) {
@@ -1808,6 +1815,14 @@ function settleRound(state: TableState, now: number): TableState {
       } else {
         mult = 1;
         outcome = `Push (${pTotal})`;
+      }
+
+      // Rare box triggers:
+      // - Every blackjack (player hand) => rare box
+      // - Every joker in the player's hand => rare box
+      if (pBJ) rareBoxesEarned += 1;
+      for (const ci of h.cards ?? []) {
+        if (cardFromIndex(ci).rank === "JOKER") rareBoxesEarned += 1;
       }
 
       // Card-count bonus rules:
@@ -1876,6 +1891,9 @@ function settleRound(state: TableState, now: number): TableState {
 
     const mAll = totalWager > 0 ? totalReturn / totalWager : 0;
 
+    // Every payout over 2x => additional rare box.
+    if (mAll > 2) rareBoxesEarned += 1;
+
     // If you won (net positive), keep your base bet in play for next round (auto re-bet).
     if (mAll > 1) p.carryBetNext = Number(p.lastBetPlaced ?? p.hands?.[0]?.bet ?? 0) || 0;
     else p.carryBetNext = 0;
@@ -1896,6 +1914,22 @@ function settleRound(state: TableState, now: number): TableState {
         opened: false,
         contents: box,
       });
+    }
+
+    // Rare boxes earned from gameplay events.
+    if (rareBoxesEarned > 0) {
+      p.inventory.boxes = p.inventory.boxes ?? [];
+      for (let i = 0; i < rareBoxesEarned; i += 1) {
+        const seed = Math.floor(now / 1000) ^ (s.round * 1597334677) ^ (p.userId * 2654435761) ^ (i * 97531);
+        const box = rollBox("rare", seed);
+        p.inventory.boxes.push({
+          id: shortId(),
+          tier: "rare",
+          awardedAt: now,
+          opened: false,
+          contents: box,
+        });
+      }
     }
 
     results[String(p.userId)] = { outcome: bestOutcome, multiplier: mAll, wager: totalWager, settlements, ppSettlements };
