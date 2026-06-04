@@ -129,7 +129,6 @@ export default function BlackjackTablePage() {
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [reportedKey, setReportedKey] = useState<string | null>(null);
-  const [targetUserId, setTargetUserId] = useState<number | null>(null);
 
   const [targetPopup, setTargetPopup] = useState<{ open: boolean; specialId: string | null; target: number | null }>({
     open: false,
@@ -1121,23 +1120,35 @@ export default function BlackjackTablePage() {
               </button>
             </div>
 
-            <div className="mt-4">
-              <select
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/85 outline-none focus:border-white/20"
-                value={targetPopup.target ?? ""}
-                onChange={(e) => setTargetPopup((p) => ({ ...p, target: e.target.value ? Number(e.target.value) : null }))}
-              >
-                <option value="">Select…</option>
-                {targetPopup.specialId?.includes("MYTHIC") ? null : <option value={-1}>Dealer</option>}
-                {state.seats
-                  .filter(Boolean)
-                  .map((p) => p!)
-                  .map((p) => (
-                    <option key={p.userId} value={p.userId}>
-                      {p.username}
-                    </option>
-                  ))}
-              </select>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {targetPopup.specialId?.includes("MYTHIC") ? null : (
+                <button
+                  type="button"
+                  className={`rounded-2xl border border-white/10 px-3 py-2 text-xs ${
+                    targetPopup.target === -1 ? "bg-white/15 text-white" : "bg-white/5 text-white/70 hover:text-white"
+                  }`}
+                  onClick={() => setTargetPopup((p) => ({ ...p, target: -1 }))}
+                >
+                  Dealer
+                </button>
+              )}
+              {state.seats
+                .filter(Boolean)
+                .map((p) => p!)
+                .map((p) => (
+                  <button
+                    key={p.userId}
+                    type="button"
+                    className={`rounded-2xl border border-white/10 px-3 py-2 text-xs ${
+                      targetPopup.target === p.userId
+                        ? "bg-white/15 text-white"
+                        : "bg-white/5 text-white/70 hover:text-white"
+                    }`}
+                    onClick={() => setTargetPopup((q) => ({ ...q, target: p.userId }))}
+                  >
+                    {p.username}
+                  </button>
+                ))}
             </div>
 
             <div className="mt-5 flex gap-2">
@@ -1523,24 +1534,7 @@ export default function BlackjackTablePage() {
                       Mystery Box: <span className="font-mono">{state.meInventory.lastBox.join(", ")}</span>
                     </div>
                   ) : null}
-                  <label className="mt-2 block text-[11px] text-white/55">Target (for rare/magic cards)</label>
-                  <select
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/85 outline-none focus:border-white/20"
-                    value={targetUserId ?? ""}
-                    onChange={(e) => setTargetUserId(e.target.value ? Number(e.target.value) : null)}
-                    disabled={!canUseAnytimeSpecial}
-                  >
-                    <option value="">(auto)</option>
-                    <option value={-1}>Dealer</option>
-                    {state.seats
-                      .filter(Boolean)
-                      .map((p) => p!)
-                      .map((p) => (
-                        <option key={p.userId} value={p.userId}>
-                          {p.username}
-                        </option>
-                      ))}
-                  </select>
+                  {/* Target is selected only when needed (via the popup). */}
                   {(() => {
                     const inv = state.meInventory;
                     const cats = inv?.categories;
