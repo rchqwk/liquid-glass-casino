@@ -1821,7 +1821,22 @@ export default function BlackjackTablePage() {
                       <div className="h-[480px] w-[320px] rounded-[999px] border border-white/10 bg-gradient-to-b from-emerald-500/12 to-black/20" />
                     </div>
 
-                    {/* Dealer hand hidden in table view */}
+                    {/* Dealer hand (on felt) */}
+                    <div className="absolute left-1/2 top-8 w-[360px] -translate-x-1/2">
+                      <div className="mb-2 flex items-center justify-center gap-2 text-[11px] text-white/80">
+                        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 font-semibold text-white/85">
+                          Dealer
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-white/70">
+                          Visible <span className="font-mono text-white/85">{dealerTotal}</span>
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {state.dealer.cards.map((c, i) => (
+                          <CardView key={i} idx={c} hidden={c < 0} />
+                        ))}
+                      </div>
+                    </div>
 
                     {/* Seats on the sides (no center seats) */}
                     {(() => {
