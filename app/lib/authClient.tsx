@@ -129,7 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 await Promise.race([
                   sdk.ready(),
                   new Promise((_, reject) =>
-                    window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), 9000),
+                    window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), 20000),
                   ),
                 ]);
                 const authz = await (sdk as any).commands.authorize({
@@ -150,7 +150,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
                 if (loginJson?.user) setUser(loginJson.user as UserWithRole);
               } catch (e: any) {
-                setDiscordError(String(e?.message ?? "Discord sign-in failed."));
+                const msg = String(e?.message ?? "Discord sign-in failed.");
+                // iOS can get stuck during Activity initialization and never complete the RPC handshake.
+                // If that happens, fall back to the OAuth entry page so the user can still play.
+                if (msg.includes("handshake timed out")) {
+                  try {
+                    window.location.replace(`/casino/blackjack/discord${search || ""}`);
+                    return;
+                  } catch {
+                    // ignore
+                  }
+                }
+                setDiscordError(msg);
               }
             }
           }
