@@ -853,9 +853,31 @@ export function tickTable(state: TableState, now: number): TableState {
       s.updatedAt = now;
       return s;
     }
-    // Dealer stands -> open window for dealer specials
+    // Dealer stands -> open window for dealer specials ONLY when it matters.
+    // Requirement: dealer window should be 10s only if any players lose to the dealer without busting.
+    const dTotal = dVal;
+    let anyLoseWithoutBust = false;
+    for (const seatIdx of s.participants) {
+      const p = s.seats[seatIdx];
+      if (!p) continue;
+      normalizeHandsForSeat(p);
+      for (const h of p.hands ?? []) {
+        const pTotal = handTotal(h.cards, h.bonusPoints).total;
+        if (pTotal > 21) continue; // busted
+        // If dealer busted, nobody "loses to dealer"
+        if (dTotal > 21) continue;
+        if (pTotal < dTotal) {
+          anyLoseWithoutBust = true;
+          break;
+        }
+      }
+      if (anyLoseWithoutBust) break;
+    }
+    if (!anyLoseWithoutBust) {
+      return settleRound(s, now);
+    }
     s.phase = "dealer_window";
-    s.dealerWindowEndsAt = now + 8_000;
+    s.dealerWindowEndsAt = now + 10_000;
     s.updatedAt = now;
     return s;
   }

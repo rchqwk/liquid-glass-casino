@@ -74,6 +74,7 @@ export function TurnQuickPanel(props: {
   hands?: Array<{ stood?: boolean; busted?: boolean; turnEnded?: boolean; cards?: number[]; bonusPoints?: number }>;
   timerLabel?: string;
   timerSeconds?: number;
+  onTimerClick?: () => void;
   canSplit: boolean;
   canHit: boolean;
   canDoubleDown: boolean;
@@ -125,15 +126,17 @@ export function TurnQuickPanel(props: {
       {/* Floating tab (stack above Mystery Boxes) */}
       <div className="pointer-events-none fixed bottom-24 right-4 z-[65]">
         {props.timerLabel && typeof props.timerSeconds === "number" ? (
-          <div className="pointer-events-none absolute -top-16 right-0">
-            <div
+          <div className="pointer-events-auto absolute -top-16 right-0">
+            <button
+              type="button"
               className={`glass-soft rounded-2xl border px-3 py-2 text-[11px] text-white/80 ${
                 props.isMyTurn ? "border-emerald-300/20 bg-emerald-500/10" : "border-white/10 bg-white/5"
               }`}
+              onClick={() => props.onTimerClick?.()}
             >
               <div className="text-white/60">{props.timerLabel}</div>
               <div className="font-mono text-sm text-white/90">{Math.max(0, props.timerSeconds)}s</div>
-            </div>
+            </button>
           </div>
         ) : null}
         <button

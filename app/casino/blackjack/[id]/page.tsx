@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
 import { useWallet } from "../../../lib/wallet";
 import { useAuth } from "../../../lib/authClient";
@@ -235,6 +235,10 @@ export default function BlackjackTablePage() {
     if (typeof window === "undefined") return false;
     return window.matchMedia?.("(max-width: 640px)")?.matches ?? false;
   }, []);
+
+  const bettingControlsRef = useRef<HTMLDivElement | null>(null);
+  const tableViewRef = useRef<HTMLDivElement | null>(null);
+  const dealerPowerupsRef = useRef<HTMLDivElement | null>(null);
   const bettingLeft = Math.max(0, Math.ceil(((state?.bettingEndsAt ?? 0) - now) / 1000));
   const turnLeft = Math.max(0, Math.ceil(((state?.turnEndsAt ?? 0) - now) / 1000));
   const dealerLeft = Math.max(0, Math.ceil(((state?.dealerWindowEndsAt ?? 0) - now) / 1000));
@@ -1235,6 +1239,23 @@ export default function BlackjackTablePage() {
         hands={myHands}
         timerLabel={timerLabel ?? undefined}
         timerSeconds={typeof timerSeconds === "number" ? timerSeconds : undefined}
+        onTimerClick={() => {
+          const phase = state?.phase;
+          const scroll = (el: HTMLElement | null) => {
+            if (!el) return;
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+          };
+          if (phase === "betting") {
+            scroll(bettingControlsRef.current);
+            return;
+          }
+          if (phase === "dealer_window") {
+            scroll(dealerPowerupsRef.current);
+            return;
+          }
+          // "Play phase" (player_turns / dealer / settling) -> card/table view
+          scroll(tableViewRef.current);
+        }}
         canSplit={canSplit}
         canHit={!mySeat?.busted}
         canDoubleDown={canDoubleDown}
@@ -1435,7 +1456,7 @@ export default function BlackjackTablePage() {
                   disabled={state.phase !== "betting"}
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
                 />
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div ref={bettingControlsRef} className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
                     disabled={state.phase !== "betting" || betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
@@ -1568,7 +1589,7 @@ export default function BlackjackTablePage() {
                     }
 
                     return (
-                      <div className="mt-3">
+                      <div ref={dealerPowerupsRef} className="mt-3">
                         <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(110px,1fr))]">
                           {groups.map((g) => (
                             <div key={g.label} className="min-w-0">
@@ -1736,7 +1757,7 @@ export default function BlackjackTablePage() {
             )}
           </div>
 
-          <div className="glass-soft glass-shine rounded-3xl p-5">
+          <div ref={tableViewRef} className="glass-soft glass-shine rounded-3xl p-5">
             <p className="text-sm font-medium text-white">Table</p>
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="text-xs text-white/55">View</div>
