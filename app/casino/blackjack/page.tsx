@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../../lib/authClient";
 
 type TableRow = {
   id: string;
@@ -14,12 +15,14 @@ type TableRow = {
 };
 
 export default function BlackjackLobbyPage() {
+  const { user, loading: authLoading, discordMode } = useAuth();
   const [tables, setTables] = useState<TableRow[]>([]);
   const [name, setName] = useState("Blackjack Table");
   const [isPublic, setIsPublic] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
+  const [autoJoining, setAutoJoining] = useState(false);
 
   useEffect(() => {
     const id = window.setInterval(() => setTick((x) => x + 1), 1200);
@@ -44,11 +47,58 @@ export default function BlackjackLobbyPage() {
     };
   }, [tick]);
 
+  // Discord mode: tables are per voice call and non-public, so the lobby will appear empty.
+  // If we're in Discord and no public tables exist, auto-create/join the call table.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!discordMode) return;
+    if (!user) return;
+    if (autoJoining) return;
+    if (tables.length > 0) return; // only auto when lobby has no rooms listed
+
+    // Determine channel_id from current URL or stored sessionStorage query string.
+    let channelId: string | null = null;
+    try {
+      const sp = new URLSearchParams(window.location.search || "");
+      channelId = sp.get("channel_id");
+      if (!channelId) {
+        const qs = sessionStorage.getItem("lgc.discord.qs") ?? "";
+        const sp2 = new URLSearchParams(qs.startsWith("?") ? qs.slice(1) : qs);
+        channelId = sp2.get("channel_id");
+      }
+    } catch {
+      // ignore
+    }
+    if (!channelId) return;
+
+    setAutoJoining(true);
+    (async () => {
+      try {
+        await fetch(`/api/blackjack/tables/${encodeURIComponent(channelId)}/ensure`, { method: "POST" });
+        await fetch(`/api/blackjack/tables/${encodeURIComponent(channelId)}/join`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ spectate: false }),
+        });
+        window.location.href = `/casino/blackjack/${encodeURIComponent(channelId)}`;
+      } finally {
+        // if redirect fails, allow manual retry
+        setAutoJoining(false);
+      }
+    })();
+  }, [authLoading, discordMode, user, tables.length, autoJoining]);
+
   const now = Date.now();
   const sorted = useMemo(() => [...tables].sort((a, b) => (b.bettingEndsAt ?? 0) - (a.bettingEndsAt ?? 0)), [tables]);
 
   return (
     <div className="flex flex-col gap-6">
+      {autoJoining ? (
+        <div className="glass glass-shine rounded-3xl p-6 text-white/80">
+          <div className="text-sm font-semibold text-white">Joining your Discord call table…</div>
+          <div className="mt-2 text-xs text-white/60">Creating the table if needed, then redirecting.</div>
+        </div>
+      ) : null}
       <div className="glass glass-shine rounded-3xl p-6">
         <h2 className="text-xl font-semibold text-white">Blackjack (Multiplayer)</h2>
         <p className="mt-2 text-sm leading-6 text-white/70">
