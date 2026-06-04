@@ -1521,10 +1521,10 @@ export default function BlackjackTablePage() {
                     }
 
                     return (
-                      <div className="mt-3 overflow-x-auto pb-1">
-                        <div className="flex min-w-max gap-3">
+                      <div className="mt-3">
+                        <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(110px,1fr))]">
                           {groups.map((g) => (
-                            <div key={g.label} className="min-w-[140px] max-w-[180px]">
+                            <div key={g.label} className="min-w-0">
                               <div className="mb-2 text-[11px] font-semibold text-white/60">{g.label}</div>
                               <div className="flex flex-col gap-2">
                                 {g.items.map(([k, v]) => {
@@ -1561,9 +1561,9 @@ export default function BlackjackTablePage() {
                                       }}
                                       title={k}
                                     >
-                                      <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center justify-between gap-1">
                                         <div className="font-semibold text-white">{powerupLabel(k)}</div>
-                                        <div className="text-white/60">x{v}</div>
+                                        <div className="font-mono text-white/60">{v}</div>
                                       </div>
                                     </button>
                                   );
