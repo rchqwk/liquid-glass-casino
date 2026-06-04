@@ -55,6 +55,7 @@ type Store = {
   announcements?: Array<{ id: number; ts: number; message: string }>;
   nextGlobalChatId?: number;
   global_chat?: Array<{ id: number; ts: number; user_id: number; username: string; text: string }>;
+  discord_links?: Array<{ discord_id: string; user_id: number; created_at: number }>;
 };
 
 const STORE_PATH = (() => {
@@ -84,6 +85,7 @@ function defaultStore(): Store {
     announcements: [],
     nextGlobalChatId: 1,
     global_chat: [],
+    discord_links: [],
   };
 }
 
@@ -209,6 +211,14 @@ async function ensureSchema() {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS discord_links (
+      discord_id TEXT PRIMARY KEY,
+      user_id INT NOT NULL REFERENCES users(id),
+      created_at BIGINT NOT NULL
+    )
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS game_stats (
       game_id TEXT PRIMARY KEY,
       wager_total DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -246,6 +256,78 @@ async function ensureSchema() {
 
   await sql`ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`;
   schemaReady = true;
+}
+
+export async function createOrGetDiscordLinkedUser(input: { discordId: string; displayName: string }) {
+  const discordId = String(input.discordId ?? "").trim();
+  if (!discordId) throw new Error("Missing discordId");
+  const displayName = normalizeUsername(String(input.displayName ?? "discord_user").slice(0, 32));
+  const now = Date.now();
+  const sql = getSql();
+
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`SELECT user_id FROM discord_links WHERE discord_id = ${discordId}`) as any[];
+    const existingUserId = rows[0]?.user_id;
+    if (existingUserId) {
+      const urows =
+        (await sql`SELECT id, username, role_level FROM users WHERE id = ${Number(existingUserId)}`) as any[];
+      const u = urows[0];
+      if (u) return { id: Number(u.id), username: String(u.username), role_level: Number(u.role_level ?? 0) };
+    }
+
+    // Create a dedicated username in our users table.
+    // Ensure uniqueness by suffixing last 6 chars of discordId if needed.
+    const base = displayName || "discord_user";
+    const suffix = discordId.slice(-6);
+    const uname = `${base}_${suffix}`.slice(0, 32);
+    await sql`INSERT INTO users (username, role_level, created_at) VALUES (${uname}, 0, ${now}) ON CONFLICT (username) DO NOTHING`;
+    const u2 = (await sql`SELECT id, username, role_level FROM users WHERE username = ${uname}`) as any[];
+    const user = u2[0];
+    if (!user) throw new Error("User create failed");
+    await sql`INSERT INTO discord_links (discord_id, user_id, created_at) VALUES (${discordId}, ${user.id}, ${now}) ON CONFLICT (discord_id) DO NOTHING`;
+    await sql`UPDATE users SET last_seen = ${now} WHERE id = ${user.id}`;
+    return { id: Number(user.id), username: String(user.username), role_level: Number(user.role_level ?? 0) };
+  }
+
+  // File-store fallback
+  return withStore((s) => {
+    s.discord_links = s.discord_links ?? [];
+    const existing = s.discord_links.find((l) => l.discord_id === discordId);
+    if (existing) {
+      const u = s.users.find((x) => x.id === existing.user_id);
+      if (u) return { id: u.id, username: u.username, role_level: u.role_level ?? 0 };
+    }
+    const base = displayName || "discord_user";
+    const uname = `${base}_${discordId.slice(-6)}`.slice(0, 32);
+    let user: any = s.users.find((x) => x.username === uname);
+    if (!user) {
+      user = { id: s.nextUserId++, username: uname, role_level: 0, created_at: now } as any;
+      s.users.push(user as any);
+    }
+    (user as any).last_seen = now;
+    s.discord_links.push({ discord_id: discordId, user_id: user.id, created_at: now });
+    return { id: user.id, username: user.username, role_level: user.role_level ?? 0 };
+  });
+}
+
+export async function discordSetActiveSession(userId: number, token: string) {
+  const sql = getSql();
+  const now = Date.now();
+  if (sql) {
+    await ensureSchema();
+    await sql`UPDATE users SET active_session_token = ${token}, last_seen = ${now} WHERE id = ${userId}`;
+    await sql`INSERT INTO sessions (token, user_id, created_at) VALUES (${token}, ${userId}, ${now})`;
+    return;
+  }
+  return withStore((s) => {
+    const u: any = s.users.find((x) => x.id === userId);
+    if (u) {
+      u.active_session_token = token;
+      u.last_seen = now;
+    }
+    s.sessions.push({ token, user_id: userId, created_at: now });
+  });
 }
 
 export async function touchUserLastSeen(userId: number) {
