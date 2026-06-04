@@ -10,6 +10,7 @@ export function Topbar() {
   const { user, loading } = useAuth();
   const role = user?.role_level ?? 0;
   const [barOpen, setBarOpen] = useState(false);
+  const autoHideTimerRef = useRef<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [broadcast, setBroadcast] = useState<string | null>(null);
   const [displayBalance, setDisplayBalance] = useState(balance);
@@ -32,6 +33,30 @@ export function Topbar() {
   useEffect(() => {
     displayBalanceRef.current = displayBalance;
   }, [displayBalance]);
+
+  // Auto-hide the expanded top bar after 5s of no cursor/activity.
+  useEffect(() => {
+    if (!barOpen) return;
+    const resetTimer = () => {
+      if (autoHideTimerRef.current) window.clearTimeout(autoHideTimerRef.current);
+      autoHideTimerRef.current = window.setTimeout(() => setBarOpen(false), 5000) as any;
+    };
+    resetTimer();
+    window.addEventListener("mousemove", resetTimer, { passive: true });
+    window.addEventListener("mousedown", resetTimer, { passive: true });
+    window.addEventListener("keydown", resetTimer);
+    window.addEventListener("touchstart", resetTimer, { passive: true });
+    window.addEventListener("scroll", resetTimer, { passive: true });
+    return () => {
+      window.removeEventListener("mousemove", resetTimer);
+      window.removeEventListener("mousedown", resetTimer);
+      window.removeEventListener("keydown", resetTimer);
+      window.removeEventListener("touchstart", resetTimer);
+      window.removeEventListener("scroll", resetTimer);
+      if (autoHideTimerRef.current) window.clearTimeout(autoHideTimerRef.current);
+      autoHideTimerRef.current = null;
+    };
+  }, [barOpen]);
 
   // Animate balance changes to count up/down smoothly.
   useEffect(() => {
@@ -112,17 +137,19 @@ export function Topbar() {
   return (
     <>
       {/* Floating balance bubble (always visible) */}
-      <div className="fixed top-3 right-3 z-[75]">
-        <button
-          type="button"
-          className="glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
-          onClick={() => setBarOpen((v) => !v)}
-          title="Toggle top bar"
-        >
-          <div className="text-[11px] text-white/60">Balance</div>
-          <div className="mt-0.5 font-mono text-sm font-semibold text-white/90">{displayBalance.toFixed(2)} ⓒ</div>
-        </button>
-      </div>
+      {!barOpen ? (
+        <div className="fixed top-3 right-3 z-[75]">
+          <button
+            type="button"
+            className="glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
+            onClick={() => setBarOpen(true)}
+            title="Toggle top bar"
+          >
+            <div className="text-[11px] text-white/60">Balance</div>
+            <div className="mt-0.5 font-mono text-sm font-semibold text-white/90">{displayBalance.toFixed(2)} ⓒ</div>
+          </button>
+        </div>
+      ) : null}
 
       {barOpen ? (
         <header className="sticky top-0 z-20 px-4 pt-4 sm:px-6">
