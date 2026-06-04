@@ -54,7 +54,6 @@ export default function BlackjackLobbyPage() {
     if (!discordMode) return;
     if (!user) return;
     if (autoJoining) return;
-    if (tables.length > 0) return; // only auto when lobby has no rooms listed
 
     // Determine channel_id from current URL or stored sessionStorage query string.
     let channelId: string | null = null;
@@ -86,7 +85,7 @@ export default function BlackjackLobbyPage() {
         setAutoJoining(false);
       }
     })();
-  }, [authLoading, discordMode, user, tables.length, autoJoining]);
+  }, [authLoading, discordMode, user, autoJoining]);
 
   const now = Date.now();
   const sorted = useMemo(() => [...tables].sort((a, b) => (b.bettingEndsAt ?? 0) - (a.bettingEndsAt ?? 0)), [tables]);

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
 import { useWallet } from "../../../lib/wallet";
+import { useAuth } from "../../../lib/authClient";
 
 type Suit = "♠" | "♥" | "♦" | "♣";
 type Card = { rank: string; suit: Suit; value: number };
@@ -117,6 +118,7 @@ type BJState = {
 
 export default function BlackjackTablePage() {
   const { beginBet, settleBet } = useWallet();
+  const { user, discordMode } = useAuth();
   const params = useParams<{ id?: string | string[] }>();
   const tableId =
     typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params?.id?.[0] : undefined;
@@ -155,6 +157,7 @@ export default function BlackjackTablePage() {
   }>({ messages: [], online: 0, active1h: 0 });
   const [powerupToasts, setPowerupToasts] = useState<Array<{ id: string; text: string }>>([]);
   const [lastEventAt, setLastEventAt] = useState(0);
+  const [discordAutoJoinTried, setDiscordAutoJoinTried] = useState(false);
 
   const inviteUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -166,6 +169,28 @@ export default function BlackjackTablePage() {
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  // Discord mode: force table id to be the call's channel_id.
+  useEffect(() => {
+    if (!discordMode) return;
+    if (typeof window === "undefined") return;
+    let channelId: string | null = null;
+    try {
+      const sp = new URLSearchParams(window.location.search || "");
+      channelId = sp.get("channel_id");
+      if (!channelId) {
+        const qs = sessionStorage.getItem("lgc.discord.qs") ?? "";
+        const sp2 = new URLSearchParams(qs.startsWith("?") ? qs.slice(1) : qs);
+        channelId = sp2.get("channel_id");
+      }
+    } catch {
+      // ignore
+    }
+    if (!channelId) return;
+    if (!safeTableId) return;
+    if (safeTableId === channelId) return;
+    window.location.replace(`/casino/blackjack/${encodeURIComponent(channelId)}`);
+  }, [discordMode, safeTableId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,6 +242,46 @@ export default function BlackjackTablePage() {
     if (chatOpen) return 0;
     return chatMessages.filter((m) => (Number(m.at) || 0) > chatLastReadAt).length;
   }, [chatMessages, chatLastReadAt, chatOpen]);
+
+  const isSpectator = !!user && !!state && Array.isArray(state.spectators) && state.spectators.includes(user.id);
+
+  // Discord mode: auto-join the call table when you land on it.
+  useEffect(() => {
+    if (!discordMode) return;
+    if (!user) return;
+    if (!safeTableId) return;
+    if (!state) return;
+    if (discordAutoJoinTried) return;
+    if (mySeat || isSpectator) {
+      setDiscordAutoJoinTried(true);
+      return;
+    }
+    setDiscordAutoJoinTried(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/blackjack/tables/${safeTableId}/join`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ spectate: false }),
+        });
+        const data = (await res.json().catch(() => ({}))) as any;
+        if (res.ok && data?.state) {
+          setState(data.state);
+          return;
+        }
+        // If seating fails (e.g. full), fall back to spectate.
+        const res2 = await fetch(`/api/blackjack/tables/${safeTableId}/join`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ spectate: true }),
+        });
+        const data2 = (await res2.json().catch(() => ({}))) as any;
+        if (res2.ok && data2?.state) setState(data2.state);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [discordMode, user, safeTableId, state, mySeat, isSpectator, discordAutoJoinTried]);
 
   useEffect(() => {
     if (!hostOpen || !state) return;
