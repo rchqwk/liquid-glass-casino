@@ -51,6 +51,12 @@ export default function Home({
               Enter casino
             </Link>
             <Link
+              className="glass-soft glass-shine inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-medium text-white transition hover:bg-white/10"
+              href="/casino/blackjack"
+            >
+              Enter blackjack
+            </Link>
+            <Link
               className="inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-medium text-[rgba(245,247,255,0.72)] transition hover:text-white"
               href="/casino/settings"
             >

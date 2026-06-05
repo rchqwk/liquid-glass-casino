@@ -31,9 +31,10 @@ export async function GET() {
 export async function POST(req: Request) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const body = (await req.json().catch(() => null)) as { boxId?: string; all?: boolean } | null;
+  const body = (await req.json().catch(() => null)) as { boxId?: string; all?: boolean; tableId?: string } | null;
   const boxId = body?.boxId ? String(body.boxId) : null;
   const openAll = body?.all === true;
+  const tableId = body?.tableId ? String(body.tableId) : null;
 
   const inv = ensureInventory((await getBlackjackInventory(user.id)) ?? null);
   const boxes = inv.boxes ?? [];
@@ -106,29 +107,55 @@ export async function POST(req: Request) {
   // IMPORTANT: keep active table state inventories in sync.
   // Otherwise, the next table poll tick can overwrite the DB inventory with the stale table copy.
   const now = Date.now();
-  const metas = await listBlackjackTables();
-  for (const m of metas) {
-    const t = await getBlackjackTable(m.id);
-    if (!t) continue;
-    const st: any = t.state ?? {};
-    const seats: any[] = Array.isArray(st.seats) ? st.seats : [];
-    let touched = false;
-    for (const p of seats) {
-      if (p && p.userId === user.id) {
-        p.inventory = inv;
-        touched = true;
+  if (tableId) {
+    const t = await getBlackjackTable(tableId);
+    if (t) {
+      const st: any = t.state ?? {};
+      const seats: any[] = Array.isArray(st.seats) ? st.seats : [];
+      let touched = false;
+      for (const p of seats) {
+        if (p && p.userId === user.id) {
+          p.inventory = inv;
+          touched = true;
+        }
+      }
+      if (touched) {
+        st.updatedAt = now;
+        await upsertBlackjackTable({
+          id: t.id,
+          public: t.public,
+          name: t.name,
+          state: st,
+          created_at: t.created_at,
+          updated_at: now,
+        });
       }
     }
-    if (touched) {
-      st.updatedAt = now;
-      await upsertBlackjackTable({
-        id: t.id,
-        public: t.public,
-        name: t.name,
-        state: st,
-        created_at: t.created_at,
-        updated_at: now,
-      });
+  } else {
+    const metas = await listBlackjackTables();
+    for (const m of metas) {
+      const t = await getBlackjackTable(m.id);
+      if (!t) continue;
+      const st: any = t.state ?? {};
+      const seats: any[] = Array.isArray(st.seats) ? st.seats : [];
+      let touched = false;
+      for (const p of seats) {
+        if (p && p.userId === user.id) {
+          p.inventory = inv;
+          touched = true;
+        }
+      }
+      if (touched) {
+        st.updatedAt = now;
+        await upsertBlackjackTable({
+          id: t.id,
+          public: t.public,
+          name: t.name,
+          state: st,
+          created_at: t.created_at,
+          updated_at: now,
+        });
+      }
     }
   }
 

@@ -36,6 +36,16 @@ export function MysteryBoxTab() {
   const { user } = useAuth();
   const pathname = usePathname();
   const isOnBlackjack = pathname?.startsWith("/casino/blackjack");
+  const tableIdFromPath = useMemo(() => {
+    const p = String(pathname ?? "");
+    const parts = p.split("/").filter(Boolean);
+    // /casino/blackjack/[id]
+    if (parts.length >= 3 && parts[0] === "casino" && parts[1] === "blackjack") {
+      const id = parts[2]!;
+      if (id && id !== "discord" && id !== "games") return id;
+    }
+    return null;
+  }, [pathname]);
   const [topbarOpen, setTopbarOpen] = useState<boolean>(() => {
     try {
       return (document?.documentElement?.dataset?.lgcTopbarOpen ?? "0") === "1";
@@ -116,7 +126,7 @@ export function MysteryBoxTab() {
       const res = await fetch("/api/blackjack/boxes", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ tableId: tableIdFromPath }),
       });
       const j = (await res.json()) as OpenResp;
       if (!res.ok || "error" in j) throw new Error("error" in j ? j.error : "Failed");
@@ -151,7 +161,7 @@ export function MysteryBoxTab() {
       const res = await fetch("/api/blackjack/boxes", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ all: true }),
+        body: JSON.stringify({ all: true, tableId: tableIdFromPath }),
       });
       const j = (await res.json()) as OpenAllResp;
       if (!res.ok || "error" in j) throw new Error("error" in j ? j.error : "Failed");
@@ -174,7 +184,7 @@ export function MysteryBoxTab() {
       const res = await fetch("/api/blackjack/boxes/trade", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ toTier }),
+        body: JSON.stringify({ toTier, tableId: tableIdFromPath }),
       });
       const j = (await res.json().catch(() => ({}))) as any;
       if (!res.ok) throw new Error(j?.error ?? "Trade failed");
