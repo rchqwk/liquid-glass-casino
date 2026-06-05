@@ -215,6 +215,58 @@ export default function TutorialPage() {
   const focusClass = (key: Step["focus"]) =>
     step.focus === key ? "ring-2 ring-emerald-300/60 drop-shadow-[0_0_24px_rgba(52,211,153,.12)]" : "ring-1 ring-white/10";
 
+  const panelInner = (
+    <>
+      <div className="text-xs font-semibold text-white/60">
+        Step {stepIdx + 1}/{steps.length}
+      </div>
+      <div className="mt-2 text-lg font-semibold text-white">{step.title}</div>
+      <div className="mt-2 text-sm leading-6 text-white/70">{step.body}</div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link
+          href="/casino/blackjack/rules"
+          target="_blank"
+          className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
+        >
+          Blackjack rules
+        </Link>
+        <Link
+          href="/casino/blackjack/special-rules"
+          target="_blank"
+          className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
+        >
+          Special rules
+        </Link>
+        <Link
+          href="/casino/blackjack/strategy"
+          target="_blank"
+          className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
+        >
+          Strategy guide
+        </Link>
+      </div>
+
+      <div className="mt-5 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          className="glass-soft rounded-2xl px-4 py-2 text-sm font-semibold text-white/70 hover:bg-white/10 disabled:opacity-40"
+          disabled={stepIdx === 0}
+          onClick={() => setStepIdx((s) => Math.max(0, s - 1))}
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          className="glass-soft rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/15"
+          onClick={() => setStepIdx((s) => Math.min(steps.length - 1, s + 1))}
+        >
+          {stepIdx >= steps.length - 1 ? "Finish" : "Next"}
+        </button>
+      </div>
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <div className="glass glass-shine rounded-3xl p-6">
@@ -237,60 +289,20 @@ export default function TutorialPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
-        {/* Left: explanation */}
-        <div className={`glass-soft glass-shine rounded-3xl p-5 ${focusClass("table")}`}>
-          <div className="text-xs font-semibold text-white/60">
-            Step {stepIdx + 1}/{steps.length}
-          </div>
-          <div className="mt-2 text-lg font-semibold text-white">{step.title}</div>
-          <div className="mt-2 text-sm leading-6 text-white/70">{step.body}</div>
+      {/* Mobile: tutorial text inline */}
+      <div className={`glass-soft glass-shine rounded-3xl p-5 lg:hidden ${focusClass("table")}`}>{panelInner}</div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link
-              href="/casino/blackjack/rules"
-              target="_blank"
-              className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
-            >
-              Blackjack rules
-            </Link>
-            <Link
-              href="/casino/blackjack/special-rules"
-              target="_blank"
-              className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
-            >
-              Special rules
-            </Link>
-            <Link
-              href="/casino/blackjack/strategy"
-              target="_blank"
-              className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
-            >
-              Strategy guide
-            </Link>
-          </div>
-
-          <div className="mt-5 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              className="glass-soft rounded-2xl px-4 py-2 text-sm font-semibold text-white/70 hover:bg-white/10 disabled:opacity-40"
-              disabled={stepIdx === 0}
-              onClick={() => setStepIdx((s) => Math.max(0, s - 1))}
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              className="glass-soft rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/15"
-              onClick={() => setStepIdx((s) => Math.min(steps.length - 1, s + 1))}
-            >
-              {stepIdx >= steps.length - 1 ? "Finish" : "Next"}
-            </button>
-          </div>
+      <div className="relative">
+        {/* Desktop: floating tutorial bubble pinned to the right */}
+        <div
+          className={`hidden lg:block fixed right-4 top-24 bottom-4 z-[70] w-[380px] overflow-auto glass-soft glass-shine rounded-3xl p-5 ${focusClass("table")}`}
+        >
+          {panelInner}
         </div>
 
-        {/* Right: visual mock table */}
-        <div className="glass-soft glass-shine rounded-3xl p-5">
+        {/* Visual mock table (leave room for the pinned bubble on desktop) */}
+        <div className="lg:pr-[420px]">
+          <div className="glass-soft glass-shine rounded-3xl p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm font-semibold text-white">Simulated table</div>
             <Pill tone="neutral">{step.scene.phaseLabel}</Pill>
@@ -452,8 +464,8 @@ export default function TutorialPage() {
             .
           </div>
         </div>
+        </div>
       </div>
     </div>
   );
 }
-
