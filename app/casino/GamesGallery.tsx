@@ -108,12 +108,12 @@ export function GamesGallery() {
       <div className="glass glass-shine rounded-3xl p-6">
         <h2 className="text-xl font-semibold text-white">Games</h2>
         <p className="mt-2 text-sm leading-6 text-white/70">
-          Browse the active games. Sort by total bets or total wagered.
+          Browse the active games. Stats below are for the last 24 hours.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70">
-            Total wagered (all games):{" "}
+            Total wagered (last 24h):{" "}
             <span className="ml-2 font-mono font-semibold text-white">{money(totalWagered)} ⓒ</span>
           </div>
 
@@ -164,7 +164,7 @@ export function GamesGallery() {
                 Bets: <span className="font-mono text-white/80">{c.bets}</span>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                Wagered: <span className="font-mono text-white/80">{money(c.wagerTotal)} ⓒ</span>
+                Wagered (24h): <span className="font-mono text-white/80">{money(c.wagerTotal)} ⓒ</span>
               </div>
             </div>
           </Link>

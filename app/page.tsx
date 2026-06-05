@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { EnterBlackjackButton } from "./components/EnterBlackjackButton";
 import { DiscordRootCallback } from "./components/DiscordRootCallback";
+import { StartTutorialButton } from "./components/StartTutorialButton";
 import { redirect } from "next/navigation";
 
 export default function Home({
@@ -62,6 +63,7 @@ export default function Home({
               Enter casino
             </Link>
             <EnterBlackjackButton />
+            <StartTutorialButton />
             <Link
               className="inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-medium text-[rgba(245,247,255,0.72)] transition hover:text-white"
               href="/casino/settings"

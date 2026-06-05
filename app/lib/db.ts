@@ -47,6 +47,13 @@ type Store = {
     bets: number;
     updated_at: number;
   }>;
+  nextGameStatEventId?: number;
+  game_stat_events?: Array<{
+    id: number;
+    ts: number;
+    game_id: string;
+    wager: number;
+  }>;
   blackjack_tables?: Array<{
     id: string;
     public: boolean;
@@ -88,6 +95,8 @@ function defaultStore(): Store {
     sessions: [],
     leaderboard: [],
     game_stats: [],
+    nextGameStatEventId: 1,
+    game_stat_events: [],
     blackjack_tables: [],
     blackjack_inventories: [],
     config: {},
@@ -234,6 +243,15 @@ async function ensureSchema() {
       wager_total DOUBLE PRECISION NOT NULL DEFAULT 0,
       bets INT NOT NULL DEFAULT 0,
       updated_at BIGINT NOT NULL
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS game_stat_events (
+      id SERIAL PRIMARY KEY,
+      ts BIGINT NOT NULL,
+      game_id TEXT NOT NULL,
+      wager DOUBLE PRECISION NOT NULL
     )
   `;
 
@@ -1087,6 +1105,9 @@ export async function recordGameStat(gameId: string, wager: number) {
   const now = Date.now();
   if (sql) {
     await ensureSchema();
+    // Store event (for last-24h stats)
+    await sql`INSERT INTO game_stat_events (ts, game_id, wager) VALUES (${now}, ${gid}, ${w})`;
+    await sql`DELETE FROM game_stat_events WHERE ts < ${now - 24 * 60 * 60 * 1000}`;
     await sql`
       INSERT INTO game_stats (game_id, wager_total, bets, updated_at)
       VALUES (${gid}, ${w}, 1, ${now})
@@ -1108,21 +1129,60 @@ export async function recordGameStat(gameId: string, wager: number) {
     row.wager_total = Number(row.wager_total) + w;
     row.bets = Number(row.bets) + 1;
     row.updated_at = now;
+
+    // Store event (for last-24h stats)
+    s.game_stat_events = s.game_stat_events ?? [];
+    const id = s.nextGameStatEventId ?? 1;
+    s.nextGameStatEventId = id + 1;
+    s.game_stat_events.push({ id, ts: now, game_id: gid, wager: w });
+    s.game_stat_events = s.game_stat_events.filter((e) => e.ts >= now - 24 * 60 * 60 * 1000);
   });
 }
 
-export async function getGameStats() {
+export async function getGameStats(sinceMs?: number | null) {
   const sql = getSql();
   if (sql) {
     await ensureSchema();
+    if (sinceMs != null) {
+      const cutoff = Number(sinceMs);
+      const rows =
+        (await sql`
+          SELECT
+            game_id,
+            COALESCE(SUM(wager), 0) AS wager_total,
+            COUNT(*) AS bets,
+            COALESCE(MAX(ts), 0) AS updated_at
+          FROM game_stat_events
+          WHERE ts >= ${cutoff}
+          GROUP BY game_id
+        `) as any[];
+      return rows as Array<{ game_id: string; wager_total: number; bets: number; updated_at: number }>;
+    }
     const rows =
       (await sql`
-        SELECT game_id, wager_total, bets, updated_at
-        FROM game_stats
-      `) as any[];
+          SELECT game_id, wager_total, bets, updated_at
+          FROM game_stats
+        `) as any[];
     return rows as Array<{ game_id: string; wager_total: number; bets: number; updated_at: number }>;
   }
-  return withStore((s) => (s.game_stats ?? []).slice());
+  return withStore((s) => {
+    if (sinceMs != null) {
+      const cutoff = Number(sinceMs);
+      const events = (s.game_stat_events ?? []).filter((e) => Number(e.ts ?? 0) >= cutoff);
+      const byId = new Map<string, { game_id: string; wager_total: number; bets: number; updated_at: number }>();
+      for (const ev of events) {
+        const gid = String(ev.game_id ?? "");
+        if (!gid) continue;
+        const cur = byId.get(gid) ?? { game_id: gid, wager_total: 0, bets: 0, updated_at: 0 };
+        cur.wager_total += Number(ev.wager ?? 0) || 0;
+        cur.bets += 1;
+        cur.updated_at = Math.max(cur.updated_at, Number(ev.ts ?? 0) || 0);
+        byId.set(gid, cur);
+      }
+      return Array.from(byId.values());
+    }
+    return (s.game_stats ?? []).slice();
+  });
 }
 
 export async function upsertBlackjackInventory(userId: number, inventory: any) {
