@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "../../lib/wallet";
 import { useAuth } from "../../lib/authClient";
 import { useGameConfig } from "../../lib/gameConfigClient";
+import { formatChips } from "../../lib/format";
 import { SCATTER, WILD, type SymbolId, spinCluster10x10, type CascadeStep } from "./engine";
 import { Slots5x5Sprite } from "../slots-5x5/Sprite";
 
@@ -166,7 +167,7 @@ export default function Slots10x10Page() {
             const tier = MAX_WIN_TIER_PROFITS[Math.min(base.count, MAX_WIN_TIER_PROFITS.length - 1)] ?? 250;
             const cappedProfit = tier;
             multiplier = (wagerAmt + cappedProfit) / wagerAmt;
-            outcome = `MAX WIN CAPPED: +${cappedProfit.toFixed(2)} ⓒ`;
+            outcome = `MAX WIN CAPPED: +${formatChips(cappedProfit)} ⓒ`;
             saveMaxWinState({ firstAt: base.firstAt, count: Math.min(base.count + 1, MAX_WIN_TIER_PROFITS.length - 1) });
           }
         }
@@ -239,7 +240,7 @@ export default function Slots10x10Page() {
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-white">Controls</p>
             <p className="text-xs text-white/60">
-              Balance: <span className="font-mono">{balance.toFixed(2)}</span> ⓒ
+              Balance: <span className="font-mono">{formatChips(balance)}</span> ⓒ
             </p>
           </div>
 
@@ -350,7 +351,7 @@ export default function Slots10x10Page() {
                 Return: <span className="font-mono">{last.returnMult.toFixed(2)}x</span> • Profit{" "}
                 <span className={`font-mono ${last.profit >= 0 ? "text-emerald-200" : "text-rose-200"}`}>
                   {last.profit >= 0 ? "+" : ""}
-                  {last.profit.toFixed(2)}
+                  {formatChips(last.profit)}
                 </span>
               </p>
             </div>

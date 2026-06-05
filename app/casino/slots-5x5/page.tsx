@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "../../lib/wallet";
 import { useAuth } from "../../lib/authClient";
 import { useGameConfig } from "../../lib/gameConfigClient";
+import { formatChips } from "../../lib/format";
 import { SCATTER, WILD, type SymbolId, spinSlots5x5, type WaysWinInfo } from "./engine";
 import { Slots5x5Sprite } from "./Sprite";
 
@@ -330,7 +331,7 @@ export default function Slots5x5Page() {
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-white">Controls</p>
             <p className="text-xs text-white/60">
-              Balance: <span className="font-mono">{balance.toFixed(2)}</span> ⓒ
+              Balance: <span className="font-mono">{formatChips(balance)}</span> ⓒ
             </p>
           </div>
 

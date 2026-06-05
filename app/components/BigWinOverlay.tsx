@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatChips } from "../lib/format";
 
 type BigWinDetail = {
   game: string;
@@ -11,7 +12,7 @@ type BigWinDetail = {
 };
 
 function formatNumber(n: number) {
-  return n.toFixed(2);
+  return formatChips(n);
 }
 
 const MILESTONES = [
@@ -167,4 +168,3 @@ export function BigWinOverlay() {
     </div>
   );
 }
-

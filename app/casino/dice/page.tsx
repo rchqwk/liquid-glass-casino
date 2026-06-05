@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useWallet } from "../../lib/wallet";
 import { useAuth } from "../../lib/authClient";
 import { useGameConfig } from "../../lib/gameConfigClient";
+import { formatChips } from "../../lib/format";
 
 export default function DicePage() {
   const { placeBet, balance } = useWallet();
@@ -41,7 +42,7 @@ export default function DicePage() {
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-white">Bet</p>
             <p className="text-xs text-white/60">
-              Balance: <span className="font-mono">{balance.toFixed(2)}</span> ⓒ
+              Balance: <span className="font-mono">{formatChips(balance)}</span> ⓒ
             </p>
           </div>
 
@@ -153,7 +154,7 @@ export default function DicePage() {
                   className={`font-mono ${last.profit >= 0 ? "text-emerald-200" : "text-rose-200"}`}
                 >
                   {last.profit >= 0 ? "+" : ""}
-                  {last.profit.toFixed(2)} ⓒ
+                  {formatChips(last.profit)} ⓒ
                 </span>
               </p>
             </div>

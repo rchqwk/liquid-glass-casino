@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "../../lib/wallet";
 import { useAuth } from "../../lib/authClient";
 import { useGameConfig } from "../../lib/gameConfigClient";
+import { formatChips } from "../../lib/format";
 import {
   SCATTER,
   WILD,
@@ -439,7 +440,7 @@ export default function SlotsPage() {
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-white">Spin</p>
             <p className="text-xs text-white/60">
-              Balance: <span className="font-mono">{balance.toFixed(2)}</span> ⓒ
+              Balance: <span className="font-mono">{formatChips(balance)}</span> ⓒ
             </p>
           </div>
 
@@ -663,7 +664,7 @@ export default function SlotsPage() {
               <p className="text-xs font-medium text-white/70">Gamble (double or nothing)</p>
               <p className="mt-1 text-xs text-white/60">
                 Winnings:{" "}
-                <span className="font-mono text-white/80">{pendingGamble.toFixed(2)}</span> ⓒ
+                <span className="font-mono text-white/80">{formatChips(pendingGamble)}</span> ⓒ
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -925,7 +926,7 @@ export default function SlotsPage() {
                 Profit{" "}
                 <span className={`font-mono ${last.profit >= 0 ? "text-emerald-200" : "text-rose-200"}`}>
                   {last.profit >= 0 ? "+" : ""}
-                  {last.profit.toFixed(2)} ⓒ
+                  {formatChips(last.profit)} ⓒ
                 </span>
               </p>
             </div>

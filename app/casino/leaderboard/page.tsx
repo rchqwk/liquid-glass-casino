@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatChips } from "../../lib/format";
 
 type Row = {
   username: string;
@@ -68,10 +69,10 @@ export default function LeaderboardPage() {
                       }`}
                     >
                       {r.profit_total >= 0 ? "+" : ""}
-                      {Number(r.profit_total).toFixed(2)}
+                      {formatChips(Number(r.profit_total))}
                     </td>
                     <td className="py-2 pr-4 font-mono text-white/70">
-                      {Number(r.wager_total).toFixed(2)}
+                      {formatChips(Number(r.wager_total))}
                     </td>
                     <td className="py-2 pr-4 font-mono text-white/70">
                       {r.bets}
@@ -86,4 +87,3 @@ export default function LeaderboardPage() {
     </div>
   );
 }
-

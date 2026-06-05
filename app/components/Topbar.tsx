@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "../lib/wallet";
 import { useAuth } from "../lib/authClient";
+import { formatChips, formatNumberWords } from "../lib/format";
 
 export function Topbar() {
   const { balance, deposit, reset, setBalance, refill5000AvailableAt, refill100AvailableAt } = useWallet();
@@ -213,7 +214,7 @@ export function Topbar() {
               <div>
                 <div className="text-sm font-semibold text-white">Prestige {nextPrestigeLevel}</div>
                 <div className="mt-1 text-xs text-white/60">
-                  Next prestige after this: <span className="font-mono">{nextAfterPrestigeAt.toLocaleString()}</span>
+                  Next prestige after this: <span className="font-mono">{formatNumberWords(nextAfterPrestigeAt)}</span>
                 </div>
               </div>
               <button
@@ -296,7 +297,7 @@ export function Topbar() {
             title="Toggle top bar"
           >
             <div className="text-[11px] text-white/60">Balance</div>
-            <div className="mt-0.5 font-mono text-sm font-semibold text-white/90">{displayBalance.toFixed(2)} ⓒ</div>
+            <div className="mt-0.5 font-mono text-sm font-semibold text-white/90">{formatChips(displayBalance)} ⓒ</div>
           </button>
         </div>
       ) : null}

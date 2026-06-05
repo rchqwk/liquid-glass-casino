@@ -2059,6 +2059,14 @@ export default function BlackjackTablePage() {
           {err ? (
             <>
               <div className="text-sm font-semibold text-rose-200">{err}</div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link
+                  href="/casino/blackjack"
+                  className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
+                >
+                  Return to lobby
+                </Link>
+              </div>
 
             </>
           ) : (

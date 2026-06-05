@@ -8,6 +8,7 @@ import type { BetKey } from "./rouletteMath";
 import { EUROPEAN_ORDER, colorOf, payoutMultiplierForKey } from "./rouletteMath";
 import { RouletteWheel } from "./RouletteWheel";
 import { useAuth } from "../../lib/authClient";
+import { formatChips } from "../../lib/format";
 
 export default function RoulettePage() {
   const { balance, beginBet, settleBet } = useWallet();
@@ -64,14 +65,14 @@ export default function RoulettePage() {
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-white">Bet slip</p>
                 <p className="text-xs text-white/60">
-                  Balance: <span className="font-mono">{balance.toFixed(2)}</span> ⓒ
+                  Balance: <span className="font-mono">{formatChips(balance)}</span> ⓒ
                 </p>
               </div>
 
               <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3">
                 <p className="text-xs text-white/60">Total stake</p>
                 <p className="mt-1 text-lg font-semibold text-white">
-                  {totalStake.toFixed(2)} ⓒ
+                  {formatChips(totalStake)} ⓒ
                 </p>
                 <p className="mt-2 text-[11px] leading-4 text-white/55">
                   Tip: click the same cell multiple times to stack chips.
@@ -126,7 +127,7 @@ export default function RoulettePage() {
 
                           const multiplier =
                             totalStake > 0 ? totalReturn / totalStake : 0;
-                          const outcome = `Spun ${spun} (${colorOf(spun)}). Return ${totalReturn.toFixed(2)} on stake ${totalStake.toFixed(2)}.`;
+                          const outcome = `Spun ${spun} (${colorOf(spun)}). Return ${formatChips(totalReturn)} on stake ${formatChips(totalStake)}.`;
                           const settled = settleBet({ nonce, multiplier, outcome });
                           if (!("error" in settled)) {
                             setLastOutcome(settled.outcome);
@@ -196,7 +197,7 @@ export default function RoulettePage() {
                       className={`font-mono ${lastProfit >= 0 ? "text-emerald-200" : "text-rose-200"}`}
                     >
                       {lastProfit >= 0 ? "+" : ""}
-                      {lastProfit.toFixed(2)} ⓒ
+                      {formatChips(lastProfit)} ⓒ
                     </span>
                   </p>
                 ) : null}
