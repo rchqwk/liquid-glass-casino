@@ -211,7 +211,9 @@ export function MysteryBoxTab() {
       {/* Floating tab */}
       <div
         className="pointer-events-none fixed right-3 z-[65]"
-        style={{ top: topbarOpen ? 96 : 78 }}
+        // Position under the Balance bubble when the topbar is closed, and under the
+        // expanded topbar header when it is open.
+        style={{ top: topbarOpen ? 124 : 88 }}
       >
         <button
           type="button"

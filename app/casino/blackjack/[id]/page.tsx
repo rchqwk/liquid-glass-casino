@@ -1087,7 +1087,7 @@ export default function BlackjackTablePage() {
       ) : null}
 
       {/* Host options (seat 1 only) */}
-      {isHost ? (
+      {false && isHost ? (
         <div className="pointer-events-none fixed bottom-40 left-4 z-[65]">
           <button
             type="button"
@@ -1103,7 +1103,7 @@ export default function BlackjackTablePage() {
 
       {/* Collectibles bubble (only when in-game) */}
       {gameActive ? (
-        <div className="pointer-events-none fixed bottom-28 left-4 z-[65]">
+        <div className="pointer-events-none fixed bottom-40 left-4 z-[65]">
           <button
             type="button"
             className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
