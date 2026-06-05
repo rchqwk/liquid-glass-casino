@@ -229,6 +229,7 @@ export function MysteryBoxTab() {
           type="button"
           className="pointer-events-auto glass glass-shine relative rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
           onClick={() => setOpen(true)}
+          data-tour="mystery-box-bubble"
         >
           <div className="font-semibold">Mystery Boxes</div>
           <div className="mt-1 text-[11px] text-white/60">Unopened: <span className="font-mono text-white/90">{unopened}</span></div>

@@ -57,6 +57,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       user: res.user,
       inactivePrompt: res.inactivePrompt,
+      session_token: token,
     });
   } catch (e: any) {
     // Always return JSON so the client doesn't throw while parsing.

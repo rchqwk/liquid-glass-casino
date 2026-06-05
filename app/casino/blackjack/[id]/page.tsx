@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
+import { TourOverlay } from "../../../components/TourOverlay";
+import { blackjackTourSteps } from "../../../lib/tourSteps";
 import { useWallet } from "../../../lib/wallet";
 import { useAuth } from "../../../lib/authClient";
 
@@ -1095,6 +1097,7 @@ export default function BlackjackTablePage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <TourOverlay steps={blackjackTourSteps} />
       {powerupToasts.length ? (
         <div className="pointer-events-none fixed top-24 left-1/2 z-[90] w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 space-y-2">
           {powerupToasts.map((t) => (
@@ -1131,6 +1134,7 @@ export default function BlackjackTablePage() {
             className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
             onClick={() => setCollectiblesOpen(true)}
             title="Collectibles"
+            data-tour="bj-collectibles-bubble"
           >
             <div className="font-semibold">Collectibles</div>
             <div className="mt-1 text-[11px] text-white/60">Decorate the felt</div>
@@ -1343,6 +1347,7 @@ export default function BlackjackTablePage() {
           className="pointer-events-auto glass glass-shine relative rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
           onClick={() => setChatOpen(true)}
           title="Room chat"
+          data-tour="bj-chat-bubble"
         >
           <div className="font-semibold">Chat</div>
           <div className="mt-1 text-[11px] text-white/60">Talk to players</div>
@@ -2097,7 +2102,7 @@ export default function BlackjackTablePage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
-          <div ref={roundControlsRef} className="glass-soft glass-shine rounded-3xl p-5">
+          <div ref={roundControlsRef} className="glass-soft glass-shine rounded-3xl p-5" data-tour="bj-round-controls">
             <p className="text-sm font-medium text-white">Round controls</p>
             <div className="mt-3 text-xs text-white/60">
             {state.phase === "betting" ? (
@@ -2136,6 +2141,7 @@ export default function BlackjackTablePage() {
                     disabled={state.phase !== "betting" || betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
                     className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
                     onClick={placeBetWithWallet}
+                    data-tour="bj-place-bet"
                   >
                     Place bet
                   </button>
@@ -2147,6 +2153,7 @@ export default function BlackjackTablePage() {
                     }`}
                     onClick={() => setAllIn((v) => !v)}
                     title="Bet your full balance"
+                    data-tour="bj-all-in"
                   >
                     All in
                   </button>
@@ -2220,7 +2227,7 @@ export default function BlackjackTablePage() {
                   </div>
                 ) : null}
 
-                <div className="mt-5">
+                <div className="mt-5" data-tour="bj-specials">
                   <p className="text-xs font-medium text-white/70">Specials</p>
                   {state.meInventory ? (
                     <div className="mt-2 text-[11px] text-white/55">

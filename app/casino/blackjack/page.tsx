@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../lib/authClient";
+import { TourOverlay } from "../../components/TourOverlay";
+import { blackjackTourSteps } from "../../lib/tourSteps";
 
 type TableRow = {
   id: string;
@@ -92,6 +94,7 @@ export default function BlackjackLobbyPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <TourOverlay steps={blackjackTourSteps} />
       {autoJoining ? (
         <div className="glass glass-shine rounded-3xl p-6 text-white/80">
           <div className="text-sm font-semibold text-white">Joining your Discord call table…</div>
@@ -106,7 +109,7 @@ export default function BlackjackLobbyPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
-        <div className="glass-soft glass-shine rounded-3xl p-5">
+        <div className="glass-soft glass-shine rounded-3xl p-5" data-tour="bj-create-join">
           <p className="text-sm font-medium text-white">Create table</p>
           <label className="mt-4 block text-xs text-white/60">Name</label>
           <input
@@ -146,7 +149,7 @@ export default function BlackjackLobbyPage() {
           {err ? <div className="mt-3 text-xs text-rose-200">{err}</div> : null}
         </div>
 
-        <div className="glass-soft glass-shine rounded-3xl p-5">
+        <div className="glass-soft glass-shine rounded-3xl p-5" data-tour="bj-public-tables">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-white">Public tables</p>
             <span className="text-xs text-white/60">{sorted.length} found</span>

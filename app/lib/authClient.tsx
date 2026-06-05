@@ -268,9 +268,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             body: JSON.stringify({ username }),
           });
           const data = (await res.json()) as
-            | { user: UserWithRole; inactivePrompt?: boolean }
+            | { user: UserWithRole; inactivePrompt?: boolean; session_token?: string }
             | { error: string };
           if (!res.ok) return { ok: false, error: ("error" in data ? data.error : "Sign-in failed") };
+          // Persist session token for environments where cookies may be blocked (iOS web).
+          if ("session_token" in data && data.session_token) {
+            try {
+              localStorage.setItem("lgc.session", String(data.session_token));
+            } catch {
+              // ignore
+            }
+          }
           if ("user" in data) setUser(data.user);
           return { ok: true, inactivePrompt: "inactivePrompt" in data ? data.inactivePrompt : undefined };
         } catch {
