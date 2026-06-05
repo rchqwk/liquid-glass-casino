@@ -15,6 +15,11 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   const isAllowed = useMemo(() => {
     // Always allow the dedicated profile page so users can manage sign-in/out.
     if (pathname === "/casino/profile") return true;
+    // Allow tutorial / docs pages without forcing sign-in (useful for first-time visitors).
+    if (pathname === "/casino/tutorial") return true;
+    if (pathname === "/casino/blackjack/rules") return true;
+    if (pathname === "/casino/blackjack/special-rules") return true;
+    if (pathname === "/casino/blackjack/strategy") return true;
     return false;
   }, [pathname]);
 

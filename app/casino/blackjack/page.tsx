@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../lib/authClient";
-import { TourOverlay } from "../../components/TourOverlay";
-import { blackjackTourSteps } from "../../lib/tourSteps";
 
 type TableRow = {
   id: string;
@@ -94,7 +92,6 @@ export default function BlackjackLobbyPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TourOverlay steps={blackjackTourSteps} />
       {autoJoining ? (
         <div className="glass glass-shine rounded-3xl p-6 text-white/80">
           <div className="text-sm font-semibold text-white">Joining your Discord call table…</div>

@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
-import { TourOverlay } from "../../../components/TourOverlay";
-import { blackjackTourSteps } from "../../../lib/tourSteps";
 import { useWallet } from "../../../lib/wallet";
 import { useAuth } from "../../../lib/authClient";
 
@@ -1097,7 +1095,6 @@ export default function BlackjackTablePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <TourOverlay steps={blackjackTourSteps} />
       {powerupToasts.length ? (
         <div className="pointer-events-none fixed top-24 left-1/2 z-[90] w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 space-y-2">
           {powerupToasts.map((t) => (
