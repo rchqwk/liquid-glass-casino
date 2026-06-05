@@ -598,6 +598,7 @@ export type PlayerSeat = {
   username: string;
   prestigeLevel?: number;
   nameColor?: string | null;
+  allIn?: boolean;
   joinedAt: number;
   lastSeenAt: number;
   missedRounds: number;
@@ -1088,6 +1089,7 @@ function startBetting(state: TableState, now: number) {
     if (!p) continue;
     p.inventory = normalizeInventory(p.inventory);
     p.skipThisRound = false;
+    p.allIn = false;
     normalizeHandsForSeat(p);
     const carry = Number(p.carryBetNext ?? 0) || 0;
     p.hands = [
@@ -1274,6 +1276,7 @@ export function applyBet(
   amount: number,
   now: number,
   betNonce?: number | null,
+  allIn?: boolean,
 ): { state: TableState; error?: string } {
   const s = tickTable(state, now);
   if (s.phase !== "betting") return { state: s, error: "Betting is closed." };
@@ -1288,6 +1291,7 @@ export function applyBet(
   const a = Number(amount);
   if (!Number.isFinite(a) || a <= 0) return { state: s, error: "Invalid bet amount." };
   p.hands[0]!.bet = Math.round(a * 100) / 100;
+  p.allIn = !!allIn;
   if (betNonce == null) {
     p.hands[0]!.nonces = [];
   } else {
@@ -1364,6 +1368,7 @@ export function applySkip(state: TableState, userId: number, now: number): { sta
   normalizeHandsForSeat(p);
   p.hands[0]!.bet = 0;
   p.hands[0]!.nonces = [];
+  p.allIn = false;
   p.activeHandIndex = 0;
   normalizeHandsForSeat(p);
   p.lastBetPlaced = 0;
@@ -1384,6 +1389,7 @@ export function applyClearBet(state: TableState, userId: number, now: number): {
   normalizeHandsForSeat(p);
   p.hands[0]!.bet = 0;
   p.hands[0]!.nonces = [];
+  p.allIn = false;
   p.activeHandIndex = 0;
   normalizeHandsForSeat(p);
   p.lastBetPlaced = 0;

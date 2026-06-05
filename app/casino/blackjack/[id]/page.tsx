@@ -139,6 +139,7 @@ export default function BlackjackTablePage() {
   const [state, setState] = useState<BJState | null>(null);
   const stateRef = useRef<BJState | null>(null);
   const [betAmount, setBetAmount] = useState(10);
+  const [allIn, setAllIn] = useState(false);
   const [ppAmount, setPpAmount] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -147,6 +148,13 @@ export default function BlackjackTablePage() {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  // When "All in" is active, keep the bet amount synced to current balance.
+  useEffect(() => {
+    if (!allIn) return;
+    const b = Math.max(0, Math.round(Number(balance ?? 0) * 100) / 100);
+    setBetAmount(b);
+  }, [allIn, balance]);
 
   // Discord Rich Presence + Join button support (Embedded App SDK).
   useEffect(() => {
@@ -585,6 +593,14 @@ export default function BlackjackTablePage() {
               <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 font-semibold text-white/85">
                 <NameBadge p={p} />
               </span>
+              {p.allIn ? (
+                <span
+                  className="rounded-full border border-yellow-300/25 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-100"
+                  title="All in"
+                >
+                  🟡 ALL-IN
+                </span>
+              ) : null}
               {p.bet ? (
                 <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
                   Bet <span className="font-mono text-white/80">{Number(p.bet).toFixed(2)}</span>
@@ -626,6 +642,11 @@ export default function BlackjackTablePage() {
           <div className="flex items-center justify-between gap-2">
             <div className="text-sm font-semibold">
               <NameBadge p={p} />
+              {p.allIn ? (
+                <span className="ml-2 rounded-full border border-yellow-300/25 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-semibold text-yellow-100">
+                  ALL-IN
+                </span>
+              ) : null}
             </div>
             <div className="text-xs text-white/60">
               Bet: <span className="font-mono text-white/80">{p.bet.toFixed(2)}</span>
@@ -997,7 +1018,7 @@ export default function BlackjackTablePage() {
 
   const placeBetWithWallet = async () => {
     if (state?.phase !== "betting") return;
-    const wager = Math.round(Number(betAmount ?? 0) * 100) / 100;
+    const wager = Math.round(Number((allIn ? balance : betAmount) ?? 0) * 100) / 100;
     if (!(wager > 0)) {
       setErr("Invalid bet amount");
       return;
@@ -1014,7 +1035,7 @@ export default function BlackjackTablePage() {
       return;
     }
     setBetPending(true);
-    const res = await post("bet", { amount: wager, betNonce: started.nonce });
+    const res = await post("bet", { amount: wager, betNonce: started.nonce, allIn });
     setBetPending(false);
     // If server rejected, refund the reserved wallet bet immediately.
     if (!res?.ok) {
@@ -1069,6 +1090,7 @@ export default function BlackjackTablePage() {
     setBetPending(true);
     await post("clearbet");
     setBetPending(false);
+    setAllIn(false);
   };
 
   return (
@@ -2105,7 +2127,7 @@ export default function BlackjackTablePage() {
                   step={0.01}
                   value={betAmount}
                   onChange={(e) => setBetAmount(Number(e.target.value))}
-                  disabled={state.phase !== "betting"}
+                  disabled={state.phase !== "betting" || allIn}
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
                 />
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -2116,6 +2138,17 @@ export default function BlackjackTablePage() {
                     onClick={placeBetWithWallet}
                   >
                     Place bet
+                  </button>
+                  <button
+                    type="button"
+                    disabled={state.phase !== "betting" || betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
+                    className={`glass-soft rounded-2xl px-4 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-40 ${
+                      allIn ? "border border-yellow-300/25 bg-yellow-500/10 text-yellow-100" : "text-white/80"
+                    }`}
+                    onClick={() => setAllIn((v) => !v)}
+                    title="Bet your full balance"
+                  >
+                    All in
                   </button>
                   <button
                     type="button"
@@ -2134,6 +2167,7 @@ export default function BlackjackTablePage() {
                       const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter((x: any) => Number.isFinite(x) && x >= 0);
                       for (const n of nonces) settleBet({ nonce: n, multiplier: 1, outcome: "Bet canceled" });
                       await post("skip");
+                      setAllIn(false);
                     }}
                   >
                     Skip round
