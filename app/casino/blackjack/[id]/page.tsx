@@ -1102,8 +1102,8 @@ export default function BlackjackTablePage() {
       ) : null}
 
       {/* Collectibles bubble (only when in-game) */}
-      {gameActive ? (
-        <div className="pointer-events-none fixed bottom-40 left-4 z-[65]">
+      {gameActive && !tableEditMode ? (
+        <div className="pointer-events-none fixed bottom-4 left-40 z-[65]">
           <button
             type="button"
             className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
@@ -1229,7 +1229,7 @@ export default function BlackjackTablePage() {
       {tableEditMode && gameActive ? (
         <>
           {/* Exit bubble */}
-          <div className="pointer-events-none fixed bottom-28 left-4 z-[75]">
+          <div className="pointer-events-none fixed bottom-4 left-4 z-[75]">
             <button
               type="button"
               className="pointer-events-auto glass glass-shine rounded-3xl border border-yellow-300/25 bg-yellow-500/10 px-4 py-3 text-left text-xs text-yellow-100 hover:bg-yellow-500/15"
@@ -1314,7 +1314,8 @@ export default function BlackjackTablePage() {
       ) : null}
 
       {/* Floating chat bubble (bottom-left) */}
-      <div className="pointer-events-none fixed bottom-24 left-4 z-[65]">
+      {!tableEditMode ? (
+      <div className="pointer-events-none fixed bottom-4 left-4 z-[65]">
         <button
           type="button"
           className="pointer-events-auto glass glass-shine relative rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
@@ -1330,6 +1331,7 @@ export default function BlackjackTablePage() {
           ) : null}
         </button>
       </div>
+      ) : null}
 
       {hostOpen ? (
         <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">

@@ -123,8 +123,8 @@ export function TurnQuickPanel(props: {
 
   return (
     <>
-      {/* Floating tab (stack above Mystery Boxes) */}
-      <div className="pointer-events-none fixed bottom-24 right-4 z-[65]">
+      {/* Floating tab */}
+      <div className="pointer-events-none fixed bottom-4 right-4 z-[65]">
         {props.timerLabel && typeof props.timerSeconds === "number" ? (
           <div className="pointer-events-auto absolute -top-16 right-0">
             <button
