@@ -1143,9 +1143,12 @@ export default function BlackjackTablePage() {
                 className={`rounded-2xl border px-3 py-2 text-xs ${
                   tableEditMode ? "border-yellow-300/25 bg-yellow-500/10 text-yellow-100" : "border-white/10 bg-white/5 text-white/70 hover:text-white"
                 }`}
-                onClick={() => setTableEditMode((v) => !v)}
+                onClick={() => {
+                  setCollectiblesOpen(false);
+                  setTableEditMode(true);
+                }}
               >
-                {tableEditMode ? "Exit table edit" : "Enter table edit"}
+                Enter table edit
               </button>
               <button
                 type="button"
@@ -1170,10 +1173,10 @@ export default function BlackjackTablePage() {
                       <button
                         key={k}
                         type="button"
-                        disabled={!tableEditMode}
+                        disabled
                         className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
-                        onClick={() => void postCollectible({ action: "place_emoji", key: k, x: 0.5, y: 0.55 })}
-                        title={tableEditMode ? "Place on felt" : "Enter table edit mode to place"}
+                        onClick={() => {}}
+                        title="Use Table Edit Mode to place"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="text-lg">{collectibleLabel(k)}</div>
@@ -1195,9 +1198,9 @@ export default function BlackjackTablePage() {
                       <button
                         key={f.id}
                         type="button"
-                        disabled={!tableEditMode}
+                        disabled
                         className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
-                        onClick={() => void postCollectible({ action: "place_figurine", figurineId: f.id, x: 0.5, y: 0.55 })}
+                        onClick={() => {}}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
@@ -1216,10 +1219,98 @@ export default function BlackjackTablePage() {
             </div>
 
             <div className="mt-4 text-xs text-white/50">
-              Tip: in edit mode you can drag your placed items. Tap your placed item to put it back in inventory.
+              Tip: enter Table Edit Mode to place and move items.
             </div>
           </div>
         </div>
+      ) : null}
+
+      {/* Table edit overlay (shows table + side inventory list) */}
+      {tableEditMode && gameActive ? (
+        <>
+          {/* Exit bubble */}
+          <div className="pointer-events-none fixed bottom-28 left-4 z-[75]">
+            <button
+              type="button"
+              className="pointer-events-auto glass glass-shine rounded-3xl border border-yellow-300/25 bg-yellow-500/10 px-4 py-3 text-left text-xs text-yellow-100 hover:bg-yellow-500/15"
+              onClick={() => {
+                setTableEditMode(false);
+                setDragId(null);
+              }}
+              title="Exit table edit mode"
+            >
+              <div className="font-semibold">Table Edit</div>
+              <div className="mt-1 text-[11px] text-yellow-100/70">Tap to exit</div>
+            </button>
+          </div>
+
+          {/* Side inventory list */}
+          <div className="pointer-events-none fixed right-3 top-28 z-[75] w-[220px] max-w-[48vw]">
+            <div className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-white/85">Collectibles</div>
+                <button
+                  type="button"
+                  className="rounded-2xl px-2 py-1 text-[11px] text-white/60 hover:text-white"
+                  onClick={() => setCollectiblesOpen(true)}
+                  title="Open full inventory"
+                >
+                  +
+                </button>
+              </div>
+              <div className="mt-2 max-h-[60vh] overflow-y-auto pr-1">
+                <div className="text-[11px] font-semibold text-white/60">Emoji</div>
+                <div className="mt-2 grid gap-2">
+                  {Object.entries(ownedCollectibles)
+                    .filter(([, v]) => Number(v) > 0)
+                    .map(([k, v]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-left text-[11px] text-white/80 hover:bg-white/10"
+                        onClick={() => void postCollectible({ action: "place_emoji", key: k, x: 0.5, y: 0.55 })}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-base">{collectibleLabel(k)}</div>
+                          <div className="font-mono text-white/60">{v}</div>
+                        </div>
+                      </button>
+                    ))}
+                  {Object.values(ownedCollectibles).every((v) => Number(v) <= 0) ? (
+                    <div className="text-xs text-white/45">No emoji items.</div>
+                  ) : null}
+                </div>
+
+                <div className="mt-4 text-[11px] font-semibold text-white/60">Figurines</div>
+                <div className="mt-2 grid gap-2">
+                  {figurines.length ? (
+                    figurines.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-left text-[11px] text-white/80 hover:bg-white/10"
+                        onClick={() => void postCollectible({ action: "place_figurine", figurineId: f.id, x: 0.5, y: 0.55 })}
+                      >
+                        <div className="flex items-center gap-2">
+                          <img src={f.imageUrl} alt="" className="h-8 w-8 rounded-lg border border-white/10 object-cover" />
+                          <div className="min-w-0">
+                            <div className="truncate text-white/80">Figurine</div>
+                            <div className="font-mono text-[10px] text-white/45">{f.id.slice(0, 6)}</div>
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="text-xs text-white/45">No figurines.</div>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 text-[10px] text-white/45">
+                Drag items on the felt to move. Tap × to return to inventory.
+              </div>
+            </div>
+          </div>
+        </>
       ) : null}
 
       {/* Floating chat bubble (bottom-left) */}
@@ -2439,16 +2530,27 @@ export default function BlackjackTablePage() {
                               e.stopPropagation();
                               setDragId(String(d.id));
                             }}
-                            onClick={async (e) => {
-                              if (!canEdit) return;
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const ok = window.confirm("Put this back in your inventory?");
-                              if (!ok) return;
-                              await postCollectible({ action: "pickup", decorationId: d.id });
-                            }}
-                            title={canEdit ? "Drag to move • Tap to pick up" : undefined}
+                            title={canEdit ? "Drag to move" : undefined}
                           >
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-black/40 text-[12px] font-semibold text-white/90 hover:bg-black/60"
+                                onPointerDown={(e) => {
+                                  // prevent starting a drag
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  void postCollectible({ action: "pickup", decorationId: d.id });
+                                }}
+                                title="Return to inventory"
+                              >
+                                ×
+                              </button>
+                            ) : null}
                             {d.kind === "figurine" ? (
                               <img
                                 src={String(d.imageUrl ?? "")}
