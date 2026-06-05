@@ -12,13 +12,6 @@ import { defaultInventory, ensureInventory, newTableState, safePublicStateForUse
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function dbSource() {
-  if (process.env.POSTGRES_URL) return "POSTGRES_URL";
-  if (process.env.NEON_DATABASE_URL) return "NEON_DATABASE_URL";
-  if (process.env.DATABASE_URL) return "DATABASE_URL";
-  return "file";
-}
-
 function shortId() {
   return Math.random().toString(16).slice(2, 10);
 }
@@ -79,7 +72,7 @@ export async function GET() {
       updatedAt: state.updatedAt,
     });
   }
-  return NextResponse.json({ tables: out, dbSource: dbSource() });
+  return NextResponse.json({ tables: out });
 }
 
 export async function POST(req: Request) {
@@ -141,10 +134,10 @@ export async function POST(req: Request) {
   const check = await getBlackjackTable(id);
   if (!check) {
     return NextResponse.json(
-      { error: "Table created but not readable (DB mismatch).", dbSource: dbSource() },
+      { error: "Table created but not readable." },
       { status: 500 },
     );
   }
 
-  return NextResponse.json({ tableId: id, state: safePublicStateForUser(state, user.id), dbSource: dbSource() });
+  return NextResponse.json({ tableId: id, state: safePublicStateForUser(state, user.id) });
 }

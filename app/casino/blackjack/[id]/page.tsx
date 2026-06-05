@@ -2059,7 +2059,7 @@ export default function BlackjackTablePage() {
           {err ? (
             <>
               <div className="text-sm font-semibold text-rose-200">{err}</div>
-              <div className="mt-2 text-xs text-white/55">If this persists, the Master Debug overlay (bottom-left) will show dbSource + knownTables.</div>
+
             </>
           ) : (
             "Loading…"

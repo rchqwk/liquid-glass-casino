@@ -27,22 +27,6 @@ export default function DiscordBlackjackEntryPage() {
 
   // If we initiated OAuth ourselves, we store channel id in `state`.
   const channelId = channelIdFromQuery ?? oauthStateFromQuery;
-  const rawQueryString = useMemo(() => {
-    try {
-      if (typeof window === "undefined") return "";
-      return window.location.search || "";
-    } catch {
-      return "";
-    }
-  }, []);
-  const rawHref = useMemo(() => {
-    try {
-      if (typeof window === "undefined") return "";
-      return window.location.href || "";
-    } catch {
-      return "";
-    }
-  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
@@ -374,12 +358,6 @@ export default function DiscordBlackjackEntryPage() {
               <div style={{ marginTop: 6 }}>
                 This usually means Discord is opening this as a normal web page instead of an Activity iframe. Start it from a
                 voice channel: <span className="lgc-mono">Rocket (Activities) → your app → Start</span>.
-              </div>
-              <div style={{ marginTop: 8 }} className="lgc-tiny">
-                Debug: <span className="lgc-mono">{rawQueryString || "(no query params)"}</span>
-              </div>
-              <div style={{ marginTop: 6 }} className="lgc-tiny">
-                URL: <span className="lgc-mono" style={{ wordBreak: "break-all" }}>{rawHref || "(unavailable)"}</span>
               </div>
             </div>
           ) : null}

@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../lib/authServer";
-import { getBlackjackTable, listBlackjackTables, upsertBlackjackInventory, upsertBlackjackTable } from "../../../../lib/db";
+import { getBlackjackTable, upsertBlackjackInventory, upsertBlackjackTable } from "../../../../lib/db";
 import { safePublicStateForUser, tickTable } from "../../../../lib/blackjackMultiplayer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function dbSource() {
-  if (process.env.POSTGRES_URL) return "POSTGRES_URL";
-  if (process.env.NEON_DATABASE_URL) return "NEON_DATABASE_URL";
-  if (process.env.DATABASE_URL) return "DATABASE_URL";
-  return "file";
-}
 
 export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await getAuthedUserAsync();
@@ -19,15 +12,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   const { id } = await ctx.params;
   const t = await getBlackjackTable(id);
   if (!t) {
-    const metas = await listBlackjackTables();
-    return NextResponse.json(
-      {
-        error: "Not found",
-        dbSource: dbSource(),
-        knownTables: metas.slice(0, 5).map((m) => m.id),
-      },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const now = Date.now();
@@ -45,7 +30,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
       created_at: t.created_at,
       updated_at: next.updatedAt,
     });
-    return NextResponse.json({ error: "Not found", dbSource: dbSource(), knownTables: [] }, { status: 404 });
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   if (next.updatedAt !== t.updated_at) {
@@ -62,5 +47,5 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     next.evictedInventories = [];
   }
 
-  return NextResponse.json({ state: safePublicStateForUser(next, user.id), dbSource: dbSource() });
+  return NextResponse.json({ state: safePublicStateForUser(next, user.id) });
 }
