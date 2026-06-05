@@ -289,7 +289,7 @@ export const SPECIALS: Record<SpecialId, SpecialDef> = {
 export type InventoryCategoryId = "boosts" | "saves" | "utility" | "magic" | "dealer" | "mythic";
 
 export type Inventory = {
-  v: 2;
+  v: 3;
   // How many hands this player has participated in at this table/session (persisted)
   handsPlayed: number;
   categories: Record<InventoryCategoryId, Partial<Record<SpecialId, number>>>;
@@ -301,6 +301,15 @@ export type Inventory = {
     opened: boolean;
     contents?: SpecialId[]; // stored server-side; omitted from GET response for unopened boxes
   }>;
+  bond?: {
+    owned: number; // inactive bond items owned
+    active?: {
+      principal: number;
+      value: number;
+      startedAt: number;
+      lastAccrualAt: number;
+    } | null;
+  };
 };
 
 function classifySpecial(id: SpecialId): InventoryCategoryId {
@@ -322,10 +331,12 @@ function classifySpecial(id: SpecialId): InventoryCategoryId {
 
 function normalizeInventory(raw: any): Inventory {
   // Migration from the old flat object: {SPECIAL_ID: count}
-  if (raw && raw.v === 2 && raw.categories) {
+  if (raw && raw.v === 3 && raw.categories) {
     const cats = raw.categories ?? {};
+    const bondRaw = raw.bond ?? {};
+    const active = bondRaw?.active ?? null;
     return {
-      v: 2,
+      v: 3,
       handsPlayed: Number(raw.handsPlayed ?? 0) || 0,
       categories: {
         boosts: (cats.boosts ?? {}) as any,
@@ -345,14 +356,53 @@ function normalizeInventory(raw: any): Inventory {
             contents: Array.isArray(b?.contents) ? (b.contents as SpecialId[]) : undefined,
           }))
         : [],
+      bond: {
+        owned: Math.max(0, Math.floor(Number(bondRaw?.owned ?? 0) || 0)),
+        active: active
+          ? {
+              principal: Math.max(0, Number(active?.principal ?? 0) || 0),
+              value: Math.max(0, Number(active?.value ?? 0) || 0),
+              startedAt: Number(active?.startedAt ?? 0) || 0,
+              lastAccrualAt: Number(active?.lastAccrualAt ?? active?.startedAt ?? 0) || 0,
+            }
+          : null,
+      },
+    };
+  }
+
+  if (raw && raw.v === 2 && raw.categories) {
+    const cats = raw.categories ?? {};
+    return {
+      v: 3,
+      handsPlayed: Number(raw.handsPlayed ?? 0) || 0,
+      categories: {
+        boosts: (cats.boosts ?? {}) as any,
+        saves: (cats.saves ?? {}) as any,
+        utility: (cats.utility ?? {}) as any,
+        magic: (cats.magic ?? {}) as any,
+        dealer: (cats.dealer ?? {}) as any,
+        mythic: (cats.mythic ?? {}) as any,
+      },
+      boxes: Array.isArray(raw.boxes)
+        ? (raw.boxes as any[]).map((b) => ({
+            id: String(b?.id ?? ""),
+            tier: (b?.tier === "rare" || b?.tier === "legendary" || b?.tier === "mythic" ? b.tier : "normal") as any,
+            awardedAt: Number(b?.awardedAt ?? 0) || 0,
+            openedAt: b?.openedAt != null ? Number(b.openedAt) : undefined,
+            opened: !!b?.opened,
+            contents: Array.isArray(b?.contents) ? (b.contents as SpecialId[]) : undefined,
+          }))
+        : [],
+      bond: { owned: 0, active: null },
     };
   }
 
   const inv: Inventory = {
-    v: 2,
+    v: 3,
     handsPlayed: 0,
     categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {}, mythic: {} },
     boxes: [],
+    bond: { owned: 0, active: null },
   };
 
   if (raw && typeof raw === "object") {
@@ -677,10 +727,11 @@ function shuffleDeck(seed: number) {
 
 export function defaultInventory(): Inventory {
   const inv: Inventory = {
-    v: 2,
+    v: 3,
     handsPlayed: 0,
     categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {}, mythic: {} },
     boxes: [],
+    bond: { owned: 0, active: null },
   };
   // Small starter kit
   invAdd(inv, "ADD2_SELF", 1);
@@ -766,6 +817,24 @@ function shortEventId() {
   return Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 10);
 }
 
+function roundMoney(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+function applyBondAccrual(inv: Inventory, now: number) {
+  const b = inv.bond;
+  const active = b?.active;
+  if (!b || !active) return false;
+  const last = Number(active.lastAccrualAt ?? active.startedAt ?? 0) || 0;
+  if (!last || now <= last) return false;
+  const periods = Math.floor((now - last) / 60_000);
+  if (periods <= 0) return false;
+  const factor = Math.pow(1.2, periods);
+  active.value = roundMoney(Math.max(0, Number(active.value ?? 0) || 0) * factor);
+  active.lastAccrualAt = last + periods * 60_000;
+  return true;
+}
+
 export function newTableState(input: { id: string; name: string; public: boolean; now: number }): TableState {
   return {
     id: input.id,
@@ -821,6 +890,11 @@ export function tickTable(state: TableState, now: number): TableState {
     if (!p) continue;
     p.inventory = normalizeInventory(p.inventory);
     normalizeHandsForSeat(p);
+    // Bond accrual happens only while the player is seated at the table.
+    if (applyBondAccrual(p.inventory, now)) {
+      // This is a real state change that must persist.
+      s.updatedAt = now;
+    }
   }
 
   // Clean dead spectators (no-op for MVP)
@@ -1805,6 +1879,13 @@ function settleRound(state: TableState, now: number): TableState {
         // Blackjack pays 2:1 (profit), i.e. 3x return including stake.
         mult = 3;
         outcome = "Blackjack (2:1)";
+        const pl = Number((p as any).prestigeLevel ?? 0) || 0;
+        if (pl > 0) {
+          // Prestige bonus: additional 2:1 per prestige level => +2x return per level.
+          const bonus = 2 * pl;
+          mult += bonus;
+          outcome += ` +${bonus.toFixed(0)}x (prestige)`;
+        }
       } else if (dTotal > 21) {
         mult = 2;
         outcome = `Dealer bust (${dTotal})`;
@@ -1841,6 +1922,15 @@ function settleRound(state: TableState, now: number): TableState {
           const bonus = 2 * (cards - 4);
           mult += bonus;
           outcome += ` +${bonus.toFixed(0)}x (cards)`;
+        }
+        // Prestige bonus for 5+ card wins: additional 2:1 per prestige level.
+        if (mult > 1 && cards >= 5) {
+          const pl = Number((p as any).prestigeLevel ?? 0) || 0;
+          if (pl > 0) {
+            const bonus = 2 * pl;
+            mult += bonus;
+            outcome += ` +${bonus.toFixed(0)}x (prestige)`;
+          }
         }
         // Extra bonus: 5+ cards AND exactly 21 => additional 2:1 (profit), i.e. +2x return.
         if (mult > 1 && cards >= 5 && pTotal === 21) {

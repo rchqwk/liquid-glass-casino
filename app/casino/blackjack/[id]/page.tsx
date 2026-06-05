@@ -119,7 +119,7 @@ type BJState = {
 };
 
 export default function BlackjackTablePage() {
-  const { beginBet, settleBet } = useWallet();
+  const { beginBet, settleBet, balance, setBalance } = useWallet();
   const { user, discordMode } = useAuth();
   const params = useParams<{ id?: string | string[] }>();
   const tableId =
@@ -288,6 +288,7 @@ export default function BlackjackTablePage() {
   const [betPending, setBetPending] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [bondPopup, setBondPopup] = useState<{ open: boolean; mode: "inactive" | "active" }>({ open: false, mode: "inactive" });
   const [hostOpen, setHostOpen] = useState(false);
   const [hostTurnMs, setHostTurnMs] = useState<30_000 | 60_000>(30_000);
   const [hostDisabled, setHostDisabled] = useState<Record<string, boolean>>({});
@@ -416,7 +417,21 @@ export default function BlackjackTablePage() {
 
   const nameClass = (p: Seat) => {
     const effective = p.userId === user?.id ? (((user as any)?.name_color ?? null) as any) : p.nameColor;
-    if (effective === "brown") return "text-amber-700";
+    const map: Record<string, string> = {
+      brown: "text-amber-700",
+      red: "text-rose-300",
+      orange: "text-orange-300",
+      yellow: "text-yellow-200",
+      green: "text-emerald-300",
+      teal: "text-teal-300",
+      blue: "text-sky-300",
+      indigo: "text-indigo-300",
+      violet: "text-violet-300",
+      pink: "text-pink-300",
+      cyan: "text-cyan-300",
+      lime: "text-lime-300",
+    };
+    if (effective && map[String(effective)]) return map[String(effective)]!;
     return "text-white/85";
   };
 
@@ -424,10 +439,12 @@ export default function BlackjackTablePage() {
     const effectivePrestige =
       p.userId === user?.id ? Number((user as any)?.prestige_level ?? 0) : Number(p.prestigeLevel ?? 0);
     const prestige = effectivePrestige;
+    const glow =
+      prestige > 0 && prestige % 5 === 0 ? "drop-shadow-[0_0_12px_rgba(250,204,21,.35)]" : "";
     return (
-      <span className={`inline-flex items-center gap-1 font-semibold ${nameClass(p)}`}>
+      <span className={`inline-flex items-center gap-1 font-semibold ${nameClass(p)} ${glow}`}>
         <span>{p.username}</span>
-        {prestige >= 1 ? <span className="text-yellow-300">★</span> : null}
+        {prestige >= 1 ? <span className="text-yellow-300">★{prestige}</span> : null}
       </span>
     );
   };
@@ -455,6 +472,13 @@ export default function BlackjackTablePage() {
 
   const isSpectator = !!user && !!state && Array.isArray(state.spectators) && state.spectators.includes(user.id);
   const gameActive = !!state && (!!mySeat || isSpectator);
+
+  const bond = (state?.meInventory as any)?.bond ?? null;
+  const bondOwned = Math.max(0, Number(bond?.owned ?? 0) || 0);
+  const bondActive = bond?.active ?? null;
+  const bondNextTickIn = bondActive
+    ? Math.max(0, 60 - Math.floor((now - Number(bondActive.lastAccrualAt ?? bondActive.startedAt ?? now)) / 1000))
+    : 0;
 
   // Provide blackjack context to the global top bar.
   useEffect(() => {
@@ -857,6 +881,19 @@ export default function BlackjackTablePage() {
     });
     const data = (await res.json()) as any;
     if (!res.ok) setErr(data?.error ?? "Action failed");
+    if (data?.state) setState(data.state);
+    return { ok: !!res.ok, data };
+  };
+
+  const postBond = async (body?: any) => {
+    if (!safeTableId) return { ok: false as const };
+    const res = await fetch(`/api/blackjack/tables/${safeTableId}/bond`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+    const data = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok) setErr(data?.error ?? "Bond action failed");
     if (data?.state) setState(data.state);
     return { ok: !!res.ok, data };
   };
@@ -1419,6 +1456,85 @@ export default function BlackjackTablePage() {
         </div>
       ) : null}
 
+      {/* Bond popup */}
+      {bondPopup.open ? (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 p-4">
+          <div className="glass glass-shine w-full max-w-[520px] rounded-3xl border border-white/10 p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">Bonds</div>
+                <div className="mt-1 text-xs text-white/60">+20% every 60 seconds while you are seated at the table.</div>
+              </div>
+              <button
+                type="button"
+                className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
+                onClick={() => setBondPopup({ open: false, mode: "inactive" })}
+              >
+                Close
+              </button>
+            </div>
+
+            {bondPopup.mode === "inactive" ? (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
+                <div>
+                  You have <span className="font-mono">{bondOwned}</span> bond(s).
+                </div>
+                <div className="mt-2 text-xs text-white/60">
+                  Activating a bond will move chips into the bond and start compounding while you stay seated.
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10"
+                    onClick={() => setBondPopup({ open: false, mode: "inactive" })}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={bondOwned <= 0}
+                    className="glass-soft rounded-2xl border border-yellow-300/25 bg-yellow-500/10 px-4 py-2 text-sm font-semibold text-yellow-100 hover:bg-yellow-500/15 disabled:opacity-40"
+                    onClick={async () => {
+                      if (bondOwned <= 0) return;
+                      const raw = window.prompt("How many chips do you want to put in the bond?") ?? "";
+                      const amt = Math.round(Number(raw) * 100) / 100;
+                      if (!Number.isFinite(amt) || amt <= 0) return;
+                      if (amt > Number(balance ?? 0)) {
+                        setErr("Not enough chips.");
+                        return;
+                      }
+                      const ok = window.confirm(`Activate bond with ${amt.toFixed(2)} chips?`);
+                      if (!ok) return;
+                      // Prototype: wallet is client-side; we deduct locally.
+                      setBalance(Math.max(0, Number(balance ?? 0) - amt));
+                      await postBond({ type: "activate", amount: amt });
+                      setBondPopup({ open: false, mode: "inactive" });
+                    }}
+                  >
+                    Activate Bond
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-yellow-300/15 bg-yellow-500/10 p-4 text-sm text-yellow-100">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold">Active Bond Value</div>
+                  <div className="font-mono">{Number(bondActive?.value ?? 0).toFixed(2)} ⓒ</div>
+                </div>
+                <div className="mt-2 text-xs text-yellow-100/70">
+                  Principal: <span className="font-mono">{Number(bondActive?.principal ?? 0).toFixed(2)}</span> • Next
+                  tick in <span className="font-mono">{bondNextTickIn}s</span>
+                </div>
+                <div className="mt-3 text-xs text-yellow-100/70">
+                  Rules: while seated, the bond value increases by <span className="font-semibold">1.2×</span> every 60
+                  seconds.
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       {removeCardPopup.open && state ? (
         <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 p-4">
           <div className="glass glass-shine w-full max-w-[520px] rounded-3xl border border-white/10 p-6">
@@ -1884,6 +2000,41 @@ export default function BlackjackTablePage() {
                               </div>
                             </div>
                           ))}
+                        </div>
+
+                        {/* Bonds (prestige item) */}
+                        <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-[11px] font-semibold text-white/80">Bonds</div>
+                            <div className="text-[11px] text-white/60">
+                              Owned: <span className="font-mono text-white/80">{bondOwned}</span>
+                            </div>
+                          </div>
+                          {bondActive ? (
+                            <button
+                              type="button"
+                              className="mt-2 w-full rounded-xl border border-yellow-300/15 bg-yellow-500/10 px-2 py-2 text-left text-[11px] text-yellow-100 hover:bg-yellow-500/15"
+                              onClick={() => setBondPopup({ open: true, mode: "active" })}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="font-semibold">Active Bond</div>
+                                <div className="font-mono">{Number(bondActive.value ?? 0).toFixed(2)} ⓒ</div>
+                              </div>
+                              <div className="mt-1 text-[10px] text-yellow-100/70">+20% every 60s while seated • next in {bondNextTickIn}s</div>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={bondOwned <= 0}
+                              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
+                              onClick={() => setBondPopup({ open: true, mode: "inactive" })}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="font-semibold">Inactive Bond</div>
+                                <div className="font-mono text-white/60">{bondOwned > 0 ? "Tap to activate" : "Buy in Prestige Shop"}</div>
+                              </div>
+                            </button>
+                          )}
                         </div>
                       </div>
                     );

@@ -8,6 +8,7 @@ type UserWithRole = {
   username: string;
   role_level: number;
   prestige_level?: number;
+  prestige_points?: number;
   name_color?: string | null;
 };
 

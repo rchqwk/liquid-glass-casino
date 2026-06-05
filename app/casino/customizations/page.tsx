@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../lib/authClient";
 
 type ApiResp =
-  | { ok: true; user?: any; prestige_level?: number; name_color?: string | null }
+  | { ok: true; user?: any; prestige_level?: number; prestige_points?: number; name_color?: string | null }
   | { error: string };
 
 export default function CustomizationsPage() {
@@ -15,7 +15,20 @@ export default function CustomizationsPage() {
   const [nameColor, setNameColor] = useState<string | null>(null);
 
   const prestige = Number((user as any)?.prestige_level ?? 0);
-  const unlockedBrown = prestige >= 1;
+  const COLORS: Array<{ key: string; label: string; minPrestige: number }> = [
+    { key: "brown", label: "Brown", minPrestige: 1 },
+    { key: "red", label: "Red", minPrestige: 2 },
+    { key: "orange", label: "Orange", minPrestige: 3 },
+    { key: "yellow", label: "Yellow", minPrestige: 4 },
+    { key: "green", label: "Green", minPrestige: 5 },
+    { key: "teal", label: "Teal", minPrestige: 6 },
+    { key: "blue", label: "Blue", minPrestige: 7 },
+    { key: "indigo", label: "Indigo", minPrestige: 8 },
+    { key: "violet", label: "Violet", minPrestige: 9 },
+    { key: "pink", label: "Pink", minPrestige: 10 },
+    { key: "cyan", label: "Cyan", minPrestige: 15 },
+    { key: "lime", label: "Lime", minPrestige: 20 },
+  ];
 
   useEffect(() => {
     setNameColor(((user as any)?.name_color ?? null) as any);
@@ -91,19 +104,26 @@ export default function CustomizationsPage() {
               >
                 Default
               </button>
-              <button
-                type="button"
-                disabled={saving || !unlockedBrown}
-                className={`rounded-2xl border px-3 py-2 text-xs ${
-                  nameColor === "brown"
-                    ? "border-yellow-300/30 bg-yellow-500/10 text-yellow-100"
-                    : "border-white/10 bg-white/5 text-white/70 hover:text-white disabled:opacity-40"
-                }`}
-                onClick={() => void saveColor("brown")}
-                title={unlockedBrown ? "Prestige 1 unlocked" : "Unlock by reaching Prestige 1"}
-              >
-                Brown (Prestige)
-              </button>
+              {COLORS.map((c) => {
+                const unlocked = prestige >= c.minPrestige;
+                const selected = nameColor === c.key;
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    disabled={saving || !unlocked}
+                    className={`rounded-2xl border px-3 py-2 text-xs ${
+                      selected
+                        ? "border-yellow-300/30 bg-yellow-500/10 text-yellow-100"
+                        : "border-white/10 bg-white/5 text-white/70 hover:text-white disabled:opacity-40"
+                    }`}
+                    onClick={() => void saveColor(c.key)}
+                    title={unlocked ? `Unlocked at Prestige ${c.minPrestige}` : `Unlock at Prestige ${c.minPrestige}`}
+                  >
+                    {c.label}
+                  </button>
+                );
+              })}
             </div>
 
             {msg ? <div className="mt-3 text-xs text-white/60">{msg}</div> : null}
@@ -113,4 +133,3 @@ export default function CustomizationsPage() {
     </div>
   );
 }
-

@@ -45,6 +45,7 @@ type WalletContextValue = {
   clientSeed: string;
   nonce: number;
   history: HistoryItem[];
+  setBalance: (balance: number) => void;
   getRngForNonce: (nonce: number) => BetRng | null;
   refill5000AvailableAt: number; // epoch ms
   refill100AvailableAt: number; // epoch ms
@@ -139,6 +140,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         clientSeed: "",
         nonce: 0,
         history: [],
+        setBalance: () => {},
         getRngForNonce: () => null,
         refill5000AvailableAt: 0,
         refill100AvailableAt: 0,
@@ -158,6 +160,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       clientSeed: state.clientSeed,
       nonce: state.nonce,
       history: state.history,
+      setBalance: (bal) => {
+        const nextBal = clampMoney(Number(bal ?? 0));
+        if (!Number.isFinite(nextBal) || nextBal < 0) return;
+        setState((s) => {
+          if (!s) return s;
+          return { ...s, balance: nextBal, openBets: {} };
+        });
+      },
       refill5000AvailableAt:
         (state.lastRefill5000At ?? 0) + REFILL_5000_COOLDOWN_MS,
       refill100AvailableAt:

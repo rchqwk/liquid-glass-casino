@@ -6,12 +6,13 @@ import { useWallet } from "../lib/wallet";
 import { useAuth } from "../lib/authClient";
 
 export function Topbar() {
-  const { balance, deposit, reset, refill5000AvailableAt, refill100AvailableAt } = useWallet();
+  const { balance, deposit, reset, setBalance, refill5000AvailableAt, refill100AvailableAt } = useWallet();
   const { user, loading, refresh } = useAuth();
   const role = user?.role_level ?? 0;
   const [barOpen, setBarOpen] = useState(false);
   const autoHideTimerRef = useRef<number | null>(null);
   const [prestigeBusy, setPrestigeBusy] = useState(false);
+  const [prestigeModalOpen, setPrestigeModalOpen] = useState(false);
   const [bjCtx, setBjCtx] = useState<{ active: boolean; tableId?: string; inviteUrl?: string } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [broadcast, setBroadcast] = useState<string | null>(null);
@@ -156,7 +157,19 @@ export function Topbar() {
   const refill100CooldownMs = Math.max(0, refill100AvailableAt - now);
   const canRefill = !loading && !!user;
   const prestigeLevel = Number((user as any)?.prestige_level ?? 0);
-  const canClaimPrestige1 = !!user && Number(balance ?? 0) >= 1_000_000_000 && prestigeLevel < 1;
+  const nextPrestigeAt = useMemo(() => {
+    const base = 1_000_000_000;
+    const step = 1_000_000;
+    return base * Math.pow(step, Math.max(0, prestigeLevel));
+  }, [prestigeLevel]);
+  const nextAfterPrestigeAt = useMemo(() => {
+    const base = 1_000_000_000;
+    const step = 1_000_000;
+    return base * Math.pow(step, Math.max(0, prestigeLevel + 1));
+  }, [prestigeLevel]);
+  const canPrestigeNow = !!user && Number(balance ?? 0) >= nextPrestigeAt;
+  const nextPrestigeLevel = prestigeLevel + 1;
+  const prestigePoints = Number((user as any)?.prestige_points ?? 0);
   const refillLabel = useMemo(() => {
     if (role >= 1) return "+5000";
     if (refillCooldownMs <= 0) return "+5000";
@@ -178,37 +191,98 @@ export function Topbar() {
   return (
     <>
       {/* Prestige bubble (shows when eligible) */}
-      {!barOpen && canClaimPrestige1 ? (
+      {!barOpen && canPrestigeNow ? (
         <div className="fixed top-3 left-3 z-[75]">
           <button
             type="button"
             disabled={prestigeBusy}
             className="glass glass-shine rounded-3xl border border-yellow-300/25 bg-yellow-500/10 px-4 py-3 text-left text-xs text-yellow-100 shadow-[0_0_30px_rgba(250,204,21,.18)] hover:bg-yellow-500/15 disabled:opacity-40"
-            onClick={async () => {
-              if (prestigeBusy) return;
-              setPrestigeBusy(true);
-              setMsg(null);
-              try {
-                const res = await fetch("/api/customizations", {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ claimPrestige1: true }),
-                });
-                const j = (await res.json().catch(() => ({}))) as any;
-                if (!res.ok) throw new Error(j?.error ?? "Failed");
-                await refresh();
-                setMsg("Prestige 1 unlocked.");
-              } catch (e: any) {
-                setMsg(String(e?.message ?? "Failed"));
-              } finally {
-                setPrestigeBusy(false);
-              }
-            }}
-            title="Unlock Prestige 1"
+            onClick={() => setPrestigeModalOpen(true)}
+            title={`Prestige ${nextPrestigeLevel}`}
           >
             <div className="text-[11px] text-yellow-200/80">Prestige ready</div>
-            <div className="mt-0.5 text-sm font-semibold">Prestige 1 ★</div>
+            <div className="mt-0.5 text-sm font-semibold">Prestige {nextPrestigeLevel} ★</div>
           </button>
+        </div>
+      ) : null}
+
+      {prestigeModalOpen ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4">
+          <div className="glass glass-shine w-full max-w-[520px] rounded-3xl border border-yellow-300/15 p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">Prestige {nextPrestigeLevel}</div>
+                <div className="mt-1 text-xs text-white/60">
+                  Next prestige after this: <span className="font-mono">{nextAfterPrestigeAt.toLocaleString()}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
+                onClick={() => setPrestigeModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-white/75">
+              <div className="font-semibold text-white/90">You gain:</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                <li>
+                  +1 <span className="font-semibold">Prestige Point</span> (you will have {prestigePoints + 1})
+                </li>
+                <li>★{nextPrestigeLevel} badge next to your name</li>
+                <li>+2:1 bonus on Blackjack payouts (prestige bonus)</li>
+                <li>+2:1 bonus on 5+ card win bonuses (prestige bonus)</li>
+              </ul>
+              <div className="mt-3 font-semibold text-rose-200">Warning (resets):</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-rose-100/90">
+                <li>Your money (chips) will be reset</li>
+                <li>Your Blackjack powerups / boxes will be reset</li>
+              </ul>
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10"
+                onClick={() => setPrestigeModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={prestigeBusy || !canPrestigeNow}
+                className="glass-soft rounded-2xl border border-yellow-300/25 bg-yellow-500/10 px-4 py-2 text-sm font-semibold text-yellow-100 hover:bg-yellow-500/15 disabled:opacity-40"
+                onClick={async () => {
+                  if (prestigeBusy) return;
+                  setPrestigeBusy(true);
+                  setMsg(null);
+                  try {
+                    const res = await fetch("/api/prestige", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ action: "prestige" }),
+                    });
+                    const j = (await res.json().catch(() => ({}))) as any;
+                    if (!res.ok) throw new Error(j?.error ?? "Failed");
+                    // Reset local wallet (chips) client-side.
+                    reset();
+                    setBalance(0);
+                    await refresh();
+                    setPrestigeModalOpen(false);
+                    setMsg(`Prestiged to ${nextPrestigeLevel}.`);
+                  } catch (e: any) {
+                    setMsg(String(e?.message ?? "Failed"));
+                  } finally {
+                    setPrestigeBusy(false);
+                  }
+                }}
+              >
+                Prestige now
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -297,6 +371,12 @@ export function Topbar() {
                 href="/casino/customizations"
               >
                 Customizations
+              </Link>
+              <Link
+                className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
+                href="/casino/prestige-shop"
+              >
+                Prestige Shop
               </Link>
               <Link
                 className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"

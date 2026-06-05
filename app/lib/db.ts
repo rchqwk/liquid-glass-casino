@@ -9,6 +9,7 @@ export type AuthedUserWithRole = {
   username: string;
   role_level: number;
   prestige_level?: number;
+  prestige_points?: number;
   name_color?: string | null;
 };
 
@@ -23,6 +24,7 @@ type Store = {
     username: string;
     role_level: number;
     prestige_level?: number;
+    prestige_points?: number;
     name_color?: string | null;
     created_at: number;
     fingerprint?: string;
@@ -262,6 +264,7 @@ async function ensureSchema() {
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_baseline DOUBLE PRECISION NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_baseline_ts BIGINT NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS prestige_level INT NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS prestige_points INT NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS name_color TEXT`;
 
   await sql`ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`;
@@ -617,7 +620,7 @@ export async function getUserBySessionToken(token: string): Promise<AuthedUserWi
     const rows =
       (await sql`
         SELECT u.id as id, u.username as username, u.role_level as role_level
-             , u.prestige_level as prestige_level, u.name_color as name_color
+             , u.prestige_level as prestige_level, u.prestige_points as prestige_points, u.name_color as name_color
         FROM sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.token = ${token}
@@ -640,6 +643,7 @@ export async function getUserBySessionToken(token: string): Promise<AuthedUserWi
       username: user.username,
       role_level: user.role_level ?? 0,
       prestige_level: Number((user as any).prestige_level ?? 0),
+      prestige_points: Number((user as any).prestige_points ?? 0),
       name_color: ((user as any).name_color ?? null) as any,
     };
   });
@@ -675,7 +679,7 @@ export async function loginUsernameWithToken(input: {
     const urows =
       (await sql`
         SELECT id, username, role_level, fingerprint, active_session_token, last_signout
-             , prestige_level, name_color
+             , prestige_level, prestige_points, name_color
         FROM users WHERE username = ${username}
       `) as any[];
     const user = urows[0];
@@ -726,6 +730,7 @@ export async function loginUsernameWithToken(input: {
         username: user.username,
         role_level: user.role_level as number,
         prestige_level: Number(user.prestige_level ?? 0),
+        prestige_points: Number(user.prestige_points ?? 0),
         name_color: (user.name_color ?? null) as any,
       },
       inactivePrompt,
@@ -767,6 +772,7 @@ export async function loginUsernameWithToken(input: {
         username: user.username,
         role_level: user.role_level ?? 0,
         prestige_level: Number((user as any).prestige_level ?? 0),
+        prestige_points: Number((user as any).prestige_points ?? 0),
         name_color: ((user as any).name_color ?? null) as any,
       },
       inactivePrompt,
@@ -792,7 +798,7 @@ export async function updateUserCustomizations(input: {
       await sql`UPDATE users SET name_color = ${input.name_color ?? null} WHERE id = ${uid}`;
     }
     const rows =
-      (await sql`SELECT id, username, role_level, prestige_level, name_color FROM users WHERE id = ${uid}`) as any[];
+      (await sql`SELECT id, username, role_level, prestige_level, prestige_points, name_color FROM users WHERE id = ${uid}`) as any[];
     const u = rows[0] ?? null;
     if (!u) return null;
     await sql`UPDATE users SET last_seen = ${now} WHERE id = ${uid}`;
@@ -801,6 +807,7 @@ export async function updateUserCustomizations(input: {
       username: String(u.username),
       role_level: Number(u.role_level ?? 0),
       prestige_level: Number(u.prestige_level ?? 0),
+      prestige_points: Number(u.prestige_points ?? 0),
       name_color: (u.name_color ?? null) as any,
     };
   }
@@ -819,8 +826,97 @@ export async function updateUserCustomizations(input: {
       username: u.username,
       role_level: u.role_level ?? 0,
       prestige_level: Number((u as any).prestige_level ?? 0),
+      prestige_points: Number((u as any).prestige_points ?? 0),
       name_color: ((u as any).name_color ?? null) as any,
     };
+  });
+}
+
+export async function applyPrestige(input: { userId: number; nextColor?: string | null }) {
+  const sql = getSql();
+  const now = Date.now();
+  if (sql) {
+    await ensureSchema();
+    const uid = Number(input.userId);
+    if (!Number.isFinite(uid) || uid <= 0) return null;
+    await sql`UPDATE users SET prestige_level = prestige_level + 1, prestige_points = prestige_points + 1 WHERE id = ${uid}`;
+    if (Object.prototype.hasOwnProperty.call(input, "nextColor")) {
+      await sql`UPDATE users SET name_color = ${input.nextColor ?? null} WHERE id = ${uid}`;
+    }
+    const rows =
+      (await sql`SELECT id, username, role_level, prestige_level, prestige_points, name_color FROM users WHERE id = ${uid}`) as any[];
+    const u = rows[0] ?? null;
+    if (!u) return null;
+    await sql`UPDATE users SET last_seen = ${now} WHERE id = ${uid}`;
+    return {
+      id: Number(u.id),
+      username: String(u.username),
+      role_level: Number(u.role_level ?? 0),
+      prestige_level: Number(u.prestige_level ?? 0),
+      prestige_points: Number(u.prestige_points ?? 0),
+      name_color: (u.name_color ?? null) as any,
+    } satisfies AuthedUserWithRole;
+  }
+
+  return withStore((s) => {
+    const u = s.users.find((x) => x.id === input.userId) as any;
+    if (!u) return null;
+    u.prestige_level = Number(u.prestige_level ?? 0) + 1;
+    u.prestige_points = Number(u.prestige_points ?? 0) + 1;
+    if (Object.prototype.hasOwnProperty.call(input, "nextColor")) u.name_color = input.nextColor ?? null;
+    return {
+      id: u.id,
+      username: u.username,
+      role_level: u.role_level ?? 0,
+      prestige_level: Number(u.prestige_level ?? 0),
+      prestige_points: Number(u.prestige_points ?? 0),
+      name_color: (u.name_color ?? null) as any,
+    } satisfies AuthedUserWithRole;
+  });
+}
+
+export async function spendPrestigePoints(input: { userId: number; cost: number }) {
+  const sql = getSql();
+  const now = Date.now();
+  const uid = Number(input.userId);
+  const cost = Math.max(0, Math.floor(Number(input.cost ?? 0)));
+  if (!Number.isFinite(uid) || uid <= 0) return null;
+  if (!Number.isFinite(cost) || cost <= 0) return null;
+  if (sql) {
+    await ensureSchema();
+    const rows =
+      (await sql`SELECT prestige_points FROM users WHERE id = ${uid}`) as any[];
+    const cur = Number(rows[0]?.prestige_points ?? 0);
+    if (cur < cost) throw new Error("Not enough prestige points.");
+    await sql`UPDATE users SET prestige_points = prestige_points - ${cost}, last_seen = ${now} WHERE id = ${uid}`;
+    const rows2 =
+      (await sql`SELECT id, username, role_level, prestige_level, prestige_points, name_color FROM users WHERE id = ${uid}`) as any[];
+    const u = rows2[0] ?? null;
+    if (!u) return null;
+    return {
+      id: Number(u.id),
+      username: String(u.username),
+      role_level: Number(u.role_level ?? 0),
+      prestige_level: Number(u.prestige_level ?? 0),
+      prestige_points: Number(u.prestige_points ?? 0),
+      name_color: (u.name_color ?? null) as any,
+    } satisfies AuthedUserWithRole;
+  }
+
+  return withStore((s) => {
+    const u = s.users.find((x) => x.id === uid) as any;
+    if (!u) return null;
+    const cur = Number(u.prestige_points ?? 0);
+    if (cur < cost) throw new Error("Not enough prestige points.");
+    u.prestige_points = cur - cost;
+    return {
+      id: u.id,
+      username: u.username,
+      role_level: u.role_level ?? 0,
+      prestige_level: Number(u.prestige_level ?? 0),
+      prestige_points: Number(u.prestige_points ?? 0),
+      name_color: (u.name_color ?? null) as any,
+    } satisfies AuthedUserWithRole;
   });
 }
 
