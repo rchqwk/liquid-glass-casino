@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { EnterBlackjackButton } from "./components/EnterBlackjackButton";
+import { DiscordRootCallback } from "./components/DiscordRootCallback";
 import { redirect } from "next/navigation";
 
 export default function Home({
@@ -7,6 +8,15 @@ export default function Home({
 }: {
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
+  // If Discord OAuth redirected back to the site root (rchqwk.com),
+  // complete the login client-side from here.
+  const code = typeof searchParams?.code === "string" ? searchParams.code : null;
+  const state =
+    typeof searchParams?.state === "string" ? searchParams.state : null;
+  if (code) {
+    return <DiscordRootCallback code={code} state={state} />;
+  }
+
   // If Discord launches the Activity at the site root (recommended), it will append
   // Embedded App query params like `frame_id`. Detect that and forward into the
   // casino experience while preserving query params.

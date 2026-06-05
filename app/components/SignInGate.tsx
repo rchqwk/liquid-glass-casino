@@ -38,13 +38,35 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (discordMode) return;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+    const returnTo = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/";
+
+    // Web version on rchqwk.com uses a root redirect URI and broader scopes.
+    if (hostname === "rchqwk.com") {
+      try {
+        sessionStorage.setItem("lgc.discord.webReturnTo", returnTo);
+      } catch {
+        // ignore
+      }
+      const url = new URL("https://discord.com/oauth2/authorize");
+      url.searchParams.set("client_id", "1512024820194349157");
+      url.searchParams.set("response_type", "code");
+      url.searchParams.set("redirect_uri", origin || "https://rchqwk.com");
+      url.searchParams.set(
+        "scope",
+        "activities.write activities.invites.write activities.read identify",
+      );
+      setDiscordUrl(url.toString());
+      return;
+    }
+
     const clientId =
       process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ?? "";
     if (!clientId) return;
     const redirectUri =
       process.env.NEXT_PUBLIC_DISCORD_WEB_REDIRECT_URI ??
       "https://rchqwk-liquid-glass-casino.vercel.app/discord/callback";
-    const returnTo = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/";
     const url = new URL("https://discord.com/oauth2/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("response_type", "code");
