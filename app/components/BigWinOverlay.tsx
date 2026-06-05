@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatChips } from "../lib/format";
+import { useWallet } from "../lib/wallet";
 
 type BigWinDetail = {
   game: string;
@@ -46,18 +47,59 @@ function durationFor(x: number) {
 }
 
 export function BigWinOverlay() {
+  const { balance } = useWallet();
   const [active, setActive] = useState<BigWinDetail | null>(null);
   const [shownProfit, setShownProfit] = useState(0);
   const [shownX, setShownX] = useState(0);
   const [shownLabel, setShownLabel] = useState<string | null>(null);
   const [centerMode, setCenterMode] = useState(false);
+  const [fading, setFading] = useState(false);
+  const [bankrollMult10m, setBankrollMult10m] = useState<number>(1);
 
   const rafRef = useRef<number | null>(null);
   const startedAtRef = useRef<number>(0);
+  const hideTimerRef = useRef<number | null>(null);
+  const historyRef = useRef<Array<{ t: number; b: number }>>([]);
+  const balanceRef = useRef<number>(0);
 
   const targetProfit = active?.profit ?? 0;
   const targetX = active?.returnMult ?? 0;
   const title = useMemo(() => (active ? labelFor(active.returnMult) : null), [active]);
+
+  const bankrollLabel = useMemo(() => {
+    const x = Math.floor(bankrollMult10m + 1e-9);
+    if (x < 2) return null;
+    if (x === 2) return "BANKROLL DOUBLED";
+    if (x === 3) return "BANKROLL TRIPLED";
+    if (x === 4) return "BANKROLL QUADRUPLED";
+    return `BANKROLL ${x}x`;
+  }, [bankrollMult10m]);
+
+  const computeBankrollMult10m = () => {
+    const now = Date.now();
+    const cutoff = now - 10 * 60 * 1000;
+    const hist = historyRef.current.filter((p) => p.t >= cutoff);
+    historyRef.current = hist;
+    const cur = Number(balanceRef.current ?? 0);
+    const candidates = hist.map((p) => Number(p.b ?? 0)).filter((b) => Number.isFinite(b) && b > 0);
+    if (!Number.isFinite(cur) || cur <= 0 || candidates.length === 0) return 1;
+    const min = Math.min(...candidates);
+    if (!Number.isFinite(min) || min <= 0) return 1;
+    return Math.max(1, cur / min);
+  };
+
+  // Track bankroll history (last 10 minutes).
+  useEffect(() => {
+    const now = Date.now();
+    const b = Number(balance ?? 0);
+    balanceRef.current = b;
+    historyRef.current.push({ t: now, b });
+    // prune
+    const cutoff = now - 10 * 60 * 1000;
+    historyRef.current = historyRef.current.filter((p) => p.t >= cutoff);
+    setBankrollMult10m(computeBankrollMult10m());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [balance]);
 
   // Clear on any next spin
   useEffect(() => {
@@ -67,6 +109,9 @@ export function BigWinOverlay() {
       setShownX(0);
       setShownLabel(null);
       setCenterMode(false);
+      setFading(false);
+      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
     };
     window.addEventListener("lgc:betstart", onStart as any);
     return () => window.removeEventListener("lgc:betstart", onStart as any);
@@ -80,7 +125,19 @@ export function BigWinOverlay() {
       setShownX(0);
       setShownLabel(labelFor(20));
       setCenterMode(detail.returnMult >= 50); // mega+ gets center alert
+      setFading(false);
       startedAtRef.current = performance.now();
+
+      // Auto-fade after 5s (public alpha: don't keep overlays stuck).
+      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = window.setTimeout(() => {
+        setFading(true);
+        window.setTimeout(() => {
+          setActive(null);
+          setCenterMode(false);
+          setFading(false);
+        }, 650);
+      }, 5000);
     };
     window.addEventListener("lgc:bigwin", onBigWin as any);
     return () => window.removeEventListener("lgc:bigwin", onBigWin as any);
@@ -112,13 +169,6 @@ export function BigWinOverlay() {
         rafRef.current = window.requestAnimationFrame(tick);
       } else {
         rafRef.current = null;
-        // If it's not a mega+ win, fade out after a moment.
-        if (active.returnMult < 50) {
-          window.setTimeout(() => {
-            setActive(null);
-            setCenterMode(false);
-          }, 1200);
-        }
       }
     };
 
@@ -133,7 +183,7 @@ export function BigWinOverlay() {
   if (!active) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[60]">
+    <div className={`pointer-events-none fixed inset-0 z-[60] transition-opacity duration-500 ${fading ? "opacity-0" : "opacity-100"}`}>
       {/* Mild top banner always */}
       <div className="pointer-events-none absolute left-0 right-0 top-16 flex justify-center px-4">
         <div className="bigwin-banner glass-soft rounded-2xl border border-white/10 px-4 py-2 text-center text-xs text-white/85">
@@ -142,6 +192,14 @@ export function BigWinOverlay() {
           <span className="font-mono">{shownX.toFixed(2)}x</span>{" "}
           <span className="text-white/55">•</span>{" "}
           <span className="font-mono">+{formatNumber(shownProfit)} ⓒ</span>
+          {bankrollLabel ? (
+            <>
+              {" "}
+              <span className="text-white/55">•</span>{" "}
+              <span className="font-semibold text-emerald-200">{bankrollLabel}</span>{" "}
+              <span className="text-white/55">(last 10m)</span>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -159,9 +217,11 @@ export function BigWinOverlay() {
             <div className="mt-2 text-lg text-white/85">
               <span className="font-mono">+{formatNumber(shownProfit)} ⓒ</span>
             </div>
-            <div className="mt-4 text-[11px] text-white/55">
-              (Holds until a higher milestone or your next spin)
-            </div>
+            {bankrollLabel ? (
+              <div className="mt-3 text-[11px] font-semibold text-emerald-200">
+                {bankrollLabel} <span className="font-normal text-white/55">(last 10m)</span>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
