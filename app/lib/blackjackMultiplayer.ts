@@ -310,6 +310,10 @@ export type Inventory = {
       lastAccrualAt: number;
     } | null;
   };
+  collectibles?: {
+    owned: Record<string, number>; // emoji collectibles by key (e.g. "SODA_CUP")
+    figurines: Array<{ id: string; imageUrl: string; createdAt: number }>;
+  };
 };
 
 function classifySpecial(id: SpecialId): InventoryCategoryId {
@@ -335,6 +339,9 @@ function normalizeInventory(raw: any): Inventory {
     const cats = raw.categories ?? {};
     const bondRaw = raw.bond ?? {};
     const active = bondRaw?.active ?? null;
+    const colRaw = raw.collectibles ?? {};
+    const ownedRaw = colRaw?.owned ?? {};
+    const figurinesRaw = colRaw?.figurines ?? [];
     return {
       v: 3,
       handsPlayed: Number(raw.handsPlayed ?? 0) || 0,
@@ -367,6 +374,28 @@ function normalizeInventory(raw: any): Inventory {
             }
           : null,
       },
+      collectibles: {
+        owned:
+          ownedRaw && typeof ownedRaw === "object"
+            ? Object.fromEntries(
+                Object.entries(ownedRaw).map(([k, v]) => [String(k), Math.max(0, Math.floor(Number(v ?? 0) || 0))]),
+              )
+            : {},
+        figurines: Array.isArray(figurinesRaw)
+          ? (figurinesRaw as any[]).flatMap((f) => {
+              const id = String(f?.id ?? "");
+              const imageUrl = String(f?.imageUrl ?? "");
+              if (!id || !imageUrl) return [];
+              return [
+                {
+                  id,
+                  imageUrl,
+                  createdAt: Number(f?.createdAt ?? 0) || 0,
+                },
+              ];
+            })
+          : [],
+      },
     };
   }
 
@@ -394,6 +423,7 @@ function normalizeInventory(raw: any): Inventory {
           }))
         : [],
       bond: { owned: 0, active: null },
+      collectibles: { owned: {}, figurines: [] },
     };
   }
 
@@ -403,6 +433,7 @@ function normalizeInventory(raw: any): Inventory {
     categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {}, mythic: {} },
     boxes: [],
     bond: { owned: 0, active: null },
+    collectibles: { owned: {}, figurines: [] },
   };
 
   if (raw && typeof raw === "object") {
@@ -612,6 +643,18 @@ export type TableState = {
   // Broadcast events for the table (used for toasts/alerts)
   events?: Array<{ id: string; at: number; text: string }>;
 
+  // Felt decorations (collectibles)
+  decorations?: Array<{
+    id: string;
+    ownerUserId: number;
+    kind: "emoji" | "figurine";
+    key?: string; // for emoji collectibles
+    imageUrl?: string; // for figurines
+    x: number; // 0..1 (relative to felt container)
+    y: number; // 0..1
+    createdAt: number;
+  }>;
+
   phase: Phase;
   round: number;
   bettingEndsAt: number; // epoch ms
@@ -732,6 +775,10 @@ export function defaultInventory(): Inventory {
     categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {}, mythic: {} },
     boxes: [],
     bond: { owned: 0, active: null },
+    collectibles: {
+      owned: { SODA_CUP: 1, CHICKEN_WING: 1, FRIES: 1, DICE: 1 },
+      figurines: [],
+    },
   };
   // Small starter kit
   invAdd(inv, "ADD2_SELF", 1);
@@ -850,6 +897,7 @@ export function newTableState(input: { id: string; name: string; public: boolean
     afkKickEnabled: true,
     chat: [],
     events: [],
+    decorations: [],
     phase: "betting",
     round: 1,
     bettingEndsAt: input.now + 30_000,

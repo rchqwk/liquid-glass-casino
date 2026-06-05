@@ -116,6 +116,16 @@ type BJState = {
     settlements?: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }>;
     ppSettlements?: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }>;
   } | null;
+  decorations?: Array<{
+    id: string;
+    ownerUserId: number;
+    kind: "emoji" | "figurine";
+    key?: string;
+    imageUrl?: string;
+    x: number;
+    y: number;
+    createdAt: number;
+  }>;
 };
 
 export default function BlackjackTablePage() {
@@ -289,6 +299,10 @@ export default function BlackjackTablePage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [bondPopup, setBondPopup] = useState<{ open: boolean; mode: "inactive" | "active" }>({ open: false, mode: "inactive" });
+  const [collectiblesOpen, setCollectiblesOpen] = useState(false);
+  const [tableEditMode, setTableEditMode] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const feltRef = useRef<HTMLDivElement | null>(null);
   const [hostOpen, setHostOpen] = useState(false);
   const [hostTurnMs, setHostTurnMs] = useState<30_000 | 60_000>(30_000);
   const [hostDisabled, setHostDisabled] = useState<Record<string, boolean>>({});
@@ -479,6 +493,16 @@ export default function BlackjackTablePage() {
   const bondNextTickIn = bondActive
     ? Math.max(0, 60 - Math.floor((now - Number(bondActive.lastAccrualAt ?? bondActive.startedAt ?? now)) / 1000))
     : 0;
+
+  const collectibles = (state?.meInventory as any)?.collectibles ?? { owned: {}, figurines: [] };
+  const ownedCollectibles = (collectibles?.owned ?? {}) as Record<string, number>;
+  const figurines = (collectibles?.figurines ?? []) as Array<{ id: string; imageUrl: string }>;
+  const decorations = (state?.decorations ?? []) as any[];
+
+  const collectibleLabel = (k: string) => {
+    const map: Record<string, string> = { SODA_CUP: "🥤", CHICKEN_WING: "🍗", FRIES: "🍟", DICE: "🎲" };
+    return map[k] ?? k;
+  };
 
   // Provide blackjack context to the global top bar.
   useEffect(() => {
@@ -898,6 +922,56 @@ export default function BlackjackTablePage() {
     return { ok: !!res.ok, data };
   };
 
+  const postCollectible = async (body?: any) => {
+    if (!safeTableId) return { ok: false as const };
+    const res = await fetch(`/api/blackjack/tables/${safeTableId}/collectibles`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+    const data = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok) setErr(data?.error ?? "Collectibles action failed");
+    if (data?.state) setState(data.state);
+    return { ok: !!res.ok, data };
+  };
+
+  // Drag handling for table edit mode
+  useEffect(() => {
+    if (!dragId) return;
+    const onMove = (e: PointerEvent) => {
+      if (!feltRef.current) return;
+      const r = feltRef.current.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width;
+      const y = (e.clientY - r.top) / r.height;
+      // Optimistic local update
+      setState((s) => {
+        if (!s) return s;
+        const decos = (s.decorations ?? []).map((d) => ({ ...d }));
+        const idx = decos.findIndex((d) => d.id === dragId);
+        if (idx >= 0) {
+          decos[idx] = { ...decos[idx], x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
+        }
+        return { ...(s as any), decorations: decos } as any;
+      });
+    };
+    const onUp = async (e: PointerEvent) => {
+      if (!feltRef.current) return;
+      const r = feltRef.current.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width;
+      const y = (e.clientY - r.top) / r.height;
+      const id = dragId;
+      setDragId(null);
+      await postCollectible({ action: "move", decorationId: id, x, y });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp as any);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragId]);
+
   // Allow the global top bar to trigger in-game actions.
   useEffect(() => {
     const onInvite = () => setInviteOpen(true);
@@ -1024,6 +1098,127 @@ export default function BlackjackTablePage() {
             <div className="font-semibold">Host options</div>
             <div className="mt-1 text-[11px] text-white/60">Turn time, powerups, password</div>
           </button>
+        </div>
+      ) : null}
+
+      {/* Collectibles bubble (only when in-game) */}
+      {gameActive ? (
+        <div className="pointer-events-none fixed bottom-28 left-4 z-[65]">
+          <button
+            type="button"
+            className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
+            onClick={() => setCollectiblesOpen(true)}
+            title="Collectibles"
+          >
+            <div className="font-semibold">Collectibles</div>
+            <div className="mt-1 text-[11px] text-white/60">Decorate the felt</div>
+          </button>
+        </div>
+      ) : null}
+
+      {/* Collectibles popup */}
+      {collectiblesOpen ? (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 p-4">
+          <div className="glass glass-shine w-full max-w-[560px] rounded-3xl border border-white/10 p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">Collectibles</div>
+                <div className="mt-1 text-xs text-white/60">Place items on the felt and drag them in edit mode.</div>
+              </div>
+              <button
+                type="button"
+                className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
+                onClick={() => {
+                  setCollectiblesOpen(false);
+                  setTableEditMode(false);
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={`rounded-2xl border px-3 py-2 text-xs ${
+                  tableEditMode ? "border-yellow-300/25 bg-yellow-500/10 text-yellow-100" : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                }`}
+                onClick={() => setTableEditMode((v) => !v)}
+              >
+                {tableEditMode ? "Exit table edit" : "Enter table edit"}
+              </button>
+              <button
+                type="button"
+                className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70 hover:text-white"
+                onClick={async () => {
+                  const url = (window.prompt("PNG image URL for your figurine:") ?? "").trim();
+                  if (!url) return;
+                  await postCollectible({ action: "create_figurine", imageUrl: url });
+                }}
+              >
+                New Figurine (PNG)
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="text-xs font-semibold text-white/80">Emoji items</div>
+                <div className="mt-3 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(90px,1fr))]">
+                  {Object.entries(ownedCollectibles)
+                    .filter(([, v]) => Number(v) > 0)
+                    .map(([k, v]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        disabled={!tableEditMode}
+                        className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
+                        onClick={() => void postCollectible({ action: "place_emoji", key: k, x: 0.5, y: 0.55 })}
+                        title={tableEditMode ? "Place on felt" : "Enter table edit mode to place"}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-lg">{collectibleLabel(k)}</div>
+                          <div className="font-mono text-white/60">{v}</div>
+                        </div>
+                      </button>
+                    ))}
+                  {Object.values(ownedCollectibles).every((v) => Number(v) <= 0) ? (
+                    <div className="text-xs text-white/50">No emoji collectibles yet.</div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="text-xs font-semibold text-white/80">Figurines</div>
+                <div className="mt-3 grid gap-2">
+                  {figurines.length ? (
+                    figurines.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        disabled={!tableEditMode}
+                        className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
+                        onClick={() => void postCollectible({ action: "place_figurine", figurineId: f.id, x: 0.5, y: 0.55 })}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <img src={f.imageUrl} alt="" className="h-8 w-8 rounded-lg border border-white/10 object-cover" />
+                            <div className="text-white/70">Figurine</div>
+                          </div>
+                          <div className="font-mono text-white/45">{f.id.slice(0, 4)}</div>
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="text-xs text-white/50">No figurines yet.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 text-xs text-white/50">
+              Tip: in edit mode you can drag your placed items. Tap your placed item to put it back in inventory.
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -2226,6 +2421,47 @@ export default function BlackjackTablePage() {
                   <div
                     className={`relative mx-auto w-full max-w-[640px] ${isMobile ? "origin-top scale-[0.88]" : ""}`}
                   >
+                    {/* Felt container for collectibles */}
+                    <div ref={feltRef} className="absolute inset-0">
+                      {decorations.map((d: any) => {
+                        const mine = Number(d.ownerUserId ?? 0) === Number(user?.id ?? 0);
+                        const canEdit = tableEditMode && mine;
+                        const left = `${Math.max(0, Math.min(1, Number(d.x ?? 0.5))) * 100}%`;
+                        const top = `${Math.max(0, Math.min(1, Number(d.y ?? 0.5))) * 100}%`;
+                        return (
+                          <div
+                            key={d.id}
+                            className={`absolute -translate-x-1/2 -translate-y-1/2 ${canEdit ? "pointer-events-auto" : "pointer-events-none"}`}
+                            style={{ left, top }}
+                            onPointerDown={(e) => {
+                              if (!canEdit) return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDragId(String(d.id));
+                            }}
+                            onClick={async (e) => {
+                              if (!canEdit) return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const ok = window.confirm("Put this back in your inventory?");
+                              if (!ok) return;
+                              await postCollectible({ action: "pickup", decorationId: d.id });
+                            }}
+                            title={canEdit ? "Drag to move • Tap to pick up" : undefined}
+                          >
+                            {d.kind === "figurine" ? (
+                              <img
+                                src={String(d.imageUrl ?? "")}
+                                alt=""
+                                className="h-14 w-14 rounded-xl border border-white/10 bg-black/20 object-cover"
+                              />
+                            ) : (
+                              <div className="text-3xl">{collectibleLabel(String(d.key ?? ""))}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                     <div className="mx-auto h-[560px] w-full rounded-[48px] border border-white/10 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-black/25 shadow-[0_40px_120px_rgba(0,0,0,.45)]" />
                     <div className="pointer-events-none absolute inset-0 rounded-[48px] ring-1 ring-white/10" />
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
