@@ -27,9 +27,29 @@ type Step = {
 };
 
 function Card({ r, s, hidden }: { r: string; s: string; hidden?: boolean }) {
+  // Style match (roughly) with the real blackjack CardView.
+  const isHidden = hidden || r === "?" || s === "?";
+  if (isHidden) {
+    return (
+      <div className="relative flex h-20 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/10 shadow-[0_10px_30px_rgba(0,0,0,.35)]">
+        <div className="h-[86%] w-[86%] rounded-xl bg-gradient-to-br from-white/20 to-white/5" />
+      </div>
+    );
+  }
+  const isRed = s === "♥" || s === "♦";
   return (
-    <div className="flex h-14 w-10 items-center justify-center rounded-xl border border-white/15 bg-black/25 text-sm font-semibold text-white">
-      {hidden ? "🂠" : `${r}${s}`}
+    <div className="relative flex h-20 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/90 shadow-[0_10px_30px_rgba(0,0,0,.35)]">
+      <div className={`absolute left-2 top-2 text-[10px] font-semibold ${isRed ? "text-rose-600" : "text-zinc-900"}`}>
+        {r}
+        <div className="text-[9px] leading-3">{s}</div>
+      </div>
+      <div className={`text-xl ${isRed ? "text-rose-600" : "text-zinc-900"}`}>{s}</div>
+      <div
+        className={`absolute bottom-2 right-2 rotate-180 text-[10px] font-semibold ${isRed ? "text-rose-600" : "text-zinc-900"}`}
+      >
+        {r}
+        <div className="text-[9px] leading-3">{s}</div>
+      </div>
     </div>
   );
 }
@@ -300,170 +320,179 @@ export default function TutorialPage() {
           {panelInner}
         </div>
 
-        {/* Visual mock table (leave room for the pinned bubble on desktop) */}
-        <div className="lg:pr-[420px]">
+        {/* Everything below should match the normal blackjack layout (controls left, table right).
+            The tutorial bubble floats above it on desktop. */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
+          {/* Left column: mock controls (in the usual place) */}
           <div className="glass-soft glass-shine rounded-3xl p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm font-semibold text-white">Simulated table</div>
-            <Pill tone="neutral">{step.scene.phaseLabel}</Pill>
-          </div>
-
-          {step.scene.banner ? (
-            <div
-              className={`mt-3 rounded-2xl border px-3 py-2 text-xs ${
-                step.scene.banner.tone === "good"
-                  ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-100"
-                  : step.scene.banner.tone === "bad"
-                    ? "border-rose-400/25 bg-rose-500/10 text-rose-100"
-                    : "border-amber-400/25 bg-amber-500/10 text-amber-100"
-              }`}
-            >
-              {step.scene.banner.text}
+            <p className="text-sm font-medium text-white">Round controls</p>
+            <div className="mt-3 text-xs text-white/60">{step.scene.phaseLabel}</div>
+            <div className={`mt-4 rounded-3xl border border-white/10 bg-white/5 p-4 ${focusClass("bet")}`}>
+              <div className="text-xs font-semibold text-white/70">Betting</div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-white/70">
+                <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+                  Balance: <span className="font-mono text-white/85">123.45 ⓒ</span>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+                  Bet: <span className="font-mono text-white/85">{(step.scene.seats[0]?.bet ?? 0).toFixed(2)} ⓒ</span>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/70">
+                  Place bet
+                </span>
+                <span className="rounded-2xl border border-yellow-300/25 bg-yellow-500/10 px-3 py-2 text-[11px] font-semibold text-yellow-100">
+                  All in
+                </span>
+                <span className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/70">
+                  Clear bet
+                </span>
+              </div>
             </div>
-          ) : null}
 
-          <div className="mt-4">
-            <div className="relative mx-auto w-full max-w-[640px]">
-              <div className="mx-auto h-[520px] w-full rounded-[48px] border border-white/10 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-black/25 shadow-[0_40px_120px_rgba(0,0,0,.45)]" />
-              <div className="pointer-events-none absolute inset-0 rounded-[48px] ring-1 ring-white/10" />
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="h-[440px] w-[300px] rounded-[999px] border border-white/10 bg-gradient-to-b from-emerald-500/12 to-black/20" />
-              </div>
-
-              {/* Dealer */}
-              <div className="absolute left-1/2 top-8 w-[360px] -translate-x-1/2">
-                <div className="mb-2 flex items-center justify-center gap-2 text-[11px] text-white/80">
-                  <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 font-semibold text-white/85">
-                    Dealer
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-white/70">
-                    {step.scene.dealer.totalLabel}
-                  </span>
-                </div>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {step.scene.dealer.cards.length ? (
-                    <>
-                      {step.scene.dealer.cards.map((c, i) => (
-                        <Card key={i} r={c.r} s={c.s} hidden={c.r === "?"} />
-                      ))}
-                    </>
-                  ) : (
-                    <div className="text-xs text-white/40">No cards</div>
-                  )}
-                </div>
-              </div>
-
-              {/* Seats alternating */}
-              {(() => {
-                const leftTops = [110, 205, 300, 395];
-                const rightTops = [122, 217, 312, 407];
-                return step.scene.seats.map((p, i) => {
-                  const isLeft = p.side === "left";
-                  const rank = Math.floor(i / 2);
-                  const topPx = isLeft ? leftTops[rank] ?? 400 : rightTops[rank] ?? 412;
-                  return (
-                    <div key={p.name} className={`absolute ${isLeft ? "left-4" : "right-4"} w-[260px]`} style={{ top: topPx }}>
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                        <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px] text-white/80">
-                          <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 font-semibold text-white/85">
-                            {p.name}
-                          </span>
-                          {p.badges?.map((b) => (
-                            <span
-                              key={b}
-                              className="rounded-full border border-yellow-300/25 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-100"
-                            >
-                              {b}
-                            </span>
-                          ))}
-                          {p.bet ? (
-                            <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
-                              Bet <span className="font-mono text-white/80">{p.bet.toFixed(2)}</span>
-                            </span>
-                          ) : null}
-                          {p.total ? (
-                            <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
-                              <span className="font-mono text-white/85">{p.total}</span>
-                            </span>
-                          ) : null}
-                          {p.status ? <span className="text-emerald-200">{p.status}</span> : null}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {p.cards.length ? (
-                            p.cards.map((c, idx) => <Card key={idx} r={c.r} s={c.s} />)
-                          ) : (
-                            <div className="text-xs text-white/35">—</div>
-                          )}
-                        </div>
-                      </div>
+            <div className={`mt-4 rounded-3xl border border-white/10 bg-white/5 p-4 ${focusClass("specials")}`}>
+              <div className="text-xs font-semibold text-white/70">Specials</div>
+              <div className="mt-2 space-y-2">
+                {step.scene.specials.map((s) => (
+                  <div key={s.id} className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] font-semibold text-white/85">{s.label}</div>
+                      <div className="text-[11px] text-white/45">x2</div>
                     </div>
-                  );
-                });
-              })()}
-
-              {/* Left-side mock controls */}
-              <div className="absolute left-6 bottom-6 w-[260px]">
-                <div className={`rounded-3xl border border-white/10 bg-white/5 p-4 ${focusClass("bet")}`}>
-                  <div className="text-xs font-semibold text-white/70">Round controls</div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-white/70">
-                    <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
-                      Balance: <span className="font-mono text-white/85">123.45 ⓒ</span>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
-                      Bet: <span className="font-mono text-white/85">25.00 ⓒ</span>
-                    </div>
+                    <div className="mt-1 text-[11px] leading-5 text-white/60">{s.why}</div>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <span className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/70">
-                      Place bet
-                    </span>
-                    <span className="rounded-2xl border border-yellow-300/25 bg-yellow-500/10 px-3 py-2 text-[11px] font-semibold text-yellow-100">
-                      All in
-                    </span>
-                  </div>
-                </div>
-
-                <div className={`mt-3 rounded-3xl border border-white/10 bg-white/5 p-4 ${focusClass("specials")}`}>
-                  <div className="text-xs font-semibold text-white/70">Specials</div>
-                  <div className="mt-2 space-y-2">
-                    {step.scene.specials.map((s) => (
-                      <div key={s.id} className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="text-[11px] font-semibold text-white/85">{s.label}</div>
-                          <div className="text-[11px] text-white/45">x2</div>
-                        </div>
-                        <div className="mt-1 text-[11px] leading-5 text-white/60">{s.why}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className={`mt-3 rounded-3xl border border-white/10 bg-white/5 p-4 ${focusClass("boxes")}`}>
-                  <div className="text-xs font-semibold text-white/70">Mystery Boxes</div>
-                  <div className="mt-2 text-[11px] text-white/60">Unopened: <span className="font-mono text-white/85">3</span></div>
-                </div>
-
-                <div className={`mt-3 rounded-3xl border border-white/10 bg-white/5 p-4 ${focusClass("collectibles")}`}>
-                  <div className="text-xs font-semibold text-white/70">Collectibles</div>
-                  <div className="mt-2 text-[11px] text-white/60">Place items on the felt (max 4 placed).</div>
-                </div>
-
-                <div className={`mt-3 rounded-3xl border border-white/10 bg-white/5 p-4 ${focusClass("chat")}`}>
-                  <div className="text-xs font-semibold text-white/70">Chat</div>
-                  <div className="mt-2 text-[11px] text-white/60">Coordinate with players / call shots.</div>
-                </div>
+                ))}
               </div>
+            </div>
+
+            <div className={`mt-4 rounded-3xl border border-white/10 bg-white/5 p-4 ${focusClass("boxes")}`}>
+              <div className="text-xs font-semibold text-white/70">Mystery Boxes</div>
+              <div className="mt-2 text-[11px] text-white/60">
+                Unopened: <span className="font-mono text-white/85">3</span>
+              </div>
+            </div>
+
+            <div className={`mt-4 rounded-3xl border border-white/10 bg-white/5 p-4 ${focusClass("collectibles")}`}>
+              <div className="text-xs font-semibold text-white/70">Collectibles</div>
+              <div className="mt-2 text-[11px] text-white/60">Place items on the felt (max 4 placed).</div>
+            </div>
+
+            <div className={`mt-4 rounded-3xl border border-white/10 bg-white/5 p-4 ${focusClass("chat")}`}>
+              <div className="text-xs font-semibold text-white/70">Chat</div>
+              <div className="mt-2 text-[11px] text-white/60">Coordinate with players / call shots.</div>
             </div>
           </div>
 
-          <div className="mt-4 text-[11px] text-white/45">
-            This is a visual clone for learning. To play for real, head to{" "}
-            <Link className="text-white/70 underline" href="/casino/blackjack">
-              Blackjack lobby
-            </Link>
-            .
+          {/* Right column: table (positions/sizing match the real table view) */}
+          <div className="glass-soft glass-shine rounded-3xl p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-white">Table</div>
+              <Pill tone="neutral">{step.scene.phaseLabel}</Pill>
+            </div>
+
+            {step.scene.banner ? (
+              <div
+                className={`mt-3 rounded-2xl border px-3 py-2 text-xs ${
+                  step.scene.banner.tone === "good"
+                    ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-100"
+                    : step.scene.banner.tone === "bad"
+                      ? "border-rose-400/25 bg-rose-500/10 text-rose-100"
+                      : "border-amber-400/25 bg-amber-500/10 text-amber-100"
+                }`}
+              >
+                {step.scene.banner.text}
+              </div>
+            ) : null}
+
+            <div className="mt-4">
+              <div className="relative mx-auto w-full max-w-[640px]">
+                <div className="mx-auto h-[560px] w-full rounded-[48px] border border-white/10 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-black/25 shadow-[0_40px_120px_rgba(0,0,0,.45)]" />
+                <div className="pointer-events-none absolute inset-0 rounded-[48px] ring-1 ring-white/10" />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="h-[480px] w-[320px] rounded-[999px] border border-white/10 bg-gradient-to-b from-emerald-500/12 to-black/20" />
+                </div>
+
+                {/* Dealer hand */}
+                <div className="absolute left-1/2 top-8 w-[360px] -translate-x-1/2">
+                  <div className="mb-2 flex items-center justify-center gap-2 text-[11px] text-white/80">
+                    <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 font-semibold text-white/85">
+                      Dealer
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-white/70">
+                      {step.scene.dealer.totalLabel}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {step.scene.dealer.cards.length ? (
+                      <>
+                        {step.scene.dealer.cards.map((c, i) => (
+                          <Card key={i} r={c.r} s={c.s} hidden={c.r === "?" || c.s === "?"} />
+                        ))}
+                      </>
+                    ) : (
+                      <div className="text-xs text-white/40">No cards</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Seats on the sides (match in-game alternating layout) */}
+                {(() => {
+                  const leftTops = [92, 182, 272, 362, 452];
+                  const rightTops = [104, 194, 284, 374, 464];
+                  return step.scene.seats.map((p, i) => {
+                    const isLeft = i % 2 === 0;
+                    const rank = Math.floor(i / 2);
+                    const topPx = isLeft ? leftTops[rank] ?? 452 : rightTops[rank] ?? 464;
+                    return (
+                      <div key={p.name} className={`absolute ${isLeft ? "left-4" : "right-4"} w-[260px]`} style={{ top: topPx }}>
+                        <div className={`${step.focus === "table" ? "drop-shadow-[0_0_18px_rgba(52,211,153,.12)]" : ""}`}>
+                          <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px] text-white/80">
+                            <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 font-semibold text-white/85">
+                              {p.name}
+                            </span>
+                            {p.badges?.map((b) => (
+                              <span
+                                key={b}
+                                className="rounded-full border border-yellow-300/25 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-100"
+                              >
+                                {b}
+                              </span>
+                            ))}
+                            {p.bet ? (
+                              <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
+                                Bet <span className="font-mono text-white/80">{p.bet.toFixed(2)}</span>
+                              </span>
+                            ) : null}
+                            {p.total ? (
+                              <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
+                                <span className="font-mono text-white/85">{p.total}</span>
+                              </span>
+                            ) : null}
+                            {p.status ? <span className="text-emerald-200">{p.status}</span> : null}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {p.cards.length ? (
+                              p.cards.map((c, idx) => <Card key={idx} r={c.r} s={c.s} />)
+                            ) : (
+                              <div className="text-xs text-white/35">—</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            <div className="mt-4 text-[11px] text-white/45">
+              This is a visual clone for learning. To play for real, head to{" "}
+              <Link className="text-white/70 underline" href="/casino/blackjack">
+                Blackjack lobby
+              </Link>
+              .
+            </div>
           </div>
-        </div>
         </div>
       </div>
     </div>
