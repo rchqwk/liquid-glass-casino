@@ -868,6 +868,17 @@ function roundMoney(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+function randomCollectibleKey(seed: number) {
+  const keys = ["SODA_CUP", "CHICKEN_WING", "FRIES", "DICE"];
+  const r = lcg(seed)();
+  return keys[Math.floor(r * keys.length)] ?? "SODA_CUP";
+}
+
+function collectibleEmoji(key: string) {
+  const map: Record<string, string> = { SODA_CUP: "🥤", CHICKEN_WING: "🍗", FRIES: "🍟", DICE: "🎲" };
+  return map[key] ?? "🎁";
+}
+
 function applyBondAccrual(inv: Inventory, now: number) {
   const b = inv.bond;
   const active = b?.active;
@@ -1891,6 +1902,7 @@ function settleRound(state: TableState, now: number): TableState {
     const ppSettlements: Array<{ nonce: number; wager: number; multiplier: number; outcome: string }> = [];
     let anySevenCardWinOrPush = false;
     let rareBoxesEarned = 0;
+    let collectibleBoxesEarned = 0;
 
     // Evaluate each hand vs dealer; choose the best multiplier for player reporting.
     for (const h of p.hands ?? []) {
@@ -1955,6 +1967,14 @@ function settleRound(state: TableState, now: number): TableState {
       for (const ci of h.cards ?? []) {
         if (cardFromIndex(ci).rank === "JOKER") rareBoxesEarned += 1;
       }
+
+      // Collectible box triggers:
+      // - Blackjack
+      // - Triple 7
+      // - Any 7+ card win/push
+      const isTriple7 = !isDealerBJ && pTotal === 21 && h.cards.length === 3 && h.cards.every((ci) => cardFromIndex(ci).rank === "7");
+      const isSevenPlus = h.cards.length >= 7 && mult >= 1 && pTotal <= 21;
+      if (pBJ || isTriple7 || isSevenPlus) collectibleBoxesEarned += 1;
 
       // Card-count bonus rules:
       // - 6+ cards without busting: if you would have LOST, treat as push instead ("push on lost").
@@ -2070,6 +2090,24 @@ function settleRound(state: TableState, now: number): TableState {
           contents: box,
         });
       }
+    }
+
+    // Collectible boxes earned from special hands.
+    if (collectibleBoxesEarned > 0) {
+      p.inventory.collectibles = p.inventory.collectibles ?? { owned: {}, figurines: [] };
+      const owned = p.inventory.collectibles.owned ?? {};
+      for (let i = 0; i < collectibleBoxesEarned; i += 1) {
+        const key = randomCollectibleKey((now ^ (s.round * 1103515245) ^ (p.userId * 2654435761) ^ i) >>> 0);
+        owned[key] = Math.max(0, Math.floor(Number(owned[key] ?? 0) || 0) + 1);
+        s.events = Array.isArray(s.events) ? s.events : [];
+        s.events.push({
+          id: shortEventId(),
+          at: now,
+          text: `${p.username} found a collectible box: ${collectibleEmoji(key)}`,
+        });
+      }
+      p.inventory.collectibles.owned = owned;
+      s.updatedAt = now;
     }
 
     results[String(p.userId)] = { outcome: bestOutcome, multiplier: mAll, wager: totalWager, settlements, ppSettlements };

@@ -36,6 +36,13 @@ export function MysteryBoxTab() {
   const { user } = useAuth();
   const pathname = usePathname();
   const isOnBlackjack = pathname?.startsWith("/casino/blackjack");
+  const [topbarOpen, setTopbarOpen] = useState<boolean>(() => {
+    try {
+      return (document?.documentElement?.dataset?.lgcTopbarOpen ?? "0") === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const [data, setData] = useState<BoxesResp | null>(null);
   const [open, setOpen] = useState(false);
@@ -77,6 +84,23 @@ export function MysteryBoxTab() {
       window.clearInterval(id);
     };
   }, [user, isOnBlackjack]);
+
+  useEffect(() => {
+    const handler = (e: any) => setTopbarOpen(!!e?.detail?.open);
+    try {
+      window.addEventListener("lgc:topbar", handler as any);
+      setTopbarOpen((document?.documentElement?.dataset?.lgcTopbarOpen ?? "0") === "1");
+    } catch {
+      // ignore
+    }
+    return () => {
+      try {
+        window.removeEventListener("lgc:topbar", handler as any);
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
 
   const hasMythic = useMemo(() => (lastOpened?.rarity ?? []).includes("mythic"), [lastOpened]);
   const hasLegendary = useMemo(() => (lastOpened?.rarity ?? []).includes("legendary"), [lastOpened]);
@@ -185,7 +209,10 @@ export function MysteryBoxTab() {
       `}</style>
 
       {/* Floating tab */}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[65]">
+      <div
+        className="pointer-events-none fixed right-3 z-[65]"
+        style={{ top: topbarOpen ? 96 : 78 }}
+      >
         <button
           type="button"
           className="pointer-events-auto glass glass-shine relative rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
