@@ -2600,11 +2600,15 @@ export default function BlackjackTablePage() {
 
                     {/* Seats on the sides (no center seats) */}
                     {(() => {
-                      const leftTops = [120, 210, 300, 390, 480]; // px
-                      const rightTops = [120, 210, 300, 390, 480];
+                      // Alternate sides down the table:
+                      // seat 0 = left, seat 1 = right, seat 2 = left, ...
+                      // seat 0 also sits a bit higher to reduce overlap with other hands.
+                      const leftTops = [92, 182, 272, 362, 452]; // px
+                      const rightTops = [104, 194, 284, 374, 464]; // slight stagger
                       return state.seats.map((p, i) => {
-                        const isLeft = i < 5;
-                        const topPx = isLeft ? leftTops[i] : rightTops[i - 5];
+                        const isLeft = i % 2 === 0;
+                        const rank = Math.floor(i / 2);
+                        const topPx = isLeft ? leftTops[rank] ?? 452 : rightTops[rank] ?? 464;
                         return (
                           <div
                             key={i}
