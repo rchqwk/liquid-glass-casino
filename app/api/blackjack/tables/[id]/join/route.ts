@@ -30,6 +30,27 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   // Already seated?
   if (state.seats.some((p) => p?.userId === user.id)) {
+    // Ensure their placed collectibles are present on the felt.
+    const me = state.seats.find((p) => p?.userId === user.id);
+    if (me) {
+      me.inventory = ensureInventory(me.inventory);
+      const placed = (me.inventory as any)?.collectibles?.placed ?? [];
+      state.decorations = Array.isArray((state as any).decorations) ? ((state as any).decorations as any[]) : [];
+      // Remove any prior instances of this user's decorations, then re-add from saved placed list.
+      state.decorations = state.decorations.filter((d: any) => Number(d?.ownerUserId ?? 0) !== user.id);
+      for (const p of Array.isArray(placed) ? placed.slice(0, 4) : []) {
+        state.decorations.push({
+          id: String(p.id),
+          ownerUserId: user.id,
+          kind: p.kind === "figurine" ? "figurine" : "emoji",
+          key: p.key != null ? String(p.key) : undefined,
+          imageUrl: p.imageUrl != null ? String(p.imageUrl) : undefined,
+          x: Number(p.x ?? 0.5),
+          y: Number(p.y ?? 0.5),
+          createdAt: Number(p.placedAt ?? now) || now,
+        });
+      }
+    }
     await upsertBlackjackTable({ id: t.id, public: t.public, name: t.name, state, created_at: t.created_at, updated_at: state.updatedAt });
     return NextResponse.json({ state: safePublicStateForUser(state, user.id) });
   }
@@ -82,6 +103,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       extendUsedThisTurn: false,
     };
     await upsertBlackjackInventory(user.id, inv);
+
+    // Restore any saved placed collectibles onto this table at their saved positions.
+    const placed = (inv as any)?.collectibles?.placed ?? [];
+    state.decorations = Array.isArray((state as any).decorations) ? ((state as any).decorations as any[]) : [];
+    state.decorations = state.decorations.filter((d: any) => Number(d?.ownerUserId ?? 0) !== user.id);
+    for (const p of Array.isArray(placed) ? placed.slice(0, 4) : []) {
+      state.decorations.push({
+        id: String(p.id),
+        ownerUserId: user.id,
+        kind: p.kind === "figurine" ? "figurine" : "emoji",
+        key: p.key != null ? String(p.key) : undefined,
+        imageUrl: p.imageUrl != null ? String(p.imageUrl) : undefined,
+        x: Number(p.x ?? 0.5),
+        y: Number(p.y ?? 0.5),
+        createdAt: Number(p.placedAt ?? now) || now,
+      });
+    }
   }
 
   await upsertBlackjackTable({ id: t.id, public: t.public, name: t.name, state, created_at: t.created_at, updated_at: state.updatedAt });

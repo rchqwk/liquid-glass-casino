@@ -16,6 +16,7 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
   const now = Date.now();
   const state = tickTable(t.state, now);
   state.lastActivityAt = now;
+  state.decorations = Array.isArray((state as any).decorations) ? ((state as any).decorations as any[]) : [];
 
   // remove from spectators
   state.spectators = state.spectators.filter((u) => u !== user.id);
@@ -27,6 +28,9 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
       state.seats[i] = null;
     }
   }
+  // Remove this user's placed decorations from the table. Their positions are stored
+  // in their inventory, and will be restored next time they join any table.
+  state.decorations = state.decorations.filter((d: any) => Number(d?.ownerUserId ?? 0) !== user.id);
 
   await upsertBlackjackTable({ id: t.id, public: t.public, name: t.name, state, created_at: t.created_at, updated_at: state.updatedAt });
   return NextResponse.json({ state: safePublicStateForUser(state, user.id) });

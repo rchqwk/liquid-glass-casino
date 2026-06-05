@@ -313,6 +313,15 @@ export type Inventory = {
   collectibles?: {
     owned: Record<string, number>; // emoji collectibles by key (e.g. "SODA_CUP")
     figurines: Array<{ id: string; imageUrl: string; createdAt: number }>;
+    placed?: Array<{
+      id: string; // matches decoration id on table
+      kind: "emoji" | "figurine";
+      key?: string;
+      imageUrl?: string;
+      x: number;
+      y: number;
+      placedAt: number;
+    }>;
   };
 };
 
@@ -342,6 +351,7 @@ function normalizeInventory(raw: any): Inventory {
     const colRaw = raw.collectibles ?? {};
     const ownedRaw = colRaw?.owned ?? {};
     const figurinesRaw = colRaw?.figurines ?? [];
+    const placedRaw = colRaw?.placed ?? [];
     return {
       v: 3,
       handsPlayed: Number(raw.handsPlayed ?? 0) || 0,
@@ -395,6 +405,26 @@ function normalizeInventory(raw: any): Inventory {
               ];
             })
           : [],
+        placed: Array.isArray(placedRaw)
+          ? (placedRaw as any[]).flatMap((p) => {
+              const id = String(p?.id ?? "");
+              const kind = String(p?.kind ?? "");
+              if (!id || (kind !== "emoji" && kind !== "figurine")) return [];
+              const x = Number(p?.x ?? 0.5);
+              const y = Number(p?.y ?? 0.5);
+              return [
+                {
+                  id,
+                  kind: kind as any,
+                  key: p?.key != null ? String(p.key) : undefined,
+                  imageUrl: p?.imageUrl != null ? String(p.imageUrl) : undefined,
+                  x: Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0.5,
+                  y: Number.isFinite(y) ? Math.max(0, Math.min(1, y)) : 0.5,
+                  placedAt: Number(p?.placedAt ?? 0) || 0,
+                },
+              ];
+            })
+          : [],
       },
     };
   }
@@ -423,7 +453,7 @@ function normalizeInventory(raw: any): Inventory {
           }))
         : [],
       bond: { owned: 0, active: null },
-      collectibles: { owned: {}, figurines: [] },
+      collectibles: { owned: {}, figurines: [], placed: [] },
     };
   }
 
@@ -433,7 +463,7 @@ function normalizeInventory(raw: any): Inventory {
     categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {}, mythic: {} },
     boxes: [],
     bond: { owned: 0, active: null },
-    collectibles: { owned: {}, figurines: [] },
+    collectibles: { owned: {}, figurines: [], placed: [] },
   };
 
   if (raw && typeof raw === "object") {
@@ -778,6 +808,7 @@ export function defaultInventory(): Inventory {
     collectibles: {
       owned: { SODA_CUP: 1, CHICKEN_WING: 1, FRIES: 1, DICE: 1 },
       figurines: [],
+      placed: [],
     },
   };
   // Small starter kit
