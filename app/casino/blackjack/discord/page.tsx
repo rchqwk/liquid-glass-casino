@@ -299,6 +299,46 @@ export default function DiscordBlackjackEntryPage() {
             </div>
           ) : null}
 
+          {err && String(err).toLowerCase().includes("handshake timed out") ? (
+            <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <button
+                type="button"
+                style={{
+                  borderRadius: 16,
+                  border: "1px solid rgba(255,255,255,.14)",
+                  background: "rgba(255,255,255,.08)",
+                  padding: "10px 12px",
+                  color: "rgba(255,255,255,.90)",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+                onClick={() => {
+                  // Some iOS contexts get stuck during the Embedded SDK handshake.
+                  // Allow a temporary fallback to the normal web sign-in flow (username).
+                  try {
+                    sessionStorage.removeItem("lgc.discord.embedded");
+                    sessionStorage.removeItem("lgc.discord.qs");
+                    sessionStorage.removeItem("lgc.discord.fallback.tried");
+                    sessionStorage.removeItem("lgc.discord.oauthAutoRedirected");
+                  } catch {
+                    // ignore
+                  }
+                  try {
+                    window.location.href = "/casino/blackjack";
+                  } catch {
+                    // ignore
+                  }
+                }}
+              >
+                Play with username (temporary)
+              </button>
+              <div className="lgc-tiny" style={{ alignSelf: "center" }}>
+                This skips Discord auth so you can still play on iOS.
+              </div>
+            </div>
+          ) : null}
+
           {stage === "init" && elapsed >= 2 && oauthAuthorizeUrl ? (
             <div
               style={{
