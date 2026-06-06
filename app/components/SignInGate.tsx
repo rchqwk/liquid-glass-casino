@@ -11,6 +11,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [discordUrl, setDiscordUrl] = useState<string | null>(null);
+  const [discordElapsed, setDiscordElapsed] = useState(0);
 
   const isAllowed = useMemo(() => {
     // Always allow the dedicated profile page so users can manage sign-in/out.
@@ -24,6 +25,15 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   const blocked = !isAllowed && !loading && !user;
+
+  // If Discord sign-in is taking too long, offer a temporary username fallback.
+  useEffect(() => {
+    if (!blocked) return;
+    if (!discordMode) return;
+    setDiscordElapsed(0);
+    const id = window.setInterval(() => setDiscordElapsed((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [blocked, discordMode]);
 
   // iOS Discord sometimes opens the app without `frame_id`, which prevents the Embedded App SDK.
   // If that happens, automatically fall back to our OAuth-based Discord entry page.
@@ -98,7 +108,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                   </p>
                   <div className="mt-4 flex items-center gap-3 text-sm text-white/70">
                     <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-emerald-300" />
-                    Connecting…
+                    Connecting… <span className="font-mono text-white/55">{discordElapsed}s</span>
                   </div>
                   {discordError ? <p className="mt-3 text-sm text-rose-200">{discordError}</p> : null}
                   <button
@@ -108,6 +118,27 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                   >
                     Retry Discord sign-in
                   </button>
+                  {discordElapsed >= 12 || (discordError && discordError.toLowerCase().includes("handshake timed out")) ? (
+                    <button
+                      type="button"
+                      className="mt-3 glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/10"
+                      onClick={() => {
+                        // Let iOS users bypass the embedded handshake and play with a username.
+                        // We must clear the persisted "embedded" flag so the app doesn't force Discord mode.
+                        try {
+                          sessionStorage.removeItem("lgc.discord.embedded");
+                          sessionStorage.removeItem("lgc.discord.qs");
+                          sessionStorage.removeItem("lgc.discord.fallback.tried");
+                          sessionStorage.removeItem("lgc.discord.oauthAutoRedirected");
+                        } catch {
+                          // ignore
+                        }
+                        window.location.href = "/casino/blackjack";
+                      }}
+                    >
+                      Play with username (temporary)
+                    </button>
+                  ) : null}
                   <p className="mt-3 text-[11px] leading-5 text-white/55">
                     If this keeps failing, re-launch the Activity from the voice channel.
                   </p>
