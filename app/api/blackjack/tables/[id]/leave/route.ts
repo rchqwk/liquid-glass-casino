@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackTable, upsertBlackjackInventory, upsertBlackjackTable } from "../../../../../lib/db";
-import { safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { returnPlacedCollectiblesToInventory, safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +24,9 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
   for (let i = 0; i < state.seats.length; i++) {
     const p = state.seats[i];
     if (p?.userId === user.id) {
-      await upsertBlackjackInventory(user.id, p.inventory);
+      // Return any placed collectibles back to inventory so they don't stay "stuck" as placed after leaving.
+      const inv = returnPlacedCollectiblesToInventory(p.inventory, state.decorations as any, now);
+      await upsertBlackjackInventory(user.id, inv);
       state.seats[i] = null;
     }
   }

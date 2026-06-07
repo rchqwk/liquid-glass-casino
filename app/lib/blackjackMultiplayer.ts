@@ -493,6 +493,47 @@ export function ensureInventory(raw: any): Inventory {
   return normalizeInventory(raw);
 }
 
+// When a player leaves a table (or gets AFK-kicked), we want any placed collectibles to return
+// back into their inventory so they don't "disappear" from owned counts.
+export function returnPlacedCollectiblesToInventory(invRaw: any, decorations: any[] | null, now: number): Inventory {
+  const inv = normalizeInventory(invRaw);
+  inv.collectibles = inv.collectibles ?? { owned: {}, figurines: [], placed: [] };
+  inv.collectibles.owned = inv.collectibles.owned ?? {};
+  inv.collectibles.figurines = Array.isArray(inv.collectibles.figurines) ? inv.collectibles.figurines : [];
+  inv.collectibles.placed = Array.isArray(inv.collectibles.placed) ? inv.collectibles.placed : [];
+
+  const owned = inv.collectibles.owned as Record<string, number>;
+  const figs = inv.collectibles.figurines as Array<{ id: string; imageUrl: string; createdAt: number }>;
+  const placed = inv.collectibles.placed as Array<any>;
+
+  const decoList = Array.isArray(decorations) ? decorations : [];
+
+  for (const p of placed) {
+    const kind = String(p?.kind ?? "emoji") === "figurine" ? "figurine" : "emoji";
+    if (kind === "emoji") {
+      const key = String(p?.key ?? "").trim();
+      if (!key) continue;
+      owned[key] = Math.max(0, Math.floor(Number(owned[key] ?? 0) || 0) + 1);
+    } else {
+      const id = String(p?.key ?? p?.id ?? "").trim();
+      const decoId = String(p?.id ?? "").trim();
+      let imageUrl = String(p?.imageUrl ?? "").trim();
+      if (!imageUrl && decoId) {
+        const deco = decoList.find((d: any) => String(d?.id ?? "") === decoId);
+        imageUrl = String(deco?.imageUrl ?? "").trim();
+      }
+      if (id && imageUrl) {
+        figs.push({ id, imageUrl, createdAt: Number(p?.placedAt ?? now) || now });
+      }
+    }
+  }
+
+  inv.collectibles.owned = owned;
+  inv.collectibles.figurines = figs;
+  inv.collectibles.placed = [];
+  return inv;
+}
+
 export function unopenedBoxCount(inv: Inventory) {
   return (inv.boxes ?? []).filter((b) => !b.opened).length;
 }
@@ -1154,8 +1195,8 @@ function startRound(state: TableState, now: number) {
       const p = s.seats[i];
       if (!p) continue;
       if (p.missedRounds >= 5) {
-        // Save their inventory (including placed collectibles positions) the same way as a normal "Leave".
-        // We also remove their decorations from the felt; positions are restored from inventory on next join.
+        // Save their inventory. Also return any placed collectibles back into inventory so they don't stay "stuck"
+        // while the player is gone (AFK kick behaves like leaving the table).
         s.decorations = Array.isArray((s as any).decorations) ? (((s as any).decorations as any[]) ?? []) : [];
         p.inventory = normalizeInventory((p as any).inventory);
         p.inventory.collectibles = p.inventory.collectibles ?? { owned: {}, figurines: [], placed: [] };
@@ -1184,11 +1225,14 @@ function startRound(state: TableState, now: number) {
         // Max 4 placed items per player.
         p.inventory.collectibles.placed = p.inventory.collectibles.placed.slice(0, 4);
 
+        // Convert placed items back into inventory.
+        p.inventory = returnPlacedCollectiblesToInventory(p.inventory, s.decorations as any, now);
+
         s.evictedInventories = s.evictedInventories ?? [];
         s.evictedInventories.push({ userId: p.userId, inventory: p.inventory });
         s.seats[i] = null;
 
-        // Remove their decorations from the table (they'll be restored later from saved positions).
+        // Remove their decorations from the table.
         s.decorations = (s.decorations ?? []).filter((d: any) => Number(d?.ownerUserId ?? 0) !== Number(p.userId));
       }
     }
