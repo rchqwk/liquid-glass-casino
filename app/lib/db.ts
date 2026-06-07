@@ -1351,7 +1351,7 @@ export async function getLeaderboardRows(limit = 50) {
                l.updated_at as updated_at
         FROM leaderboard l
         JOIN users u ON u.id = l.user_id
-        WHERE u.role_level = 0 AND l.active = TRUE
+        WHERE u.role_level = 0 AND l.active = TRUE AND l.bets > 0
         ORDER BY l.profit_total DESC
         LIMIT ${limit}
       `) as any[];
@@ -1373,7 +1373,7 @@ export async function getLeaderboardRows(limit = 50) {
           updated_at: l.updated_at,
         };
       })
-      .filter((r) => (r.role_level ?? 0) === 0 && r.active)
+      .filter((r) => (r.role_level ?? 0) === 0 && r.active && (r.bets ?? 0) > 0)
       .sort((a, b) => b.profit_total - a.profit_total)
       .slice(0, limit)
       .map(({ role_level: _rl, active: _a, ...rest }) => rest);
