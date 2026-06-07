@@ -1101,7 +1101,6 @@ function startBetting(state: TableState, now: number) {
     if (!p) continue;
     p.inventory = normalizeInventory(p.inventory);
     p.skipThisRound = false;
-    p.allIn = false;
     normalizeHandsForSeat(p);
     const carry = Number(p.carryBetNext ?? 0) || 0;
     p.hands = [
@@ -2099,20 +2098,27 @@ function settleRound(state: TableState, now: number): TableState {
     }
 
     const mAll = totalWager > 0 ? totalReturn / totalWager : 0;
+    const playedAllIn = !!(p as any).allIn;
 
     // Every payout over 2x => additional rare box.
     if (mAll > 2) rareBoxesEarned += 1;
 
-    // If you won (net positive), keep your base bet in play for next round (auto re-bet).
-    if (mAll > 1) p.carryBetNext = Number(p.lastBetPlaced ?? p.hands?.[0]?.bet ?? 0) || 0;
-    else p.carryBetNext = 0;
+    // Carry bet into next round:
+    // - If the player was All-in, carry the full payout so it re-bets automatically next round.
+    // - Otherwise (non all-in), only carry the base bet on net wins.
+    if (playedAllIn) {
+      p.carryBetNext = Math.round(totalReturn * 100) / 100;
+    } else if (mAll > 1) {
+      p.carryBetNext = Number(p.lastBetPlaced ?? p.hands?.[0]?.bet ?? 0) || 0;
+    } else {
+      p.carryBetNext = 0;
+    }
 
     // Bonus points:
     // - +1 each round you play All-in
     // - consecutive All-in wins grant additional extra points (streak-based)
     p.inventory.bonusPoints = Math.max(0, Math.floor(Number(p.inventory.bonusPoints ?? 0) || 0));
     p.inventory.allInWinStreak = Math.max(0, Math.floor(Number(p.inventory.allInWinStreak ?? 0) || 0));
-    const playedAllIn = !!(p as any).allIn;
     if (playedAllIn) {
       p.inventory.bonusPoints += 1;
       const isWin = mAll > 1;

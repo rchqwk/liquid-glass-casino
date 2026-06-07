@@ -817,19 +817,20 @@ export default function BlackjackTablePage() {
           ? dealerLeft
           : undefined;
 
-  // Auto-reserve funds for carried bets (bet appears prefilled due to carryBetNext)
+  // Auto-reserve funds for carried bets.
+  // If All-in is active locally, we auto-bet the full balance each round.
   useEffect(() => {
     if (!state || state.phase !== "betting") return;
     if (!mySeat) return;
-    const wager = Number(mySeat.bet ?? 0);
+    const wager = allIn ? Math.round(Number(balance ?? 0) * 100) / 100 : Number(mySeat.bet ?? 0);
     const hasNonce = Array.isArray((mySeat as any).hands?.[0]?.nonces) && ((mySeat as any).hands?.[0]?.nonces?.length ?? 0) > 0;
     if (betPending) return;
     if (!(wager > 0) || hasNonce) return;
     const started = beginBet({ game: "Blackjack (MP)", wager });
     if ("error" in started) return;
     setBetPending(true);
-    void post("bet", { amount: wager, betNonce: started.nonce }).finally(() => setBetPending(false));
-  }, [state?.phase, state?.round, mySeat?.bet, betPending, beginBet]);
+    void post("bet", { amount: wager, betNonce: started.nonce, allIn }).finally(() => setBetPending(false));
+  }, [state?.phase, state?.round, mySeat?.bet, betPending, beginBet, allIn, balance]);
 
   const dealerTotal = useMemo(() => {
     if (!state) return 0;
