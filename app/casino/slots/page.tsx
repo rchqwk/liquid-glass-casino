@@ -483,6 +483,10 @@ export default function SlotsPage() {
             step={0.01}
             value={wager}
             onChange={(e) => setWager(Number(e.target.value))}
+            onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+            }}
             disabled={spinning || freeSpinsLeft > 0 || holdSpinSteps != null}
             className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
           />

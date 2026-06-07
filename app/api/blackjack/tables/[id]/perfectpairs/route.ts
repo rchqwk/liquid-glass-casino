@@ -13,6 +13,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const body = (await req.json().catch(() => null)) as { amount?: number; betNonce?: number | null } | null;
   const amount = Number(body?.amount ?? 0);
   const betNonce = body?.betNonce ?? null;
+  if (!(amount > 0)) return NextResponse.json({ error: "Bet amount must be > 0." }, { status: 400 });
 
   const t = await getBlackjackTable(id);
   if (!t) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -29,4 +30,3 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (res.error) return NextResponse.json({ error: res.error, state: safePublicStateForUser(res.state, user.id) }, { status: 400 });
   return NextResponse.json({ state: safePublicStateForUser(res.state, user.id) });
 }
-

@@ -145,6 +145,7 @@ export default function AdminPage() {
               value={diceHouseEdge}
               disabled={role < 3}
               onChange={(e) => setDiceHouseEdge(Number(e.target.value))}
+              onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
             />
           </label>
           <label className="text-xs text-white/60">
@@ -158,6 +159,7 @@ export default function AdminPage() {
               value={slotsPayoutScale}
               disabled={role < 3}
               onChange={(e) => setSlotsPayoutScale(Number(e.target.value))}
+              onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
             />
           </label>
         </div>
@@ -227,4 +229,3 @@ export default function AdminPage() {
     </div>
   );
 }
-

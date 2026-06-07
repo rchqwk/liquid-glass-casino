@@ -41,6 +41,16 @@ body::before {
   mix-blend-mode: overlay;
 }
 
+/* Prevent number input spinners (wheel/steppers are too easy to mis-scroll on bet inputs) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 .glass {
   background: linear-gradient(180deg, var(--glass1), var(--glass0));
   border: 1px solid var(--border0);

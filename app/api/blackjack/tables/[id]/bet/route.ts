@@ -14,6 +14,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const amount = Number(body?.amount ?? 0);
   const betNonce = body?.betNonce ?? null;
   const allIn = !!body?.allIn;
+  if (!(amount > 0)) return NextResponse.json({ error: "Bet amount must be > 0." }, { status: 400 });
 
   const t = await getBlackjackTable(id);
   if (!t) return NextResponse.json({ error: "Not found" }, { status: 404 });
