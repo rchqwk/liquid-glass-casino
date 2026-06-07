@@ -51,7 +51,7 @@ type WalletContextValue = {
   refill100AvailableAt: number; // epoch ms
   deposit: (
     amount: number,
-    opts?: { bypassCooldown?: boolean },
+    opts?: { bypassCooldown?: boolean; refill5000?: boolean; refill100?: boolean },
   ) => { ok: true } | { ok: false; error: string; nextAvailableAt?: number };
   setClientSeed: (seed: string) => void;
   rotateServerSeed: () => { revealedServerSeed: string };
@@ -201,9 +201,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
 
         const bypass = !!opts?.bypassCooldown;
+        const isRefill5000 = !!opts?.refill5000 || amount === 5000;
+        const isRefill100 = !!opts?.refill100 || amount === 100;
         const now = Date.now();
 
-        if (amount === 5000 && !bypass) {
+        if (isRefill5000 && !bypass) {
           const nextAt = (state.lastRefill5000At ?? 0) + REFILL_5000_COOLDOWN_MS;
           if (now < nextAt) {
             return {
@@ -214,7 +216,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        if (amount === 100 && !bypass) {
+        if (isRefill100 && !bypass) {
           const nextAt = (state.lastRefill100At ?? 0) + REFILL_100_COOLDOWN_MS;
           if (now < nextAt) {
             return {
@@ -231,9 +233,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             ...s,
             balance: clampMoney(s.balance + amount),
             lastRefill5000At:
-              amount === 5000 && !bypass ? now : s.lastRefill5000At,
+              isRefill5000 && !bypass ? now : s.lastRefill5000At,
             lastRefill100At:
-              amount === 100 && !bypass ? now : s.lastRefill100At,
+              isRefill100 && !bypass ? now : s.lastRefill100At,
           };
         });
         return { ok: true };

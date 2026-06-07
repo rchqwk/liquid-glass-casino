@@ -158,6 +158,10 @@ export function Topbar() {
   const refill100CooldownMs = Math.max(0, refill100AvailableAt - now);
   const canRefill = !loading && !!user;
   const prestigeLevel = Number((user as any)?.prestige_level ?? 0);
+  const refillAmount = useMemo(() => {
+    // Base refill is +5000 every 15 minutes. Each prestige level adds +10000.
+    return Math.max(0, 5000 + 10000 * Math.max(0, prestigeLevel));
+  }, [prestigeLevel]);
   const nextPrestigeAt = useMemo(() => {
     const base = 1_000_000_000;
     const step = 1_000_000;
@@ -172,13 +176,14 @@ export function Topbar() {
   const nextPrestigeLevel = prestigeLevel + 1;
   const prestigePoints = Number((user as any)?.prestige_points ?? 0);
   const refillLabel = useMemo(() => {
-    if (role >= 1) return "+5000";
-    if (refillCooldownMs <= 0) return "+5000";
+    const amt = `+${formatChips(refillAmount)}`;
+    if (role >= 1) return amt;
+    if (refillCooldownMs <= 0) return amt;
     const s = Math.ceil(refillCooldownMs / 1000);
     const mm = String(Math.floor(s / 60)).padStart(2, "0");
     const ss = String(s % 60).padStart(2, "0");
-    return `+5000 (${mm}:${ss})`;
-  }, [refillCooldownMs, role]);
+    return `${amt} (${mm}:${ss})`;
+  }, [refillCooldownMs, role, refillAmount]);
 
   const refill100Label = useMemo(() => {
     if (role >= 1) return "+100";
@@ -415,7 +420,7 @@ export function Topbar() {
                     setMsg("Sign in to refill.");
                     return;
                   }
-                  const res = deposit(5000, { bypassCooldown: role >= 1 });
+                  const res = deposit(refillAmount, { bypassCooldown: role >= 1, refill5000: true });
                   if (!res.ok) {
                     setMsg(
                       res.nextAvailableAt
@@ -426,7 +431,11 @@ export function Topbar() {
                 }}
                 disabled={!canRefill || (role < 1 && refillCooldownMs > 0)}
                 type="button"
-                title={role < 1 ? "Standard users: one +5000 refill every 15 minutes" : "Admin: unlimited refills"}
+                title={
+                  role < 1
+                    ? `Standard users: one +${formatChips(refillAmount)} refill every 15 minutes (includes +10000 per prestige level)`
+                    : "Admin: unlimited refills"
+                }
               >
                 {refillLabel}
               </button>
