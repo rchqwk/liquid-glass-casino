@@ -1,14 +1,40 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../lib/authServer";
 import { getBlackjackInventory, getBlackjackTable, listBlackjackTables, upsertBlackjackInventory, upsertBlackjackTable } from "../../../lib/db";
-import { ensureInventory, unopenedBoxCount, SPECIALS, type InventoryCategoryId } from "../../../lib/blackjackMultiplayer";
+import { ensureInventory, tickTable, unopenedBoxCount, SPECIALS, type InventoryCategoryId } from "../../../lib/blackjackMultiplayer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const url = new URL(req.url);
+  const tableId = url.searchParams.get("tableId");
+
+  // Keep inventory "clockwork" accurate by ticking the active table (if provided) before
+  // reading inventory for the mystery box tab.
+  if (tableId) {
+    const t = await getBlackjackTable(String(tableId).slice(0, 48));
+    if (t) {
+      const now = Date.now();
+      const next = tickTable(t.state, now);
+      if (next.updatedAt !== t.updated_at) {
+        await upsertBlackjackTable({
+          id: t.id,
+          public: t.public,
+          name: t.name,
+          state: next,
+          created_at: t.created_at,
+          updated_at: next.updatedAt,
+        });
+        for (const p of next.seats) if (p) await upsertBlackjackInventory(p.userId, p.inventory);
+        for (const ev of next.evictedInventories ?? []) await upsertBlackjackInventory(ev.userId, ev.inventory);
+        next.evictedInventories = [];
+      }
+    }
+  }
+
   const inv = ensureInventory((await getBlackjackInventory(user.id)) ?? null);
 
   const boxes = (inv.boxes ?? []).map((b) => ({

@@ -79,7 +79,8 @@ export function MysteryBoxTab() {
     let cancelled = false;
     const tick = async () => {
       try {
-        const res = await fetch("/api/blackjack/boxes", { cache: "no-store" });
+        const url = tableIdFromPath ? `/api/blackjack/boxes?tableId=${encodeURIComponent(tableIdFromPath)}` : "/api/blackjack/boxes";
+        const res = await fetch(url, { cache: "no-store" });
         if (!res.ok) return;
         const j = (await res.json()) as BoxesResp;
         if (!cancelled) setData(j);
