@@ -1153,9 +1153,42 @@ function startRound(state: TableState, now: number) {
       const p = s.seats[i];
       if (!p) continue;
       if (p.missedRounds >= 5) {
+        // Save their inventory (including placed collectibles positions) the same way as a normal "Leave".
+        // We also remove their decorations from the felt; positions are restored from inventory on next join.
+        s.decorations = Array.isArray((s as any).decorations) ? (((s as any).decorations as any[]) ?? []) : [];
+        p.inventory = normalizeInventory((p as any).inventory);
+        p.inventory.collectibles = p.inventory.collectibles ?? { owned: {}, figurines: [], placed: [] };
+        p.inventory.collectibles.placed = Array.isArray(p.inventory.collectibles.placed) ? p.inventory.collectibles.placed : [];
+
+        // Ensure inventory has the current positions from the table decorations (defensive).
+        const existingIds = new Set((p.inventory.collectibles.placed ?? []).map((x: any) => String(x?.id ?? "")));
+        const mine = (s.decorations ?? []).filter((d: any) => Number(d?.ownerUserId ?? 0) === Number(p.userId));
+        for (const d of mine) {
+          const id = String(d?.id ?? "");
+          if (!id || existingIds.has(id)) continue;
+          const kind = String(d?.kind ?? "emoji") === "figurine" ? "figurine" : "emoji";
+          const x = Number(d?.x ?? 0.5);
+          const y = Number(d?.y ?? 0.5);
+          p.inventory.collectibles.placed!.push({
+            id,
+            kind,
+            key: d?.key != null ? String(d.key) : undefined,
+            imageUrl: d?.imageUrl != null ? String(d.imageUrl) : undefined,
+            x: Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0.5,
+            y: Number.isFinite(y) ? Math.max(0, Math.min(1, y)) : 0.5,
+            placedAt: Number(d?.createdAt ?? now) || now,
+          });
+          existingIds.add(id);
+        }
+        // Max 4 placed items per player.
+        p.inventory.collectibles.placed = p.inventory.collectibles.placed.slice(0, 4);
+
         s.evictedInventories = s.evictedInventories ?? [];
         s.evictedInventories.push({ userId: p.userId, inventory: p.inventory });
         s.seats[i] = null;
+
+        // Remove their decorations from the table (they'll be restored later from saved positions).
+        s.decorations = (s.decorations ?? []).filter((d: any) => Number(d?.ownerUserId ?? 0) !== Number(p.userId));
       }
     }
   }
