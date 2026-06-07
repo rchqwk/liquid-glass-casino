@@ -2122,11 +2122,15 @@ function settleRound(state: TableState, now: number): TableState {
     if (playedAllIn) {
       p.inventory.bonusPoints += 1;
       const isWin = mAll > 1;
+      const isPush = mAll === 1;
       if (isWin) {
         p.inventory.allInWinStreak += 1;
         // If this is the 2nd consecutive all-in win, +1 extra.
         // 3rd consecutive win, +2 extra, etc.
         p.inventory.bonusPoints += Math.max(0, p.inventory.allInWinStreak - 1);
+      } else if (isPush) {
+        // Push: do not end the streak, but do not add to it.
+        // (Still award the base +1 point for playing all-in.)
       } else {
         p.inventory.allInWinStreak = 0;
       }
