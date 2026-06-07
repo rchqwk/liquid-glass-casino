@@ -52,11 +52,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const maxPlaced = 4;
 
   if (action === "create_figurine") {
+    const cost = 20;
+    seat.inventory.bonusPoints = Math.max(0, Math.floor(Number((seat.inventory as any).bonusPoints ?? 0) || 0));
+    if ((seat.inventory as any).bonusPoints < cost) {
+      return NextResponse.json({ error: `Not enough bonus points. Custom figurine costs ${cost}.` }, { status: 400 });
+    }
     const imageUrl = String(body?.imageUrl ?? "").trim();
     if (!isValidPngUrl(imageUrl)) return NextResponse.json({ error: "Please provide a valid https://... .png URL" }, { status: 400 });
     seat.inventory.collectibles.figurines = Array.isArray(seat.inventory.collectibles.figurines)
       ? seat.inventory.collectibles.figurines
       : [];
+    (seat.inventory as any).bonusPoints -= cost;
     seat.inventory.collectibles.figurines.push({ id: shortId(), imageUrl, createdAt: now });
     state.updatedAt = now;
   } else if (action === "place_emoji") {

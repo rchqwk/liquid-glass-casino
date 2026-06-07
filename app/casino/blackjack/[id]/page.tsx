@@ -308,6 +308,9 @@ export default function BlackjackTablePage() {
   const [inviteCopied, setInviteCopied] = useState(false);
   const [bondPopup, setBondPopup] = useState<{ open: boolean; mode: "inactive" | "active" }>({ open: false, mode: "inactive" });
   const [collectiblesOpen, setCollectiblesOpen] = useState(false);
+  const [newFigOpen, setNewFigOpen] = useState(false);
+  const [newFigUrl, setNewFigUrl] = useState("");
+  const [newFigBusy, setNewFigBusy] = useState(false);
   const [tableEditMode, setTableEditMode] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const feltRef = useRef<HTMLDivElement | null>(null);
@@ -501,6 +504,9 @@ export default function BlackjackTablePage() {
   const bondNextTickIn = bondActive
     ? Math.max(0, 60 - Math.floor((now - Number(bondActive.lastAccrualAt ?? bondActive.startedAt ?? now)) / 1000))
     : 0;
+
+  const bonusPointsBalance = Math.max(0, Math.floor(Number((state?.meInventory as any)?.bonusPoints ?? 0) || 0));
+  const allInWinStreak = Math.max(0, Math.floor(Number((state?.meInventory as any)?.allInWinStreak ?? 0) || 0));
 
   const collectibles = (state?.meInventory as any)?.collectibles ?? { owned: {}, figurines: [] };
   const ownedCollectibles = (collectibles?.owned ?? {}) as Record<string, number>;
@@ -1147,6 +1153,14 @@ export default function BlackjackTablePage() {
               <div>
                 <div className="text-sm font-semibold text-white">Collectibles</div>
                 <div className="mt-1 text-xs text-white/60">Place items on the felt and drag them in edit mode.</div>
+                <div className="mt-1 text-[11px] text-white/55">
+                  Bonus points: <span className="font-mono text-white/80">{bonusPointsBalance}</span>{" "}
+                  {allInWinStreak > 0 ? (
+                    <>
+                      • All-in win streak: <span className="font-mono text-white/80">{allInWinStreak}</span>
+                    </>
+                  ) : null}
+                </div>
               </div>
               <button
                 type="button"
@@ -1154,6 +1168,8 @@ export default function BlackjackTablePage() {
                 onClick={() => {
                   setCollectiblesOpen(false);
                   setTableEditMode(false);
+                  setNewFigOpen(false);
+                  setNewFigUrl("");
                 }}
               >
                 Close
@@ -1175,16 +1191,64 @@ export default function BlackjackTablePage() {
               </button>
               <button
                 type="button"
-                className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70 hover:text-white"
-                onClick={async () => {
-                  const url = (window.prompt("PNG image URL for your figurine:") ?? "").trim();
-                  if (!url) return;
-                  await postCollectible({ action: "create_figurine", imageUrl: url });
-                }}
+                disabled={bonusPointsBalance < 20}
+                className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:opacity-40"
+                onClick={() => setNewFigOpen(true)}
+                title="Costs 20 bonus points"
               >
-                New Figurine (PNG)
+                Buy Custom Figurine (20 BP)
               </button>
             </div>
+
+            {newFigOpen ? (
+              <div className="mt-3 rounded-3xl border border-white/10 bg-white/5 p-4">
+                <div className="text-xs font-semibold text-white/80">Custom figurine (PNG)</div>
+                <div className="mt-1 text-[11px] leading-5 text-white/60">
+                  Paste a <span className="font-mono">https://... .png</span> URL. This will spend <span className="font-mono">20</span> bonus points.
+                </div>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="url"
+                    value={newFigUrl}
+                    onChange={(e) => setNewFigUrl(e.target.value)}
+                    placeholder="https://example.com/image.png"
+                    className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="glass-soft rounded-2xl px-4 py-2 text-sm font-semibold text-white/70 hover:bg-white/10"
+                      onClick={() => {
+                        setNewFigOpen(false);
+                        setNewFigUrl("");
+                      }}
+                      disabled={newFigBusy}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!newFigUrl.trim() || newFigBusy}
+                      className="glass-soft rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/15 disabled:opacity-40"
+                      onClick={async () => {
+                        const url = newFigUrl.trim();
+                        if (!url) return;
+                        setErr(null);
+                        setNewFigBusy(true);
+                        const res = await postCollectible({ action: "create_figurine", imageUrl: url });
+                        setNewFigBusy(false);
+                        if (res.ok) {
+                          setNewFigOpen(false);
+                          setNewFigUrl("");
+                        }
+                      }}
+                    >
+                      Create
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -1791,10 +1855,30 @@ export default function BlackjackTablePage() {
                 <div>
                   You have <span className="font-mono">{bondOwned}</span> bond(s).
                 </div>
+                <div className="mt-1 text-xs text-white/60">
+                  Bonus points: <span className="font-mono text-white/80">{bonusPointsBalance}</span>{" "}
+                  {allInWinStreak > 0 ? (
+                    <>
+                      • All-in win streak: <span className="font-mono text-white/80">{allInWinStreak}</span>
+                    </>
+                  ) : null}
+                </div>
                 <div className="mt-2 text-xs text-white/60">
                   Activating a bond will move chips into the bond and start compounding while you stay seated.
                 </div>
                 <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={bonusPointsBalance < 50}
+                    className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-40"
+                    onClick={async () => {
+                      setErr(null);
+                      await postBond({ type: "buy" });
+                    }}
+                    title="Costs 50 bonus points"
+                  >
+                    Buy bond (50 BP)
+                  </button>
                   <button
                     type="button"
                     className="glass-soft rounded-2xl px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10"
@@ -2176,6 +2260,16 @@ export default function BlackjackTablePage() {
                   >
                     Skip round
                   </button>
+                </div>
+
+                <div className="mt-3 text-[11px] text-white/60">
+                  Bonus points: <span className="font-mono text-white/80">{bonusPointsBalance}</span>{" "}
+                  {allInWinStreak > 0 ? (
+                    <>
+                      • All-in win streak: <span className="font-mono text-white/80">{allInWinStreak}</span>
+                    </>
+                  ) : null}{" "}
+                  • Spend: Figurine <span className="font-mono">20</span> / Bond <span className="font-mono">50</span>
                 </div>
 
                 <label className="mt-5 block text-xs text-white/60">Perfect Pairs side bet (ⓒ)</label>

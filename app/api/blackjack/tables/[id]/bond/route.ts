@@ -12,6 +12,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const body = (await req.json().catch(() => null)) as
     | { type?: "activate"; amount?: number }
+    | { type?: "buy" }
     | { type?: "info" }
     | null;
 
@@ -29,7 +30,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   seat.inventory.bond = seat.inventory.bond ?? { owned: 0, active: null };
 
   const type = String((body as any)?.type ?? "info");
-  if (type === "activate") {
+  if (type === "buy") {
+    const cost = 50;
+    (seat.inventory as any).bonusPoints = Math.max(0, Math.floor(Number((seat.inventory as any).bonusPoints ?? 0) || 0));
+    if ((seat.inventory as any).bonusPoints < cost) {
+      return NextResponse.json({ error: `Not enough bonus points. Bond costs ${cost}.` }, { status: 400 });
+    }
+    (seat.inventory as any).bonusPoints -= cost;
+    seat.inventory.bond.owned = Math.max(0, Math.floor(Number(seat.inventory.bond.owned ?? 0) || 0) + 1);
+    state.updatedAt = now;
+  } else if (type === "activate") {
     const amountRaw = (body as any)?.amount;
     const amount = Math.round(Number(amountRaw ?? 0) * 100) / 100;
     if (!Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: "Invalid amount" }, { status: 400 });

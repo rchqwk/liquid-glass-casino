@@ -292,6 +292,10 @@ export type Inventory = {
   v: 3;
   // How many hands this player has participated in at this table/session (persisted)
   handsPlayed: number;
+  // Bonus points earned from all-in play (currency)
+  bonusPoints: number;
+  // Current consecutive all-in win streak (resets when you stop all-in or fail to win)
+  allInWinStreak: number;
   categories: Record<InventoryCategoryId, Partial<Record<SpecialId, number>>>;
   boxes: Array<{
     id: string;
@@ -355,6 +359,8 @@ function normalizeInventory(raw: any): Inventory {
     return {
       v: 3,
       handsPlayed: Number(raw.handsPlayed ?? 0) || 0,
+      bonusPoints: Math.max(0, Math.floor(Number(raw.bonusPoints ?? 0) || 0)),
+      allInWinStreak: Math.max(0, Math.floor(Number(raw.allInWinStreak ?? 0) || 0)),
       categories: {
         boosts: (cats.boosts ?? {}) as any,
         saves: (cats.saves ?? {}) as any,
@@ -434,6 +440,8 @@ function normalizeInventory(raw: any): Inventory {
     return {
       v: 3,
       handsPlayed: Number(raw.handsPlayed ?? 0) || 0,
+      bonusPoints: Math.max(0, Math.floor(Number(raw.bonusPoints ?? 0) || 0)),
+      allInWinStreak: Math.max(0, Math.floor(Number(raw.allInWinStreak ?? 0) || 0)),
       categories: {
         boosts: (cats.boosts ?? {}) as any,
         saves: (cats.saves ?? {}) as any,
@@ -460,6 +468,8 @@ function normalizeInventory(raw: any): Inventory {
   const inv: Inventory = {
     v: 3,
     handsPlayed: 0,
+    bonusPoints: 0,
+    allInWinStreak: 0,
     categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {}, mythic: {} },
     boxes: [],
     bond: { owned: 0, active: null },
@@ -803,6 +813,8 @@ export function defaultInventory(): Inventory {
   const inv: Inventory = {
     v: 3,
     handsPlayed: 0,
+    bonusPoints: 0,
+    allInWinStreak: 0,
     categories: { boosts: {}, saves: {}, utility: {}, magic: {}, dealer: {}, mythic: {} },
     boxes: [],
     bond: { owned: 0, active: null },
@@ -2094,6 +2106,28 @@ function settleRound(state: TableState, now: number): TableState {
     // If you won (net positive), keep your base bet in play for next round (auto re-bet).
     if (mAll > 1) p.carryBetNext = Number(p.lastBetPlaced ?? p.hands?.[0]?.bet ?? 0) || 0;
     else p.carryBetNext = 0;
+
+    // Bonus points:
+    // - +1 each round you play All-in
+    // - consecutive All-in wins grant additional extra points (streak-based)
+    p.inventory.bonusPoints = Math.max(0, Math.floor(Number(p.inventory.bonusPoints ?? 0) || 0));
+    p.inventory.allInWinStreak = Math.max(0, Math.floor(Number(p.inventory.allInWinStreak ?? 0) || 0));
+    const playedAllIn = !!(p as any).allIn;
+    if (playedAllIn) {
+      p.inventory.bonusPoints += 1;
+      const isWin = mAll > 1;
+      if (isWin) {
+        p.inventory.allInWinStreak += 1;
+        // If this is the 2nd consecutive all-in win, +1 extra.
+        // 3rd consecutive win, +2 extra, etc.
+        p.inventory.bonusPoints += Math.max(0, p.inventory.allInWinStreak - 1);
+      } else {
+        p.inventory.allInWinStreak = 0;
+      }
+    } else {
+      // Streak only continues if you keep going all-in.
+      p.inventory.allInWinStreak = 0;
+    }
 
     mythicDropAny = mythicDropAny || anySevenCardWinOrPush;
 
