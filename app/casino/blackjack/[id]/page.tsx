@@ -604,7 +604,7 @@ export default function BlackjackTablePage() {
                   className="rounded-full border border-yellow-300/25 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-100"
                   title="All in"
                 >
-                  🟡 ALL-IN
+                  🟡 ALL-IN{Number((p as any).allInWinStreak ?? 0) > 0 ? ` x${Number((p as any).allInWinStreak)}` : ""}
                 </span>
               ) : null}
               {p.bet ? (
@@ -650,7 +650,7 @@ export default function BlackjackTablePage() {
               <NameBadge p={p} />
               {p.allIn ? (
                 <span className="ml-2 rounded-full border border-yellow-300/25 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-semibold text-yellow-100">
-                  ALL-IN
+                  ALL-IN{Number((p as any).allInWinStreak ?? 0) > 0 ? ` x${Number((p as any).allInWinStreak)}` : ""}
                 </span>
               ) : null}
             </div>
@@ -2207,101 +2207,105 @@ export default function BlackjackTablePage() {
 
             {mySeat ? (
               <>
-                <label className="mt-4 block text-xs text-white/60">Bet amount (ⓒ)</label>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={betAmount}
-                  onChange={(e) => setBetAmount(Number(e.target.value))}
-                  disabled={state.phase !== "betting" || allIn}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
-                />
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={state.phase !== "betting" || betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
-                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                    onClick={placeBetWithWallet}
-                    data-tour="bj-place-bet"
-                  >
-                    Place bet
-                  </button>
-                  <button
-                    type="button"
-                    disabled={state.phase !== "betting" || betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
-                    className={`glass-soft rounded-2xl px-4 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-40 ${
-                      allIn ? "border border-yellow-300/25 bg-yellow-500/10 text-yellow-100" : "text-white/80"
-                    }`}
-                    onClick={() => setAllIn((v) => !v)}
-                    title="Bet your full balance"
-                    data-tour="bj-all-in"
-                  >
-                    All in
-                  </button>
-                  <button
-                    type="button"
-                    disabled={state.phase !== "betting" || betPending || (((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) === 0)}
-                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 disabled:opacity-40"
-                    onClick={clearBetWithWallet}
-                  >
-                    Clear bet
-                  </button>
-                  <button
-                    type="button"
-                    disabled={state.phase !== "betting"}
-                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                    onClick={async () => {
-                      // If a bet was reserved, refund it before skipping.
-                      const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter((x: any) => Number.isFinite(x) && x >= 0);
-                      for (const n of nonces) settleBet({ nonce: n, multiplier: 1, outcome: "Bet canceled" });
-                      await post("skip");
-                      setAllIn(false);
-                    }}
-                  >
-                    Skip round
-                  </button>
-                </div>
+                {state.phase === "betting" ? (
+                  <>
+                    <label className="mt-4 block text-xs text-white/60">Bet amount (ⓒ)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={betAmount}
+                      onChange={(e) => setBetAmount(Number(e.target.value))}
+                      disabled={allIn}
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                        onClick={placeBetWithWallet}
+                        data-tour="bj-place-bet"
+                      >
+                        Place bet
+                      </button>
+                      <button
+                        type="button"
+                        disabled={betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
+                        className={`glass-soft rounded-2xl px-4 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-40 ${
+                          allIn ? "border border-yellow-300/25 bg-yellow-500/10 text-yellow-100" : "text-white/80"
+                        }`}
+                        onClick={() => setAllIn((v) => !v)}
+                        title="Bet your full balance"
+                        data-tour="bj-all-in"
+                      >
+                        All in
+                      </button>
+                      <button
+                        type="button"
+                        disabled={betPending || (((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) === 0)}
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 disabled:opacity-40"
+                        onClick={clearBetWithWallet}
+                      >
+                        Clear bet
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                        onClick={async () => {
+                          // If a bet was reserved, refund it before skipping.
+                          const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter(
+                            (x: any) => Number.isFinite(x) && x >= 0,
+                          );
+                          for (const n of nonces) settleBet({ nonce: n, multiplier: 1, outcome: "Bet canceled" });
+                          await post("skip");
+                          setAllIn(false);
+                        }}
+                      >
+                        Skip round
+                      </button>
+                    </div>
 
-                <div className="mt-3 text-[11px] text-white/60">
-                  Bonus points: <span className="font-mono text-white/80">{bonusPointsBalance}</span>{" "}
-                  {allInWinStreak > 0 ? (
-                    <>
-                      • All-in win streak: <span className="font-mono text-white/80">{allInWinStreak}</span>
-                    </>
-                  ) : null}{" "}
-                  • Spend: Figurine <span className="font-mono">20</span> / Bond <span className="font-mono">50</span>
-                </div>
+                    <div className="mt-3 text-[11px] text-white/60">
+                      Bonus points: <span className="font-mono text-white/80">{bonusPointsBalance}</span>{" "}
+                      {allInWinStreak > 0 ? (
+                        <>
+                          • All-in win streak: <span className="font-mono text-white/80">{allInWinStreak}</span>
+                        </>
+                      ) : null}{" "}
+                      • Spend: Figurine <span className="font-mono">20</span> / Bond <span className="font-mono">50</span>
+                    </div>
 
-                <label className="mt-5 block text-xs text-white/60">Perfect Pairs side bet (ⓒ)</label>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={ppAmount}
-                  onChange={(e) => setPpAmount(Number(e.target.value))}
-                  disabled={state.phase !== "betting"}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
-                />
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={state.phase !== "betting" || betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce != null}
-                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
-                    onClick={placePerfectPairsWithWallet}
-                    title="Pays on first 2 cards of each hand: perfect=25:1, colored=12:1, mixed=6:1"
-                  >
-                    Add PP bet
-                  </button>
-                  <button
-                    type="button"
-                    disabled={state.phase !== "betting" || betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce == null}
-                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
-                    onClick={clearPerfectPairsWithWallet}
-                  >
-                    Clear PP bet
-                  </button>
-                </div>
+                    <label className="mt-5 block text-xs text-white/60">Perfect Pairs side bet (ⓒ)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={ppAmount}
+                      onChange={(e) => setPpAmount(Number(e.target.value))}
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce != null}
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
+                        onClick={placePerfectPairsWithWallet}
+                        title="Pays on first 2 cards of each hand: perfect=25:1, colored=12:1, mixed=6:1"
+                      >
+                        Add PP bet
+                      </button>
+                      <button
+                        type="button"
+                        disabled={betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce == null}
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+                        onClick={clearPerfectPairsWithWallet}
+                      >
+                        Clear PP bet
+                      </button>
+                    </div>
+                  </>
+                ) : null}
 
                 {state.peekCard != null ? (
                   <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">

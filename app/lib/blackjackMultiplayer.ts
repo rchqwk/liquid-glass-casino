@@ -2225,9 +2225,17 @@ export function safePublicStateForUser(state: TableState, userId: number) {
   // hide dealer hole card during player turns
   const hideDealerHole = state.phase === "player_turns";
   const dealerCards = hideDealerHole ? state.dealer.cards.map((c, i) => (i === 1 ? -1 : c)) : state.dealer.cards;
+  // Avoid leaking full inventories for other players; include only a few public fields we want to show.
+  const seats = (state.seats ?? []).map((p) => {
+    if (!p) return null;
+    const inv = normalizeInventory((p as any).inventory);
+    const { inventory: _inv, ...pRest } = p as any;
+    return { ...pRest, allInWinStreak: Math.max(0, Math.floor(Number(inv.allInWinStreak ?? 0) || 0)) };
+  });
 
   return {
     ...rest,
+    seats,
     dealer: { ...state.dealer, cards: dealerCards },
     // spectators list is fine
     peekCard: peek,
