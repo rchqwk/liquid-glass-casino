@@ -1258,19 +1258,30 @@ export default function BlackjackTablePage() {
                   {Object.entries(ownedCollectibles)
                     .filter(([, v]) => Number(v) > 0)
                     .map(([k, v]) => (
-                      <button
+                      <div
                         key={k}
-                        type="button"
-                        disabled
-                        className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
-                        onClick={() => {}}
+                        className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-left text-[11px] text-white/80"
                         title="Use Table Edit Mode to place"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="text-lg">{collectibleLabel(k)}</div>
                           <div className="font-mono text-white/60">{v}</div>
                         </div>
-                      </button>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <div className="text-[10px] text-white/45">Sell +5 BP</div>
+                          <button
+                            type="button"
+                            className="rounded-xl border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-semibold text-white/75 hover:bg-white/10"
+                            onClick={async () => {
+                              const ok = window.confirm("Sell 1 emoji collectible for +5 bonus points?");
+                              if (!ok) return;
+                              await postCollectible({ action: "sell_emoji", key: k });
+                            }}
+                          >
+                            Sell
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   {Object.values(ownedCollectibles).every((v) => Number(v) <= 0) ? (
                     <div className="text-xs text-white/50">No emoji collectibles yet.</div>
@@ -1283,13 +1294,7 @@ export default function BlackjackTablePage() {
                 <div className="mt-3 grid gap-2">
                   {figurines.length ? (
                     figurines.map((f) => (
-                      <button
-                        key={f.id}
-                        type="button"
-                        disabled
-                        className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
-                        onClick={() => {}}
-                      >
+                      <div key={f.id} className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-left text-[11px] text-white/80">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <img src={f.imageUrl} alt="" className="h-8 w-8 rounded-lg border border-white/10 object-cover" />
@@ -1297,7 +1302,21 @@ export default function BlackjackTablePage() {
                           </div>
                           <div className="font-mono text-white/45">{f.id.slice(0, 4)}</div>
                         </div>
-                      </button>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <div className="text-[10px] text-white/45">Sell +15 BP</div>
+                          <button
+                            type="button"
+                            className="rounded-xl border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-semibold text-white/75 hover:bg-white/10"
+                            onClick={async () => {
+                              const ok = window.confirm("Sell this figurine for +15 bonus points?");
+                              if (!ok) return;
+                              await postCollectible({ action: "sell_figurine", figurineId: f.id });
+                            }}
+                          >
+                            Sell
+                          </button>
+                        </div>
+                      </div>
                     ))
                   ) : (
                     <div className="text-xs text-white/50">No figurines yet.</div>

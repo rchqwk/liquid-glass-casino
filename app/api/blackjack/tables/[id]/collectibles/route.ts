@@ -65,6 +65,31 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     (seat.inventory as any).bonusPoints -= cost;
     seat.inventory.collectibles.figurines.push({ id: shortId(), imageUrl, createdAt: now });
     state.updatedAt = now;
+  } else if (action === "sell_figurine") {
+    const value = 15;
+    const figurineId = String(body?.figurineId ?? "").trim();
+    seat.inventory.collectibles.figurines = Array.isArray(seat.inventory.collectibles.figurines)
+      ? seat.inventory.collectibles.figurines
+      : [];
+    const figs = seat.inventory.collectibles.figurines ?? [];
+    const idx = figs.findIndex((f: any) => String(f?.id ?? "") === figurineId);
+    if (idx < 0) return NextResponse.json({ error: "Figurine not found." }, { status: 400 });
+    figs.splice(idx, 1);
+    seat.inventory.collectibles.figurines = figs;
+    seat.inventory.bonusPoints = Math.max(0, Math.floor(Number((seat.inventory as any).bonusPoints ?? 0) || 0));
+    (seat.inventory as any).bonusPoints += value;
+    state.updatedAt = now;
+  } else if (action === "sell_emoji") {
+    const value = 5;
+    const key = String(body?.key ?? "").trim();
+    const owned = seat.inventory.collectibles.owned ?? {};
+    const cur = Math.floor(Number(owned[key] ?? 0) || 0);
+    if (!key || cur <= 0) return NextResponse.json({ error: "Item not owned." }, { status: 400 });
+    owned[key] = cur - 1;
+    seat.inventory.collectibles.owned = owned;
+    seat.inventory.bonusPoints = Math.max(0, Math.floor(Number((seat.inventory as any).bonusPoints ?? 0) || 0));
+    (seat.inventory as any).bonusPoints += value;
+    state.updatedAt = now;
   } else if (action === "place_emoji") {
     const key = String(body?.key ?? "").trim();
     const x = clamp01(Number(body?.x ?? 0.5));
