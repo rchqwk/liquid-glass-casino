@@ -94,7 +94,7 @@ export function MysteryBoxTab() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [user, isOnBlackjack]);
+  }, [user, isOnBlackjack, tableIdFromPath]);
 
   useEffect(() => {
     const handler = (e: any) => setTopbarOpen(!!e?.detail?.open);
@@ -190,7 +190,10 @@ export function MysteryBoxTab() {
       const j = (await res.json().catch(() => ({}))) as any;
       if (!res.ok) throw new Error(j?.error ?? "Trade failed");
       // refresh
-      const r2 = await fetch("/api/blackjack/boxes", { cache: "no-store" });
+      const r2 = await fetch(
+        tableIdFromPath ? `/api/blackjack/boxes?tableId=${encodeURIComponent(tableIdFromPath)}` : "/api/blackjack/boxes",
+        { cache: "no-store" },
+      );
       if (r2.ok) setData((await r2.json()) as BoxesResp);
     } catch (e: any) {
       setErr(String(e?.message ?? "Trade failed"));
