@@ -608,6 +608,7 @@ export type PlayerSeat = {
   username: string;
   prestigeLevel?: number;
   nameColor?: string | null;
+  avatarUrl?: string | null;
   allIn?: boolean;
   joinedAt: number;
   lastSeenAt: number;

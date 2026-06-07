@@ -368,6 +368,7 @@ export default function Slots5x5Page() {
                 const buy = placeBet({
                   game: "Fruit Bowl Super Ways Buy Feature",
                   wager: wager * 100,
+                  baseWager: wager,
                   resolve: () => ({ multiplier: 0, outcome: "Bought Free Spins" }),
                 });
                 setLast({ profit: buy.profit, outcome: "Bought Free Spins (100× bet)", returnMult: 0 });
@@ -377,6 +378,7 @@ export default function Slots5x5Page() {
                   game: "Fruit Bowl Super Ways Buy Feature",
                   profit: buy.profit,
                   wager: wager * 100,
+                  baseWager: wager,
                   balance: buy.balanceAfter,
                 });
               }}
@@ -395,6 +397,7 @@ export default function Slots5x5Page() {
                 const buy = placeBet({
                   game: "Fruit Bowl Super Ways Buy Bonus",
                   wager: wager * 200,
+                  baseWager: wager,
                   resolve: () => ({ multiplier: 0, outcome: "Bought SUPER Free Spins" }),
                 });
                 setLast({ profit: buy.profit, outcome: "Bought SUPER Free Spins (200× bet)", returnMult: 0 });
@@ -406,6 +409,7 @@ export default function Slots5x5Page() {
                   game: "Fruit Bowl Super Ways Buy Bonus",
                   profit: buy.profit,
                   wager: wager * 200,
+                  baseWager: wager,
                   balance: buy.balanceAfter,
                 });
               }}

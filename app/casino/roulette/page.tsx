@@ -33,6 +33,7 @@ export default function RoulettePage() {
   const clearBets = () => setBets({} as any);
 
   const addBet = (key: BetKey) => {
+    if (spinning) return;
     setBets((b) => ({ ...b, [key]: (b[key] ?? 0) + chip }));
   };
 
@@ -90,6 +91,9 @@ export default function RoulettePage() {
                       onClick={() => {
                         if (spinning || totalStake <= 0) return;
 
+                        const betsSnapshot = { ...(bets as any) } as Record<BetKey, number>;
+                        const stakeSnapshot = totalStake;
+
                         // Reserve funds and lock RNG for this spin
                         const started = beginBet({
                           game: "Roulette",
@@ -115,7 +119,7 @@ export default function RoulettePage() {
                           setSpinning(false);
                           setLanded(spun);
 
-                          const totalReturn = Object.entries(bets).reduce(
+                          const totalReturn = Object.entries(betsSnapshot).reduce(
                             (acc, [k, amount]) => {
                               const stake = Number(amount) || 0;
                               if (stake <= 0) return acc;
@@ -126,8 +130,8 @@ export default function RoulettePage() {
                           );
 
                           const multiplier =
-                            totalStake > 0 ? totalReturn / totalStake : 0;
-                          const outcome = `Spun ${spun} (${colorOf(spun)}). Return ${formatChips(totalReturn)} on stake ${formatChips(totalStake)}.`;
+                            stakeSnapshot > 0 ? totalReturn / stakeSnapshot : 0;
+                          const outcome = `Spun ${spun} (${colorOf(spun)}). Return ${formatChips(totalReturn)} on stake ${formatChips(stakeSnapshot)}.`;
                           const settled = settleBet({ nonce, multiplier, outcome });
                           if (!("error" in settled)) {
                             setLastOutcome(settled.outcome);
@@ -136,10 +140,11 @@ export default function RoulettePage() {
                               { spun, color: colorOf(spun), ts: Date.now() },
                               ...r,
                             ].slice(0, 10));
+                            clearBets();
                             void reportResult({
                               game: "Roulette",
                               profit: settled.profit,
-                              wager: totalStake,
+                              wager: stakeSnapshot,
                               balance: settled.balanceAfter,
                             });
                           } else {
@@ -229,7 +234,7 @@ export default function RoulettePage() {
             </div>
           </div>
 
-          <RouletteBoard bets={bets} onAddBet={addBet} />
+          <RouletteBoard bets={bets} onAddBet={addBet} disabled={spinning} />
         </div>
       </div>
     </div>

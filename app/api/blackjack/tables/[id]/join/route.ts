@@ -34,6 +34,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const me = state.seats.find((p) => p?.userId === user.id);
     if (me) {
       me.inventory = ensureInventory(me.inventory);
+      (me as any).avatarUrl = ((user as any).discord_avatar_url ?? null) as any;
       const placed = (me.inventory as any)?.collectibles?.placed ?? [];
       state.decorations = Array.isArray((state as any).decorations) ? ((state as any).decorations as any[]) : [];
       // Remove any prior instances of this user's decorations, then re-add from saved placed list.
@@ -67,6 +68,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       username: user.username,
       prestigeLevel: Number((user as any).prestige_level ?? 0),
       nameColor: ((user as any).name_color ?? null) as any,
+      avatarUrl: ((user as any).discord_avatar_url ?? null) as any,
       joinedAt: now,
       lastSeenAt: now,
       missedRounds: 0,

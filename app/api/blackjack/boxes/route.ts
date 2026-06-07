@@ -50,6 +50,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     unopened: unopenedBoxCount(inv),
     handsPlayed: inv.handsPlayed ?? 0,
+    bonusPoints: Math.max(0, Math.floor(Number((inv as any).bonusPoints ?? 0) || 0)),
     boxes,
   });
 }

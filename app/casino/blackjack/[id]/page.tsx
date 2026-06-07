@@ -42,7 +42,7 @@ function handValue(cards: number[], bonusPoints = 0) {
 function CardView({ idx, hidden }: { idx: number; hidden?: boolean }) {
   if (idx < 0 || hidden) {
     return (
-      <div className="relative flex h-20 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/10 shadow-[0_10px_30px_rgba(0,0,0,.35)]">
+      <div className="relative flex h-[72px] w-[52px] items-center justify-center rounded-2xl border border-white/15 bg-white/10 shadow-[0_10px_30px_rgba(0,0,0,.35)]">
         <div className="h-[86%] w-[86%] rounded-xl bg-gradient-to-br from-white/20 to-white/5" />
       </div>
     );
@@ -50,15 +50,15 @@ function CardView({ idx, hidden }: { idx: number; hidden?: boolean }) {
   const c = cardFromIndex(idx);
   const isRed = c.suit === "♥" || c.suit === "♦";
   return (
-    <div className="relative flex h-20 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/90 shadow-[0_10px_30px_rgba(0,0,0,.35)]">
-      <div className={`absolute left-2 top-2 text-[10px] font-semibold ${isRed ? "text-rose-600" : "text-zinc-900"}`}>
+    <div className="relative flex h-[72px] w-[52px] items-center justify-center rounded-2xl border border-white/15 bg-white/90 shadow-[0_10px_30px_rgba(0,0,0,.35)]">
+      <div className={`absolute left-2 top-2 text-[9px] font-semibold ${isRed ? "text-rose-600" : "text-zinc-900"}`}>
         {c.rank}
-        <div className="text-[9px] leading-3">{c.suit}</div>
+        <div className="text-[8px] leading-3">{c.suit}</div>
       </div>
-      <div className={`text-xl ${isRed ? "text-rose-600" : "text-zinc-900"}`}>{c.suit}</div>
-      <div className={`absolute bottom-2 right-2 rotate-180 text-[10px] font-semibold ${isRed ? "text-rose-600" : "text-zinc-900"}`}>
+      <div className={`text-lg ${isRed ? "text-rose-600" : "text-zinc-900"}`}>{c.suit}</div>
+      <div className={`absolute bottom-2 right-2 rotate-180 text-[9px] font-semibold ${isRed ? "text-rose-600" : "text-zinc-900"}`}>
         {c.rank}
-        <div className="text-[9px] leading-3">{c.suit}</div>
+        <div className="text-[8px] leading-3">{c.suit}</div>
       </div>
     </div>
   );
@@ -69,6 +69,7 @@ type Seat = {
   username: string;
   prestigeLevel?: number;
   nameColor?: string | null;
+  avatarUrl?: string | null;
   missedRounds: number;
   bet: number;
   cards: number[];
@@ -466,8 +467,17 @@ export default function BlackjackTablePage() {
     const prestige = effectivePrestige;
     const glow =
       prestige > 0 && prestige % 5 === 0 ? "drop-shadow-[0_0_12px_rgba(250,204,21,.35)]" : "";
+    const avatarUrl = String((p as any).avatarUrl ?? "").trim();
     return (
       <span className={`inline-flex items-center gap-1 font-semibold ${nameClass(p)} ${glow}`}>
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt=""
+            className="h-5 w-5 rounded-full border border-white/10 object-cover"
+            referrerPolicy="no-referrer"
+          />
+        ) : null}
         <span>{p.username}</span>
         {prestige >= 1 ? <span className="text-yellow-300">★{prestige}</span> : null}
       </span>

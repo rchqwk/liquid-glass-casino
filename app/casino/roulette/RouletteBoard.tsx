@@ -21,8 +21,9 @@ function chipLabel(amount: number) {
 export function RouletteBoard(props: {
   bets: Record<BetKey, number>;
   onAddBet: (key: BetKey) => void;
+  disabled?: boolean;
 }) {
-  const { bets, onAddBet } = props;
+  const { bets, onAddBet, disabled } = props;
 
   const numbersByRow: number[][] = [];
   for (let r = ROWS; r >= 1; r -= 1) {
@@ -44,6 +45,7 @@ export function RouletteBoard(props: {
             0,
           )} transition hover:brightness-110`}
           onClick={() => onAddBet("n:0")}
+          disabled={!!disabled}
         >
           0
           {bets["n:0"] ? (
@@ -65,6 +67,7 @@ export function RouletteBoard(props: {
                     n,
                   )} transition hover:brightness-110`}
                   onClick={() => onAddBet(`n:${n}` as BetKey)}
+                  disabled={!!disabled}
                 >
                   {n}
                   {bets[`n:${n}` as BetKey] ? (
@@ -86,12 +89,14 @@ export function RouletteBoard(props: {
           sub="low"
           activeAmount={bets.low}
           onClick={() => onAddBet("low")}
+          disabled={!!disabled}
         />
         <OutsideBet
           label="EVEN"
           sub="even"
           activeAmount={bets.even}
           onClick={() => onAddBet("even")}
+          disabled={!!disabled}
         />
         <OutsideBet
           label="RED"
@@ -99,6 +104,7 @@ export function RouletteBoard(props: {
           tone="red"
           activeAmount={bets.red}
           onClick={() => onAddBet("red")}
+          disabled={!!disabled}
         />
         <OutsideBet
           label="BLACK"
@@ -106,18 +112,21 @@ export function RouletteBoard(props: {
           tone="black"
           activeAmount={bets.black}
           onClick={() => onAddBet("black")}
+          disabled={!!disabled}
         />
         <OutsideBet
           label="ODD"
           sub="odd"
           activeAmount={bets.odd}
           onClick={() => onAddBet("odd")}
+          disabled={!!disabled}
         />
         <OutsideBet
           label="19–36"
           sub="high"
           activeAmount={bets.high}
           onClick={() => onAddBet("high")}
+          disabled={!!disabled}
         />
       </div>
 
@@ -135,8 +144,9 @@ function OutsideBet(props: {
   tone?: "red" | "black";
   activeAmount?: number;
   onClick: () => void;
+  disabled?: boolean;
 }) {
-  const { label, sub, tone, activeAmount, onClick } = props;
+  const { label, sub, tone, activeAmount, onClick, disabled } = props;
   const bg =
     tone === "red"
       ? "bg-rose-500/25 border-rose-200/15"
@@ -146,7 +156,8 @@ function OutsideBet(props: {
   return (
     <button
       type="button"
-      className={`relative rounded-2xl border px-3 py-3 text-left transition hover:bg-white/10 ${bg}`}
+      disabled={!!disabled}
+      className={`relative rounded-2xl border px-3 py-3 text-left transition hover:bg-white/10 disabled:opacity-40 ${bg}`}
       onClick={onClick}
     >
       <div className="flex items-center justify-between gap-2">
@@ -161,4 +172,3 @@ function OutsideBet(props: {
     </button>
   );
 }
-

@@ -1,17 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../../lib/authClient";
 
 export default function PrestigeShopPage() {
   const { user, loading, refresh } = useAuth();
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [bonusPoints, setBonusPoints] = useState<number>(0);
 
   const points = Number((user as any)?.prestige_points ?? 0);
 
-  const buyBond = async () => {
+  const loadBp = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch("/api/blackjack/boxes", { cache: "no-store" });
+      if (!res.ok) return;
+      const j = (await res.json().catch(() => ({}))) as any;
+      setBonusPoints(Math.max(0, Math.floor(Number(j?.bonusPoints ?? 0) || 0)));
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    setBonusPoints(0);
+    void loadBp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const buyBond = async (currency: "pp" | "bp") => {
     if (busy) return;
     setBusy(true);
     setMsg(null);
@@ -19,11 +38,12 @@ export default function PrestigeShopPage() {
       const res = await fetch("/api/prestige-shop/buy", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ item: "bond" }),
+        body: JSON.stringify({ item: "bond", currency }),
       });
       const j = (await res.json().catch(() => ({}))) as any;
       if (!res.ok) throw new Error(j?.error ?? "Failed");
       await refresh();
+      await loadBp();
       setMsg("Bought Bond.");
     } catch (e: any) {
       setMsg(String(e?.message ?? "Failed"));
@@ -39,6 +59,8 @@ export default function PrestigeShopPage() {
           <h1 className="text-lg font-semibold text-white">Prestige Shop</h1>
           <div className="mt-1 text-xs text-white/60">
             Prestige Points: <span className="font-mono text-white/80">{points}</span>
+            <span className="mx-2 text-white/35">•</span>
+            Bonus Points: <span className="font-mono text-white/80">{bonusPoints}</span>
           </div>
         </div>
         <Link
@@ -75,9 +97,18 @@ export default function PrestigeShopPage() {
                 type="button"
                 disabled={busy || points < 1}
                 className="glass-soft rounded-2xl border border-yellow-300/20 bg-yellow-500/10 px-4 py-2 text-sm font-semibold text-yellow-100 hover:bg-yellow-500/15 disabled:opacity-40"
-                onClick={buyBond}
+                onClick={() => buyBond("pp")}
               >
-                Buy Bond
+                Buy Bond (1 PP)
+              </button>
+              <button
+                type="button"
+                disabled={busy || bonusPoints < 50}
+                className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10 disabled:opacity-40"
+                onClick={() => buyBond("bp")}
+                title="Costs 50 bonus points"
+              >
+                Buy Bond (50 BP)
               </button>
             </div>
             {msg ? <div className="mt-3 text-xs text-white/60">{msg}</div> : null}
@@ -87,4 +118,3 @@ export default function PrestigeShopPage() {
     </div>
   );
 }
-

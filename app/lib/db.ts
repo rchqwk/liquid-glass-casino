@@ -11,6 +11,7 @@ export type AuthedUserWithRole = {
   prestige_level?: number;
   prestige_points?: number;
   name_color?: string | null;
+  discord_avatar_url?: string | null;
 };
 
 export function normalizeUsername(raw: string) {
@@ -26,6 +27,7 @@ type Store = {
     prestige_level?: number;
     prestige_points?: number;
     name_color?: string | null;
+    discord_avatar_url?: string | null;
     created_at: number;
     fingerprint?: string;
     active_session_token?: string | null;
@@ -284,15 +286,17 @@ async function ensureSchema() {
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS prestige_level INT NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS prestige_points INT NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS name_color TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_avatar_url TEXT`;
 
   await sql`ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`;
   schemaReady = true;
 }
 
-export async function createOrGetDiscordLinkedUser(input: { discordId: string; displayName: string }) {
+export async function createOrGetDiscordLinkedUser(input: { discordId: string; displayName: string; avatarUrl?: string | null }) {
   const discordId = String(input.discordId ?? "").trim();
   if (!discordId) throw new Error("Missing discordId");
   const displayName = normalizeUsername(String(input.displayName ?? "discord_user").slice(0, 32));
+  const avatarUrl = input.avatarUrl ? String(input.avatarUrl).slice(0, 300) : null;
   const now = Date.now();
   const sql = getSql();
 
@@ -304,6 +308,7 @@ export async function createOrGetDiscordLinkedUser(input: { discordId: string; d
       const urows =
         (await sql`SELECT id, username, role_level FROM users WHERE id = ${Number(existingUserId)}`) as any[];
       const u = urows[0];
+      if (u && avatarUrl) await sql`UPDATE users SET discord_avatar_url = ${avatarUrl} WHERE id = ${Number(existingUserId)}`;
       if (u) return { id: Number(u.id), username: String(u.username), role_level: Number(u.role_level ?? 0) };
     }
 
@@ -316,6 +321,7 @@ export async function createOrGetDiscordLinkedUser(input: { discordId: string; d
     const u2 = (await sql`SELECT id, username, role_level FROM users WHERE username = ${uname}`) as any[];
     const user = u2[0];
     if (!user) throw new Error("User create failed");
+    if (avatarUrl) await sql`UPDATE users SET discord_avatar_url = ${avatarUrl} WHERE id = ${user.id}`;
     await sql`INSERT INTO discord_links (discord_id, user_id, created_at) VALUES (${discordId}, ${user.id}, ${now}) ON CONFLICT (discord_id) DO NOTHING`;
     await sql`UPDATE users SET last_seen = ${now} WHERE id = ${user.id}`;
     return { id: Number(user.id), username: String(user.username), role_level: Number(user.role_level ?? 0) };
@@ -337,6 +343,7 @@ export async function createOrGetDiscordLinkedUser(input: { discordId: string; d
       s.users.push(user as any);
     }
     (user as any).last_seen = now;
+    if (avatarUrl) (user as any).discord_avatar_url = avatarUrl;
     s.discord_links.push({ discord_id: discordId, user_id: user.id, created_at: now });
     return { id: user.id, username: user.username, role_level: user.role_level ?? 0 };
   });
@@ -503,7 +510,7 @@ export async function getAnnouncements(afterId = 0, limit = 20) {
 
 export async function updateBalanceAndCheckDoubled(userId: number, balance: number) {
   const b = Number(balance);
-  if (!Number.isFinite(b) || b < 0) return false;
+  if (!Number.isFinite(b) || b < 0) return 0;
   const sql = getSql();
   const now = Date.now();
   const windowMs = 10 * 60 * 1000;
@@ -518,31 +525,33 @@ export async function updateBalanceAndCheckDoubled(userId: number, balance: numb
     const baseTs = Number(rows[0]?.balance_baseline_ts ?? 0);
     if (!baseTs || now - baseTs > windowMs || base <= 0) {
       await sql`UPDATE users SET balance_baseline = ${b}, balance_baseline_ts = ${now} WHERE id = ${userId}`;
-      return false;
+      return 0;
     }
-    if (b >= base * 2) {
+    const mult = Math.floor(b / base);
+    if (mult >= 2) {
       await sql`UPDATE users SET balance_baseline = ${b}, balance_baseline_ts = ${now} WHERE id = ${userId}`;
-      return true;
+      return mult;
     }
-    return false;
+    return 0;
   }
 
   return withStore((s) => {
     const u: any = s.users.find((x) => x.id === userId);
-    if (!u) return false;
+    if (!u) return 0;
     const base = Number(u.balance_baseline ?? 0);
     const baseTs = Number(u.balance_baseline_ts ?? 0);
     if (!baseTs || now - baseTs > windowMs || base <= 0) {
       u.balance_baseline = b;
       u.balance_baseline_ts = now;
-      return false;
+      return 0;
     }
-    if (b >= base * 2) {
+    const mult = Math.floor(b / base);
+    if (mult >= 2) {
       u.balance_baseline = b;
       u.balance_baseline_ts = now;
-      return true;
+      return mult;
     }
-    return false;
+    return 0;
   });
 }
 
@@ -639,6 +648,7 @@ export async function getUserBySessionToken(token: string): Promise<AuthedUserWi
       (await sql`
         SELECT u.id as id, u.username as username, u.role_level as role_level
              , u.prestige_level as prestige_level, u.prestige_points as prestige_points, u.name_color as name_color
+             , u.discord_avatar_url as discord_avatar_url
         FROM sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.token = ${token}
@@ -663,6 +673,7 @@ export async function getUserBySessionToken(token: string): Promise<AuthedUserWi
       prestige_level: Number((user as any).prestige_level ?? 0),
       prestige_points: Number((user as any).prestige_points ?? 0),
       name_color: ((user as any).name_color ?? null) as any,
+      discord_avatar_url: ((user as any).discord_avatar_url ?? null) as any,
     };
   });
 }

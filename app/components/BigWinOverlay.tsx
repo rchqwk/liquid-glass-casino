@@ -8,7 +8,7 @@ type BigWinDetail = {
   game: string;
   wager: number;
   profit: number;
-  returnMult: number; // (wager+profit)/wager
+  returnMult: number; // (wager+profit)/denominator (usually wager; can be base bet for bonus-buys)
   ts: number;
 };
 

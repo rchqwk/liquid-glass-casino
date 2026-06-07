@@ -56,7 +56,7 @@ type AuthContextValue = {
     | { ok: false; error: string }
   >;
   signOut: () => Promise<void>;
-  reportResult: (input: { game: string; profit: number; wager: number; balance?: number }) => Promise<void>;
+  reportResult: (input: { game: string; profit: number; wager: number; baseWager?: number; balance?: number }) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -297,14 +297,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null);
         }
       },
-      reportResult: async ({ game, profit, wager, balance }) => {
+      reportResult: async ({ game, profit, wager, baseWager, balance }) => {
         if (!user) return;
         if (!Number.isFinite(profit) || !Number.isFinite(wager)) return;
         try {
           await fetchWithDevice("/api/leaderboard/report", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ game, profit, wager, balance }),
+            body: JSON.stringify({ game, profit, wager, baseWager, balance }),
           });
         } catch {
           // ignore

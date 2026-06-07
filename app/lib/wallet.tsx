@@ -23,7 +23,7 @@ type WalletState = {
   lastRefill100At?: number;
   openBets?: Record<
     number,
-    { game: string; wager: number; ts: number; serverSeed: string; clientSeed: string }
+    { game: string; wager: number; ts: number; serverSeed: string; clientSeed: string; baseWager?: number }
   >;
 };
 
@@ -36,6 +36,9 @@ type BetRng = {
 type PlaceBetInput = {
   game: string;
   wager: number;
+  // Optional display denominator for multiplier readouts (e.g. bonus-buy games where
+  // the cost is 100× base bet, but you want to show X based on the base bet).
+  baseWager?: number;
   resolve: (rng: BetRng) => { multiplier: number; outcome: string };
 };
 
@@ -59,6 +62,7 @@ type WalletContextValue = {
   beginBet: (input: {
     game: string;
     wager: number;
+    baseWager?: number;
   }) => { nonce: number; rng: BetRng } | { error: string };
   settleBet: (input: {
     nonce: number;
@@ -264,7 +268,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         return { revealedServerSeed: revealed };
       },
 
-      placeBet: ({ game, wager, resolve }) => {
+      placeBet: ({ game, wager, baseWager, resolve }) => {
         emitClientEvent("lgc:betstart", { game, wager: clampMoney(wager), ts: Date.now() });
         if (!Number.isFinite(wager) || wager <= 0) {
           return { multiplier: 0, outcome: "Invalid wager", profit: 0, balanceAfter: state.balance };
@@ -300,7 +304,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const payout = wager * multiplier;
         const nextBalance = clampMoney(current.balance - wager + payout);
         const profit = clampMoney(payout - wager);
-        const returnMult = wager > 0 ? (wager + profit) / wager : 0;
+        const denom = Number(baseWager);
+        const denomWager = Number.isFinite(denom) && denom > 0 ? denom : wager;
+        const returnMult = denomWager > 0 ? payout / denomWager : 0;
 
         setState((s) =>
           s
@@ -344,7 +350,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         return { multiplier, outcome: res.outcome, profit, balanceAfter: nextBalance };
       },
 
-      beginBet: ({ game, wager }) => {
+      beginBet: ({ game, wager, baseWager }) => {
         emitClientEvent("lgc:betstart", { game, wager: clampMoney(wager), ts: Date.now() });
         if (!Number.isFinite(wager) || wager <= 0) return { error: "Invalid wager" };
         const current = state;
@@ -381,6 +387,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             ts: Date.now(),
             serverSeed: s.serverSeed,
             clientSeed: s.clientSeed,
+            baseWager:
+              Number.isFinite(Number(baseWager)) && Number(baseWager) > 0 ? clampMoney(Number(baseWager)) : undefined,
           };
           return {
             ...s,
@@ -401,7 +409,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const payout = open.wager * m;
         const profit = clampMoney(payout - open.wager);
         const nextBalance = clampMoney(state.balance + payout);
-        const returnMult = open.wager > 0 ? (open.wager + profit) / open.wager : 0;
+        const denom = Number((open as any).baseWager);
+        const denomWager = Number.isFinite(denom) && denom > 0 ? denom : open.wager;
+        const returnMult = denomWager > 0 ? payout / denomWager : 0;
 
         setState((s) => {
           if (!s) return s;

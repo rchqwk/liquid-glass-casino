@@ -20,7 +20,13 @@ type DiscordMe = {
   id: string;
   username: string;
   global_name?: string | null;
+  avatar?: string | null;
 };
+
+function discordAvatarUrl(discordId: string, avatar: string | null | undefined) {
+  if (avatar) return `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png?size=64`;
+  return "https://cdn.discordapp.com/embed/avatars/0.png";
+}
 
 function requireEnv(name: string) {
   const v = process.env[name];
@@ -71,7 +77,8 @@ export async function POST(req: Request) {
   if (!meRes.ok || !me?.id) return NextResponse.json({ error: "Discord user lookup failed" }, { status: 400 });
 
   const display = String(me.global_name ?? me.username ?? "discord_user");
-  const linked = await createOrGetDiscordLinkedUser({ discordId: me.id, displayName: display });
+  const avatarUrl = discordAvatarUrl(me.id, (me as any).avatar ?? null);
+  const linked = await createOrGetDiscordLinkedUser({ discordId: me.id, displayName: display, avatarUrl });
 
   const sessionToken = randomToken();
   await discordSetActiveSession(linked.id, sessionToken);

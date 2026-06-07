@@ -510,6 +510,7 @@ export default function SlotsPage() {
                 const buy = placeBet({
                   game: "EMOJI Hold and Win Buy Feature",
                   wager: wager * 100,
+                  baseWager: wager,
                   resolve: () => ({ multiplier: 0, outcome: "Bought Free Spins" }),
                 });
                 setLast({
@@ -522,6 +523,7 @@ export default function SlotsPage() {
                   game: "EMOJI Hold and Win Buy Feature",
                   profit: buy.profit,
                   wager: wager * 100,
+                  baseWager: wager,
                   balance: buy.balanceAfter,
                 });
               }}
@@ -541,6 +543,7 @@ export default function SlotsPage() {
                 const buy = placeBet({
                   game: "EMOJI Hold and Win Buy Bonus",
                   wager: wager * 500,
+                  baseWager: wager,
                   resolve: (rng) => {
                     const spinRes = spinSlots243Ways({
                       rngFloat: rng.float,
@@ -557,6 +560,7 @@ export default function SlotsPage() {
                   game: "EMOJI Hold and Win Buy Bonus",
                   profit: buy.profit,
                   wager: wager * 500,
+                  baseWager: wager,
                   balance: buy.balanceAfter,
                 });
               }}

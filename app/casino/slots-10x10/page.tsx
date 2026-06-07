@@ -37,9 +37,11 @@ export default function Slots10x10Page() {
   const [animProfile, setAnimProfile] = useState<"normal" | "near" | "big">("normal");
 
   const maxWinStateKey = useMemo(() => `lgc.slots10x10.maxwin.v1.${user?.id ?? "anon"}`, [user?.id]);
-  const MAX_WIN_PROFIT = 1500;
+  const MAX_WIN_MULT = 1500;
   const MAX_WIN_WINDOW_MS = 24 * 60 * 60 * 1000;
-  const MAX_WIN_TIER_PROFITS = [1500, 750, 500, 250];
+  // Max-win cap tiers (based on return multiplier). The first max-win in the window can hit 1500x,
+  // then subsequent attempts are capped to smaller multipliers.
+  const MAX_WIN_TIER_MULTS = [1500, 750, 500, 250];
 
   function loadMaxWinState(): { firstAt: number; count: number } | null {
     try {
@@ -153,22 +155,20 @@ export default function Slots10x10Page() {
         let multiplier = (isFree ? 1 : 0) + res.winMultiplier; // refund stake in free spins
         let outcome = res.winMultiplier > 0 ? `WIN +${res.winMultiplier.toFixed(2)}x` : "LOSE";
 
-        // Max-win cap: profit capped to 1500, and can only hit that cap tier once per 24h per player.
-        // Subsequent "would-be max win" spins in the 24h window are capped to 750, then 500, then 250.
+        // Max-win cap: cap the MULTIPLIER (not a fixed chip amount), and only allow the top tier
+        // once per 24h per player. Subsequent attempts in the window are capped to lower tiers.
         const wagerAmt = Math.max(0, Number(cost) || 0);
         if (wagerAmt > 0) {
-          const payout = wagerAmt * Math.max(0, Number(multiplier) || 0);
-          const profit = payout - wagerAmt;
-          if (profit > MAX_WIN_PROFIT) {
+          const rawMult = Math.max(0, Number(multiplier) || 0);
+          if (rawMult > MAX_WIN_MULT) {
             const now = Date.now();
             const cur = loadMaxWinState();
             const expired = !cur?.firstAt || now - cur.firstAt > MAX_WIN_WINDOW_MS;
             const base = expired ? { firstAt: now, count: 0 } : cur!;
-            const tier = MAX_WIN_TIER_PROFITS[Math.min(base.count, MAX_WIN_TIER_PROFITS.length - 1)] ?? 250;
-            const cappedProfit = tier;
-            multiplier = (wagerAmt + cappedProfit) / wagerAmt;
-            outcome = `MAX WIN CAPPED: +${formatChips(cappedProfit)} ⓒ`;
-            saveMaxWinState({ firstAt: base.firstAt, count: Math.min(base.count + 1, MAX_WIN_TIER_PROFITS.length - 1) });
+            const tier = MAX_WIN_TIER_MULTS[Math.min(base.count, MAX_WIN_TIER_MULTS.length - 1)] ?? 250;
+            multiplier = tier;
+            outcome = `MAX WIN CAPPED: ${tier}x`;
+            saveMaxWinState({ firstAt: base.firstAt, count: Math.min(base.count + 1, MAX_WIN_TIER_MULTS.length - 1) });
           }
         }
 
@@ -300,6 +300,7 @@ export default function Slots10x10Page() {
               const buy = placeBet({
                 game: "Break Bonanza Buy Feature",
                 wager: wager * 100,
+                baseWager: wager,
                 resolve: () => ({ multiplier: 0, outcome: "Bought Free Spins" }),
               });
               setLast({ profit: buy.profit, returnMult: 0, outcome: "Bought Free Spins (100× bet)" });
@@ -309,6 +310,7 @@ export default function Slots10x10Page() {
                 game: "Break Bonanza Buy Feature",
                 profit: buy.profit,
                 wager: wager * 100,
+                baseWager: wager,
                 balance: buy.balanceAfter,
               });
             }}
@@ -327,6 +329,7 @@ export default function Slots10x10Page() {
               const buy = placeBet({
                 game: "Break Bonanza Buy Bonus",
                 wager: wager * 250,
+                baseWager: wager,
                 resolve: () => ({ multiplier: 0, outcome: "Bought SUPER Free Spins" }),
               });
               setLast({ profit: buy.profit, returnMult: 0, outcome: "Bought SUPER Free Spins (250× bet)" });
@@ -336,6 +339,7 @@ export default function Slots10x10Page() {
                 game: "Break Bonanza Buy Bonus",
                 profit: buy.profit,
                 wager: wager * 250,
+                baseWager: wager,
                 balance: buy.balanceAfter,
               });
             }}
