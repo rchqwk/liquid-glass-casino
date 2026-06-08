@@ -751,6 +751,10 @@ export type TableState = {
   turnIndex: number; // index into participants
 
   shoe: number[]; // remaining cards (ints)
+  shoeInitialSize?: number; // total cards in the current shoe when it was shuffled
+  shoeCardsDealt?: number; // cards dealt from the current shoe so far
+  shoeCutCardAt?: number; // reshuffle marker, expressed as dealt-card number
+  shoeShufflePending?: boolean; // cut card reached; reshuffle after the current hand
   dealer: {
     cards: number[];
     bonusPoints: number;
@@ -980,6 +984,13 @@ function applyBondAccrual(inv: Inventory, now: number) {
 }
 
 export function newTableState(input: { id: string; name: string; public: boolean; now: number }): TableState {
+  const seed = Math.floor(input.now / 1000) ^ 2654435761;
+  const shoe = shuffleDeck(seed);
+  const shoeInitialSize = shoe.length;
+  const cutRng = lcg(seed ^ 1597334677);
+  const cutMin = Math.max(40, Math.floor(shoeInitialSize * 0.65));
+  const cutMax = Math.max(cutMin, Math.floor(shoeInitialSize * 0.82));
+  const shoeCutCardAt = cutMin + Math.floor(cutRng() * (cutMax - cutMin + 1));
   return {
     id: input.id,
     public: input.public,
@@ -993,7 +1004,13 @@ export function newTableState(input: { id: string; name: string; public: boolean
     password: null,
     afkKickEnabled: true,
     chat: [],
-    events: [],
+    events: [
+      {
+        id: shortEventId(),
+        at: input.now,
+        text: `The deck has been shuffled. A new shoe card was placed at card number ${shoeCutCardAt}.`,
+      },
+    ],
     decorations: [],
     phase: "betting",
     round: 1,
@@ -1004,7 +1021,11 @@ export function newTableState(input: { id: string; name: string; public: boolean
     spectators: [],
     participants: [],
     turnIndex: 0,
-    shoe: [],
+    shoe,
+    shoeInitialSize,
+    shoeCardsDealt: 0,
+    shoeCutCardAt,
+    shoeShufflePending: false,
     dealer: { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false, effects: [] },
     dealerBlackjack: false,
     peekByUserId: {},
@@ -1029,6 +1050,11 @@ export function tickTable(state: TableState, now: number): TableState {
   if (!Array.isArray(s.chat)) s.chat = [];
   if (!Array.isArray(s.events)) s.events = [];
   s.dealer.effects = Array.isArray((s.dealer as any)?.effects) ? (s.dealer as any).effects : [];
+  if (!Array.isArray(s.shoe)) s.shoe = [];
+  if (!Number.isFinite(Number(s.shoeInitialSize ?? 0))) s.shoeInitialSize = s.shoe.length;
+  if (!Number.isFinite(Number(s.shoeCardsDealt ?? 0))) s.shoeCardsDealt = 0;
+  if (!Number.isFinite(Number(s.shoeCutCardAt ?? 0))) s.shoeCutCardAt = 0;
+  s.shoeShufflePending = !!s.shoeShufflePending;
 
   // Inventory migration safety
   for (const p of s.seats) {
@@ -1129,13 +1155,32 @@ function startBetting(state: TableState, now: number) {
   s.dealerWindowEndsAt = 0;
   s.participants = [];
   s.turnIndex = 0;
-  s.shoe = [];
   s.dealer = { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false, effects: [] };
   s.dealerBlackjack = false;
   s.peekByUserId = {};
   s.lastResults = s.lastResults ?? {};
   s.evictedInventories = s.evictedInventories ?? [];
   s.events = Array.isArray(s.events) ? s.events : [];
+
+  // Keep using the current shoe across hands until the cut card is reached.
+  // Once it is reached, shuffle a fresh shoe at the next betting phase.
+  if (!Array.isArray(s.shoe) || s.shoe.length === 0 || s.shoeShufflePending) {
+    const seed = Math.floor(now / 1000) ^ (s.round * 2654435761);
+    s.shoe = shuffleDeck(seed);
+    s.shoeInitialSize = s.shoe.length;
+    s.shoeCardsDealt = 0;
+    const cutRng = lcg(seed ^ 1597334677);
+    const cutMin = Math.max(40, Math.floor(s.shoeInitialSize * 0.65));
+    const cutMax = Math.max(cutMin, Math.floor(s.shoeInitialSize * 0.82));
+    s.shoeCutCardAt = cutMin + Math.floor(cutRng() * (cutMax - cutMin + 1));
+    s.shoeShufflePending = false;
+    s.events.push({
+      id: shortEventId(),
+      at: now,
+      text: `The deck has been shuffled. A new shoe card was placed at card number ${s.shoeCutCardAt}.`,
+    });
+    if (s.events.length > 80) s.events = s.events.slice(-80);
+  }
 
   // Reset round-specific flags, keep inventory
   for (let i = 0; i < s.seats.length; i++) {
@@ -1249,10 +1294,6 @@ function startRound(state: TableState, now: number) {
   s.turnEndsAt = now + turnDurationMs(s);
   s.peekByUserId = {};
   s.dealerBlackjack = false;
-
-  // new shoe each round (MVP)
-  const seed = Math.floor(now / 1000) ^ (s.round * 2654435761);
-  s.shoe = shuffleDeck(seed);
   s.dealer = { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false, effects: [] };
 
   // deal: each participant 2, dealer 2
@@ -1315,6 +1356,20 @@ function startRound(state: TableState, now: number) {
 
 function drawFromShoe(s: TableState): number | null {
   const next = s.shoe.pop();
+  if (typeof next === "number") {
+    s.shoeCardsDealt = Math.max(0, Number(s.shoeCardsDealt ?? 0) || 0) + 1;
+    const cutAt = Math.max(0, Number(s.shoeCutCardAt ?? 0) || 0);
+    if (!s.shoeShufflePending && cutAt > 0 && s.shoeCardsDealt >= cutAt) {
+      s.shoeShufflePending = true;
+      s.events = Array.isArray(s.events) ? s.events : [];
+      s.events.push({
+        id: shortEventId(),
+        at: Date.now(),
+        text: `The shoe card has been reached at card number ${cutAt}. The deck will be shuffled after this hand.`,
+      });
+      if (s.events.length > 80) s.events = s.events.slice(-80);
+    }
+  }
   return typeof next === "number" ? next : null;
 }
 
