@@ -4,7 +4,34 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "../lib/authClient";
 
-type Msg = { id: string; ts: number; userId: number; username: string; text: string };
+type Msg = {
+  id: string;
+  ts: number;
+  userId: number;
+  username: string;
+  text: string;
+  prestigeLevel?: number;
+  nameColor?: string | null;
+};
+
+function chatNameClass(nameColor?: string | null) {
+  const effective = String(nameColor ?? "").trim().toLowerCase();
+  const map: Record<string, string> = {
+    brown: "text-amber-700",
+    red: "text-rose-300",
+    orange: "text-orange-300",
+    yellow: "text-yellow-300",
+    green: "text-emerald-300",
+    teal: "text-teal-300",
+    blue: "text-sky-300",
+    indigo: "text-indigo-300",
+    violet: "text-violet-300",
+    pink: "text-pink-300",
+    cyan: "text-cyan-300",
+    lime: "text-lime-300",
+  };
+  return map[effective] ?? "text-white/80";
+}
 
 export function GlobalChatBubble() {
   const { user, loading } = useAuth();
@@ -160,7 +187,12 @@ export function GlobalChatBubble() {
                   {messages.map((m) => (
                     <div key={m.id} className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
                       <div className="flex items-center justify-between gap-3 text-[11px] text-white/60">
-                        <span className="font-semibold text-white/80">{m.username}</span>
+                        <span className={`font-semibold ${chatNameClass(m.nameColor)}`}>
+                          {m.username}
+                          {(Number(m.prestigeLevel ?? 0) || 0) >= 1 ? (
+                            <span className="ml-1 text-yellow-300">★{Number(m.prestigeLevel ?? 0)}</span>
+                          ) : null}
+                        </span>
                         <span className="font-mono">{new Date(m.ts).toLocaleTimeString()}</span>
                       </div>
                       <div className="mt-1 whitespace-pre-wrap text-sm text-white/85">{m.text}</div>

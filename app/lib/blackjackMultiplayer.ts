@@ -721,7 +721,7 @@ export type TableState = {
   afkKickEnabled?: boolean; // default true
 
   // Simple room chat (stored on the table state)
-  chat?: Array<{ id: string; userId: number; username: string; text: string; at: number }>;
+  chat?: Array<{ id: string; userId: number; username: string; text: string; at: number; prestigeLevel?: number; nameColor?: string | null }>;
 
   // Broadcast events for the table (used for toasts/alerts)
   events?: Array<{ id: string; at: number; text: string }>;
@@ -2385,7 +2385,7 @@ export function safePublicStateForUser(state: TableState, userId: number) {
 export function applyChatMessage(
   state: TableState,
   userId: number,
-  input: { text: string },
+  input: { text: string; username?: string; prestigeLevel?: number; nameColor?: string | null },
   now: number,
 ): { state: TableState; error?: string } {
   const s = tickTable(state, now);
@@ -2397,9 +2397,11 @@ export function applyChatMessage(
   const isSpectator = (s.spectators ?? []).includes(userId);
   if (!seat && !isSpectator) return { state: s, error: "Join the room to chat." };
 
-  const username = seat?.username ?? "Spectator";
+  const username = String(input?.username ?? seat?.username ?? "Spectator");
+  const prestigeLevel = Number(input?.prestigeLevel ?? (seat as any)?.prestigeLevel ?? 0) || 0;
+  const nameColor = ((input?.nameColor ?? (seat as any)?.nameColor ?? null) as string | null);
   s.chat = Array.isArray(s.chat) ? s.chat : [];
-  s.chat.push({ id: shortChatId(), userId, username, text, at: now });
+  s.chat.push({ id: shortChatId(), userId, username, text, at: now, prestigeLevel, nameColor });
   // Keep last 120 messages.
   if (s.chat.length > 120) s.chat = s.chat.slice(s.chat.length - 120);
 

@@ -73,7 +73,15 @@ type Store = {
   nextAnnouncementId?: number;
   announcements?: Array<{ id: number; ts: number; message: string }>;
   nextGlobalChatId?: number;
-  global_chat?: Array<{ id: number; ts: number; user_id: number; username: string; text: string }>;
+  global_chat?: Array<{
+    id: number;
+    ts: number;
+    user_id: number;
+    username: string;
+    text: string;
+    prestige_level?: number;
+    name_color?: string | null;
+  }>;
   discord_links?: Array<{ discord_id: string; user_id: number; created_at: number }>;
 };
 
@@ -439,8 +447,10 @@ export async function getGlobalChatMessages(limit = 120) {
   if (sql) {
     await ensureSchema();
     const rows = (await sql`
-      SELECT id, ts, user_id, username, text
-      FROM global_chat
+      SELECT gc.id, gc.ts, gc.user_id, gc.username, gc.text,
+             u.prestige_level, u.name_color
+      FROM global_chat gc
+      LEFT JOIN users u ON u.id = gc.user_id
       ORDER BY id DESC
       LIMIT ${limit}
     `) as any[];
@@ -451,6 +461,8 @@ export async function getGlobalChatMessages(limit = 120) {
       userId: Number(r.user_id ?? 0),
       username: String(r.username ?? ""),
       text: String(r.text ?? ""),
+      prestigeLevel: Number(r.prestige_level ?? 0),
+      nameColor: (r.name_color ?? null) as string | null,
     }));
   }
 
@@ -462,6 +474,8 @@ export async function getGlobalChatMessages(limit = 120) {
       userId: Number(m.user_id ?? 0),
       username: String(m.username ?? ""),
       text: String(m.text ?? ""),
+      prestigeLevel: Number((s.users ?? []).find((u: any) => u.id === Number(m.user_id))?.prestige_level ?? m.prestige_level ?? 0),
+      nameColor: (((s.users ?? []).find((u: any) => u.id === Number(m.user_id))?.name_color ?? m.name_color ?? null) as string | null),
     }));
   });
 }

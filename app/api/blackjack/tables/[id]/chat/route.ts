@@ -17,7 +17,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const now = Date.now();
   const base = tickTable(t.state, now);
-  const res = applyChatMessage(base, user.id, { text: String(body?.text ?? "") }, now);
+  const res = applyChatMessage(
+    base,
+    user.id,
+    {
+      text: String(body?.text ?? ""),
+      username: user.username,
+      prestigeLevel: Number((user as any)?.prestige_level ?? 0),
+      nameColor: ((user as any)?.name_color ?? null) as string | null,
+    },
+    now,
+  );
 
   await upsertBlackjackTable({
     id: t.id,
@@ -36,4 +46,3 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
   return NextResponse.json({ state: safePublicStateForUser(res.state, user.id) });
 }
-
