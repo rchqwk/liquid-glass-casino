@@ -2002,6 +2002,29 @@ export default function BlackjackTablePage() {
                   Rules: while seated, the bond value increases by <span className="font-semibold">1.2×</span> every 60
                   seconds.
                 </div>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl border border-emerald-300/25 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/15"
+                    onClick={async () => {
+                      const redeemed = Math.max(0, Math.round(Number(bondActive?.value ?? 0) * 100) / 100);
+                      const res = await postBond({ type: "redeem" });
+                      if (!res?.ok) return;
+                      const amt = Math.max(0, Math.round(Number(res.data?.redeemedAmount ?? redeemed) * 100) / 100);
+                      setBalance(Math.max(0, Math.round((Number(balance ?? 0) + amt) * 100) / 100));
+                      setBondPopup({ open: false, mode: "inactive" });
+                    }}
+                  >
+                    Redeem Bond
+                  </button>
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10"
+                    onClick={() => setBondPopup({ open: false, mode: "inactive" })}
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             )}
           </div>

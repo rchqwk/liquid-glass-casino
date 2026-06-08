@@ -12,6 +12,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const body = (await req.json().catch(() => null)) as
     | { type?: "activate"; amount?: number }
+    | { type?: "redeem" }
     | { type?: "buy" }
     | { type?: "info" }
     | null;
@@ -28,6 +29,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const seat = state.seats[seatIdx]!;
   seat.inventory = ensureInventory(seat.inventory);
   seat.inventory.bond = seat.inventory.bond ?? { owned: 0, active: null };
+  let redeemedAmount = 0;
 
   const type = String((body as any)?.type ?? "info");
   if (type === "buy") {
@@ -54,6 +56,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       lastAccrualAt: now,
     };
     state.updatedAt = now;
+  } else if (type === "redeem") {
+    const active = seat.inventory.bond?.active;
+    if (!active) return NextResponse.json({ error: "No active bond." }, { status: 400 });
+    redeemedAmount = Math.max(0, Math.round(Number(active.value ?? 0) * 100) / 100);
+    seat.inventory.bond.active = null;
+    state.updatedAt = now;
   }
 
   // Persist table + all inventories.
@@ -66,5 +74,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const inv = (await getBlackjackInventory(user.id)) ?? defaultInventory();
   await upsertBlackjackInventory(user.id, ensureInventory(inv));
 
-  return NextResponse.json({ ok: true, state: safePublicStateForUser(state, user.id) });
+  return NextResponse.json({ ok: true, redeemedAmount, state: safePublicStateForUser(state, user.id) });
 }
