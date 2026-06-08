@@ -307,7 +307,10 @@ export default function BlackjackTablePage() {
   const [betPending, setBetPending] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
-  const [bondPopup, setBondPopup] = useState<{ open: boolean; mode: "inactive" | "active" }>({ open: false, mode: "inactive" });
+  const [bondPopup, setBondPopup] = useState<{ open: boolean; mode: "inactive" | "active" | "choose_amount" }>({
+    open: false,
+    mode: "inactive",
+  });
   const [collectiblesOpen, setCollectiblesOpen] = useState(false);
   const [newFigOpen, setNewFigOpen] = useState(false);
   const [newFigUrl, setNewFigUrl] = useState("");
@@ -517,6 +520,7 @@ export default function BlackjackTablePage() {
 
   const bonusPointsBalance = Math.max(0, Math.floor(Number((state?.meInventory as any)?.bonusPoints ?? 0) || 0));
   const allInWinStreak = Math.max(0, Math.floor(Number((state?.meInventory as any)?.allInWinStreak ?? 0) || 0));
+  const bondAmountPercents = [10, 25, 50, 75, 90, 100] as const;
 
   const collectibles = (state?.meInventory as any)?.collectibles ?? { owned: {}, figurines: [] };
   const ownedCollectibles = (collectibles?.owned ?? {}) as Record<string, number>;
@@ -1920,24 +1924,67 @@ export default function BlackjackTablePage() {
                     type="button"
                     disabled={bondOwned <= 0}
                     className="glass-soft rounded-2xl border border-yellow-300/25 bg-yellow-500/10 px-4 py-2 text-sm font-semibold text-yellow-100 hover:bg-yellow-500/15 disabled:opacity-40"
-                    onClick={async () => {
+                    onClick={() => {
                       if (bondOwned <= 0) return;
-                      const raw = window.prompt("How many chips do you want to put in the bond?") ?? "";
-                      const amt = Math.round(Number(raw) * 100) / 100;
-                      if (!Number.isFinite(amt) || amt <= 0) return;
-                      if (amt > Number(balance ?? 0)) {
-                        setErr("Not enough chips.");
-                        return;
-                      }
-                      const ok = window.confirm(`Activate bond with ${amt.toFixed(2)} chips?`);
-                      if (!ok) return;
-                      // Prototype: wallet is client-side; we deduct locally.
-                      setBalance(Math.max(0, Number(balance ?? 0) - amt));
-                      await postBond({ type: "activate", amount: amt });
-                      setBondPopup({ open: false, mode: "inactive" });
+                      setBondPopup({ open: true, mode: "choose_amount" });
                     }}
                   >
                     Activate Bond
+                  </button>
+                </div>
+              </div>
+            ) : bondPopup.mode === "choose_amount" ? (
+              <div className="mt-4 rounded-2xl border border-yellow-300/15 bg-yellow-500/10 p-4 text-sm text-yellow-100">
+                <div className="font-semibold">Choose Bond Amount</div>
+                <div className="mt-1 text-xs text-yellow-100/70">
+                  Pick a percentage of your current balance:
+                  <span className="ml-1 font-mono text-yellow-100">{Number(balance ?? 0).toFixed(2)} ⓒ</span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {bondAmountPercents.map((pct) => {
+                    const amt = Math.round(Number(balance ?? 0) * (pct / 100) * 100) / 100;
+                    return (
+                      <button
+                        key={pct}
+                        type="button"
+                        disabled={bondOwned <= 0 || !(amt > 0) || amt > Number(balance ?? 0)}
+                        className="glass-soft rounded-2xl border border-yellow-300/25 bg-yellow-500/10 px-4 py-3 text-left text-sm font-semibold text-yellow-100 hover:bg-yellow-500/15 disabled:opacity-40"
+                        onClick={async () => {
+                          if (!(amt > 0)) {
+                            setErr("Not enough chips.");
+                            return;
+                          }
+                          if (amt > Number(balance ?? 0)) {
+                            setErr("Not enough chips.");
+                            return;
+                          }
+                          setErr(null);
+                          // Prototype: wallet is client-side; we deduct locally.
+                          setBalance(Math.max(0, Number(balance ?? 0) - amt));
+                          await postBond({ type: "activate", amount: amt });
+                          setBondPopup({ open: false, mode: "inactive" });
+                        }}
+                      >
+                        <div>{pct}%</div>
+                        <div className="mt-1 font-mono text-xs text-yellow-100/70">{amt.toFixed(2)} ⓒ</div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10"
+                    onClick={() => setBondPopup({ open: true, mode: "inactive" })}
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10"
+                    onClick={() => setBondPopup({ open: false, mode: "inactive" })}
+                  >
+                    Cancel
                   </button>
                 </div>
               </div>
