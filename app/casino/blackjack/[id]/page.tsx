@@ -2283,7 +2283,7 @@ export function BlackjackTablePageClient({
             ) : null}
             {!showV2Shell ? <p className="text-sm font-medium text-white">Table</p> : null}
             <div className="mt-3 flex items-center justify-between gap-3">
-              <div className="text-xs text-white/55">View</div>
+              <div className="text-xs text-white/55">{showV2Shell ? "Surface mode" : "View"}</div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -2297,7 +2297,7 @@ export function BlackjackTablePageClient({
                     setTableView("table");
                   }}
                 >
-                  Table
+                  {showV2Shell ? "Felt" : "Table"}
                 </button>
                 <button
                   type="button"
@@ -2311,14 +2311,14 @@ export function BlackjackTablePageClient({
                     setTableView("list");
                   }}
                 >
-                  List
+                  {showV2Shell ? "Seat list" : "List"}
                 </button>
               </div>
             </div>
 
             {tableView === "list" ? (
               <div className="mt-4">
-                <p className="text-xs text-white/60">Dealer</p>
+                <p className="text-xs text-white/60">{showV2Shell ? "Dealer lane" : "Dealer"}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {state.dealer.cards.map((c, i) => (
                     <CardView key={i} idx={c} hidden={c < 0} />
@@ -2346,7 +2346,7 @@ export function BlackjackTablePageClient({
             ) : null}
 
             <div className="mt-6">
-              <p className="text-xs text-white/60">Seats</p>
+              <p className="text-xs text-white/60">{showV2Shell ? "Players at the table" : "Seats"}</p>
               {tableView === "list" ? (
                 <div className="mt-2 grid grid-cols-1 gap-3">
                   {state.seats.map((p, i) => (
@@ -2365,10 +2365,7 @@ export function BlackjackTablePageClient({
                 </div>
               ) : (
                 <div className="mt-3">
-                  <div
-                    className={`relative mx-auto w-full max-w-[640px] ${isMobile ? "origin-top scale-[0.88]" : ""}`}
-                  >
-                    {/* Felt container for collectibles */}
+                  <div className={`relative mx-auto w-full max-w-[640px] ${isMobile ? "origin-top scale-[0.88]" : ""}`}>
                     <div ref={feltRef} className="absolute inset-0">
                       {decorations.map((d: any) => {
                         const mine = Number(d.ownerUserId ?? 0) === Number(user?.id ?? 0);
@@ -2393,7 +2390,6 @@ export function BlackjackTablePageClient({
                                 type="button"
                                 className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-black/40 text-[12px] font-semibold text-white/90 hover:bg-black/60"
                                 onPointerDown={(e) => {
-                                  // prevent starting a drag
                                   e.preventDefault();
                                   e.stopPropagation();
                                 }}
@@ -2423,16 +2419,12 @@ export function BlackjackTablePageClient({
                     <div className="mx-auto h-[560px] w-full rounded-[48px] border border-white/10 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-black/25 shadow-[0_40px_120px_rgba(0,0,0,.45)]" />
                     <div className="pointer-events-none absolute inset-0 rounded-[48px] ring-1 ring-white/10" />
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                      {/* Rotate 90° for a portrait-friendly felt oval */}
                       <div className="h-[480px] w-[320px] rounded-[999px] border border-white/10 bg-gradient-to-b from-emerald-500/12 to-black/20" />
                     </div>
 
-                    {/* Dealer hand (on felt) */}
                     <div className="absolute left-1/2 top-8 w-[360px] -translate-x-1/2">
                       <div className="mb-2 flex items-center justify-center gap-2 text-[11px] text-white/80">
-                        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 font-semibold text-white/85">
-                          Dealer
-                        </span>
+                        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 font-semibold text-white/85">Dealer</span>
                         <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-white/70">
                           Visible <span className="font-mono text-white/85">{dealerTotal}</span>
                         </span>
@@ -2444,23 +2436,15 @@ export function BlackjackTablePageClient({
                       </div>
                     </div>
 
-                    {/* Seats on the sides (no center seats) */}
                     {(() => {
-                      // Alternate sides down the table:
-                      // seat 0 = left, seat 1 = right, seat 2 = left, ...
-                      // seat 0 also sits a bit higher to reduce overlap with other hands.
-                      const leftTops = [92, 182, 272, 362, 452]; // px
-                      const rightTops = [104, 194, 284, 374, 464]; // slight stagger
+                      const leftTops = [92, 182, 272, 362, 452];
+                      const rightTops = [104, 194, 284, 374, 464];
                       return state.seats.map((p, i) => {
                         const isLeft = i % 2 === 0;
                         const rank = Math.floor(i / 2);
                         const topPx = isLeft ? leftTops[rank] ?? 452 : rightTops[rank] ?? 464;
                         return (
-                          <div
-                            key={i}
-                            className={`absolute ${isLeft ? "left-4" : "right-4"} w-[260px]`}
-                            style={{ top: topPx }}
-                          >
+                          <div key={i} className={`absolute ${isLeft ? "left-4" : "right-4"} w-[260px]`} style={{ top: topPx }}>
                             <BlackjackTableSeat
                               seatIndex={i}
                               seat={p as any}
@@ -2476,11 +2460,15 @@ export function BlackjackTablePageClient({
                       });
                     })()}
                   </div>
-                  {isMobile ? <div className="mt-2 text-[11px] text-white/45">Tip: switch to List view if this feels too small.</div> : null}
+                  {isMobile ? (
+                    <div className="mt-2 text-[11px] text-white/45">
+                      {showV2Shell ? "Tip: switch to Seat list for a clearer mobile read." : "Tip: switch to List view if this feels too small."}
+                    </div>
+                  ) : null}
                 </div>
               )}
               <div className="mt-3 text-xs text-white/55">
-                Spectators: <span className="font-mono">{state.spectators.length}</span>
+                {showV2Shell ? "Watching live" : "Spectators"}: <span className="font-mono">{state.spectators.length}</span>
               </div>
             </div>
           </div>
