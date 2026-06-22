@@ -265,7 +265,7 @@ export function BlackjackV2StatusStrip({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-white/45">Phase</div>
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Round state</div>
             <div className="mt-1 text-sm font-semibold text-white">{phase || "-"}</div>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
@@ -275,11 +275,11 @@ export function BlackjackV2StatusStrip({
             </div>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-white/45">Players</div>
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Seats filled</div>
             <div className="mt-1 text-sm font-semibold text-white">{seatCount}/10</div>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-white/45">Spectators</div>
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Watching live</div>
             <div className="mt-1 text-sm font-semibold text-white">{spectatorCount}</div>
           </div>
         </div>
@@ -291,7 +291,7 @@ export function BlackjackV2StatusStrip({
               className="glass-soft rounded-2xl border border-emerald-300/25 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/20"
               onClick={onOpenControls}
             >
-              Play turn
+              Open turn controls
             </button>
           ) : null}
           <button
@@ -299,7 +299,7 @@ export function BlackjackV2StatusStrip({
             className="glass-soft relative rounded-2xl px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
             onClick={onOpenChat}
           >
-            Chat
+            Open chat
             {unreadChat > 0 ? (
               <span className="ml-2 rounded-full bg-fuchsia-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                 {Math.min(99, unreadChat)}
@@ -311,7 +311,7 @@ export function BlackjackV2StatusStrip({
             className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
             onClick={onOpenCollectibles}
           >
-            Collectibles
+            Felt items
           </button>
           {isHost ? (
             <button
@@ -319,7 +319,7 @@ export function BlackjackV2StatusStrip({
               className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
               onClick={onOpenHost}
             >
-              Host
+              Host tools
             </button>
           ) : null}
         </div>
@@ -369,20 +369,20 @@ export function BlackjackV2OverviewPanel({
               Round <span className="font-mono text-white">{round || 0}</span>
             </span>
             <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1">
-              Phase <span className="font-mono text-white">{phase || "-"}</span>
+              State <span className="font-mono text-white">{phase || "-"}</span>
             </span>
             <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1">
-              Dealer <span className="font-mono text-white">{dealerTotal}</span>
+              Dealer lane <span className="font-mono text-white">{dealerTotal}</span>
             </span>
             {seated ? (
               <span className="rounded-full border border-emerald-300/15 bg-emerald-500/10 px-2.5 py-1 text-emerald-100">
-                Your hand <span className="font-mono">{myTotal ?? 0}</span>
-                {typeof myBet === "number" ? <> • Bet <span className="font-mono">{myBet.toFixed(2)}</span></> : null}
+                Your total <span className="font-mono">{myTotal ?? 0}</span>
+                {typeof myBet === "number" ? <> • Stake <span className="font-mono">{myBet.toFixed(2)}</span></> : null}
               </span>
             ) : spectating ? (
-              <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1 text-white/75">Spectating</span>
+              <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1 text-white/75">Watching live</span>
             ) : (
-              <span className="rounded-full border border-yellow-300/15 bg-yellow-500/10 px-2.5 py-1 text-yellow-100">Not seated</span>
+              <span className="rounded-full border border-yellow-300/15 bg-yellow-500/10 px-2.5 py-1 text-yellow-100">Seat open</span>
             )}
             {unreadChat > 0 ? (
               <span className="rounded-full border border-fuchsia-300/15 bg-fuchsia-500/10 px-2.5 py-1 text-fuchsia-100">
@@ -400,14 +400,14 @@ export function BlackjackV2OverviewPanel({
                 className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/90 hover:bg-white/10"
                 onClick={onJoinSeat}
               >
-                Join seat
+                Take a seat
               </button>
               <button
                 type="button"
                 className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/80 hover:bg-white/10"
                 onClick={onJoinSpectate}
               >
-                Spectate
+                Watch live
               </button>
             </>
           ) : null}
@@ -416,14 +416,14 @@ export function BlackjackV2OverviewPanel({
             className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
             onClick={onJumpToControls}
           >
-            Controls
+            Open controls
           </button>
           <button
             type="button"
             className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
             onClick={onJumpToTable}
           >
-            Table
+            Jump to felt
           </button>
         </div>
       </div>

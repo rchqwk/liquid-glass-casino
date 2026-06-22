@@ -1397,7 +1397,7 @@ export function BlackjackTablePageClient({
       <BlackjackV2StatusStrip
         visible={showV2Shell && !!state}
         phase={String(state?.phase ?? "-")}
-        timerLabel={state?.phase === "betting" ? "Betting" : state?.phase === "player_turns" ? "Turn" : state?.phase === "dealer_window" ? "Dealer" : "Status"}
+        timerLabel={state?.phase === "betting" ? "Betting window" : state?.phase === "player_turns" ? "Turn clock" : state?.phase === "dealer_window" ? "Dealer lane" : "Live state"}
         timerSeconds={state?.phase === "betting" ? bettingLeft : state?.phase === "player_turns" ? turnLeft : state?.phase === "dealer_window" ? dealerLeft : undefined}
         seatCount={Number(tableMeta?.seatCount ?? state?.seats?.filter(Boolean).length ?? 0)}
         spectatorCount={Number(tableMeta?.spectatorCount ?? state?.spectators?.length ?? 0)}
@@ -1545,9 +1545,9 @@ export function BlackjackTablePageClient({
                       <>
                         <BlackjackV2ControlCard
                           title="Main bet"
-                          subtitle="Set your wager for the round, go all-in, or skip before dealing starts."
+                          subtitle="Lock your main stake for the next hand, go all-in, or sit this hand out before dealing starts."
                         >
-                          <label className="block text-xs text-white/60">Bet amount (ⓒ)</label>
+                          <label className="block text-xs text-white/60">Main stake (ⓒ)</label>
                           <input
                             type="number"
                             min={0}
@@ -1569,7 +1569,7 @@ export function BlackjackTablePageClient({
                               onClick={placeBetWithWallet}
                               data-tour="bj-place-bet"
                             >
-                              Place bet
+                              Lock stake
                             </button>
                             <button
                               type="button"
@@ -1589,7 +1589,7 @@ export function BlackjackTablePageClient({
                               className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 disabled:opacity-40"
                               onClick={clearBetWithWallet}
                             >
-                              Clear bet
+                              Reset stake
                             </button>
                             <button
                               type="button"
@@ -1605,7 +1605,7 @@ export function BlackjackTablePageClient({
                                 setAllIn(false);
                               }}
                             >
-                              Skip round
+                              Sit out hand
                             </button>
                           </div>
                           <div className="mt-3 text-[11px] text-white/60">
@@ -1621,9 +1621,9 @@ export function BlackjackTablePageClient({
 
                         <BlackjackV2ControlCard
                           title="Perfect Pairs"
-                          subtitle="Optional side bet that pays on your first two cards."
+                          subtitle="Optional side stake that pays from your first two cards."
                         >
-                          <label className="block text-xs text-white/60">Perfect Pairs side bet (ⓒ)</label>
+                          <label className="block text-xs text-white/60">Perfect Pairs stake (ⓒ)</label>
                           <input
                             type="number"
                             min={0}
@@ -1644,7 +1644,7 @@ export function BlackjackTablePageClient({
                               onClick={placePerfectPairsWithWallet}
                               title="Pays on first 2 cards of each hand: perfect=25:1, colored=12:1, mixed=6:1"
                             >
-                              Add PP bet
+                              Lock side stake
                             </button>
                             <button
                               type="button"
@@ -1652,7 +1652,7 @@ export function BlackjackTablePageClient({
                               className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
                               onClick={clearPerfectPairsWithWallet}
                             >
-                              Clear PP bet
+                              Reset side stake
                             </button>
                           </div>
                         </BlackjackV2ControlCard>
@@ -1787,8 +1787,8 @@ export function BlackjackTablePageClient({
                 <div className="mt-5" data-tour="bj-specials">
                   {showV2Shell ? (
                     <BlackjackV2ControlCard
-                      title="Powerups and bonds"
-                      subtitle="Use turn cards, dealer cards, and active bond tools from a dedicated V2 panel."
+                      title="Cards, boosts, and bonds"
+                      subtitle="Use turn cards, dealer tools, and active bond controls from one V2 action panel."
                     >
                       {!showV2Shell ? <p className="text-xs font-medium text-white/70">Specials</p> : null}
                       {state.meInventory ? (
@@ -2103,8 +2103,8 @@ export function BlackjackTablePageClient({
                 {isMyTurn ? (
                   showV2Shell ? (
                     <BlackjackV2ControlCard
-                      title="Turn actions"
-                      subtitle="Use hit, stand, double, split, and timer tools from a dedicated in-turn action card."
+                      title="Live turn actions"
+                      subtitle="Play your hand with hit, stand, double, split, and turn-timer controls."
                     >
                       {mySeat?.busted ? (
                         <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-100">
@@ -2161,7 +2161,7 @@ export function BlackjackTablePageClient({
                           disabled={!canSplit}
                           title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
                         >
-                          Split
+                          Split hand
                         </button>
                         <button
                           type="button"
@@ -2169,7 +2169,7 @@ export function BlackjackTablePageClient({
                           onClick={() => post("action", { type: "vote_skip" })}
                           title="Skip the remaining turn timer"
                         >
-                          Vote skip timer
+                          Skip timer vote
                         </button>
                         <button
                           type="button"
@@ -2178,7 +2178,7 @@ export function BlackjackTablePageClient({
                           disabled={!!mySeat?.extendUsedThisTurn}
                           title="Extend your turn timer once"
                         >
-                          Extend timer
+                          Add turn time
                         </button>
                       </div>
                     </BlackjackV2ControlCard>
