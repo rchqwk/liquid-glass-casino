@@ -222,3 +222,89 @@ export function BlackjackTurnActionBar({
     </div>
   );
 }
+
+export function BlackjackV2StatusStrip({
+  visible,
+  phase,
+  timerLabel,
+  timerSeconds,
+  seatCount,
+  spectatorCount,
+  isHost,
+  unreadChat,
+  onOpenChat,
+  onOpenCollectibles,
+  onOpenHost,
+}: {
+  visible: boolean;
+  phase: string;
+  timerLabel: string;
+  timerSeconds?: number;
+  seatCount: number;
+  spectatorCount: number;
+  isHost: boolean;
+  unreadChat: number;
+  onOpenChat: () => void;
+  onOpenCollectibles: () => void;
+  onOpenHost: () => void;
+}) {
+  if (!visible) return null;
+
+  return (
+    <div className="glass glass-shine rounded-3xl border border-cyan-300/15 bg-cyan-400/5 p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Phase</div>
+            <div className="mt-1 text-sm font-semibold text-white">{phase || "-"}</div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-white/45">{timerLabel || "Timer"}</div>
+            <div className="mt-1 text-sm font-semibold text-white">
+              {typeof timerSeconds === "number" ? `${timerSeconds}s` : "Live"}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Players</div>
+            <div className="mt-1 text-sm font-semibold text-white">{seatCount}/10</div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Spectators</div>
+            <div className="mt-1 text-sm font-semibold text-white">{spectatorCount}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="glass-soft relative rounded-2xl px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
+            onClick={onOpenChat}
+          >
+            Chat
+            {unreadChat > 0 ? (
+              <span className="ml-2 rounded-full bg-fuchsia-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                {Math.min(99, unreadChat)}
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
+            onClick={onOpenCollectibles}
+          >
+            Collectibles
+          </button>
+          {isHost ? (
+            <button
+              type="button"
+              className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
+              onClick={onOpenHost}
+            >
+              Host
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -9,7 +9,7 @@ import { useAuth } from "../../../lib/authClient";
 import { BlackjackChatPanel } from "../blackjackChatPanel";
 import { blackjackCollectibleLabel, BlackjackCollectiblesPanel, BlackjackTableEditInventory } from "../blackjackCollectiblesPanel";
 import { BlackjackHostPanel } from "../blackjackHostPanel";
-import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar } from "../blackjackTableShell";
+import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar, BlackjackV2StatusStrip } from "../blackjackTableShell";
 import { type BJState, type Seat } from "../blackjackTableTypes";
 import { CardView, cardFromIndex, handValue } from "../blackjackUiPrimitives";
 import { BlackjackTableSeat, getBlackjackChatNameClass } from "../blackjackSeatViews";
@@ -18,9 +18,11 @@ import { useBlackjackTableContract } from "../useBlackjackTableContract";
 export function BlackjackTablePageClient({
   routeBase = "/casino/blackjack",
   lobbyHref = "/casino/blackjack-v2",
+  experience = "classic",
 }: {
   routeBase?: string;
   lobbyHref?: string;
+  experience?: "classic" | "v2";
 }) {
   const { beginBet, balance, reserveServerBet, settleServerBet, cancelServerBet, adjustServerBalance } = useWallet();
   const { user, discordMode } = useAuth();
@@ -229,9 +231,10 @@ export function BlackjackTablePageClient({
   const [powerupToasts, setPowerupToasts] = useState<Array<{ id: string; text: string }>>([]);
   const [lastEventAt, setLastEventAt] = useState(0);
   const [discordAutoJoinTried, setDiscordAutoJoinTried] = useState(false);
+  const tableViewStorageKey = experience === "v2" ? "lgc.bj.v2.tableView" : "lgc.bj.tableView";
   const [tableView, setTableView] = useState<"table" | "list">(() => {
     try {
-      return (localStorage.getItem("lgc.bj.tableView") as any) === "list" ? "list" : "table";
+      return (localStorage.getItem(tableViewStorageKey) as any) === "list" ? "list" : "table";
     } catch {
       return "table";
     }
@@ -350,6 +353,9 @@ export function BlackjackTablePageClient({
   const ownedCollectibles = (collectibles?.owned ?? {}) as Record<string, number>;
   const figurines = (collectibles?.figurines ?? []) as Array<{ id: string; imageUrl: string }>;
   const decorations = (state?.decorations ?? []) as any[];
+  const showV2Shell = experience === "v2";
+  const v2HeaderVisible = !!state;
+  const classicHeaderVisible = !!(state && (mySeat || isSpectator) && topbarOpen);
 
   // Provide blackjack context to the global top bar.
   useEffect(() => {
@@ -814,7 +820,7 @@ export function BlackjackTablePageClient({
       ) : null}
 
       {/* Collectibles bubble (only when in-game) */}
-      {gameActive && !tableEditMode ? (
+      {gameActive && !tableEditMode && !showV2Shell ? (
         <div className="pointer-events-none fixed bottom-4 left-40 z-[65]">
           <button
             type="button"
@@ -897,7 +903,7 @@ export function BlackjackTablePageClient({
       />
 
       {/* Floating chat bubble (bottom-left) */}
-      {!tableEditMode ? (
+      {!tableEditMode && !showV2Shell ? (
       <div className="pointer-events-none fixed bottom-4 left-4 z-[65]">
         <button
           type="button"
@@ -1369,8 +1375,22 @@ export function BlackjackTablePageClient({
         myCards={mySeat?.cards ?? []}
         myBonusPoints={Number((myHands as any)?.[myHandIndex]?.bonusPoints ?? (mySeat as any)?.bonusPoints ?? 0)}
       />
+
+      <BlackjackV2StatusStrip
+        visible={showV2Shell && !!state}
+        phase={String(state?.phase ?? "-")}
+        timerLabel={state?.phase === "betting" ? "Betting" : state?.phase === "player_turns" ? "Turn" : state?.phase === "dealer_window" ? "Dealer" : "Status"}
+        timerSeconds={state?.phase === "betting" ? bettingLeft : state?.phase === "player_turns" ? turnLeft : state?.phase === "dealer_window" ? dealerLeft : undefined}
+        seatCount={Number(tableMeta?.seatCount ?? state?.seats?.filter(Boolean).length ?? 0)}
+        spectatorCount={Number(tableMeta?.spectatorCount ?? state?.spectators?.length ?? 0)}
+        isHost={!!isHost}
+        unreadChat={unreadChat}
+        onOpenChat={() => setChatOpen(true)}
+        onOpenCollectibles={() => setCollectiblesOpen(true)}
+        onOpenHost={() => setHostOpen(true)}
+      />
       <BlackjackTableHeader
-        visible={!!(state && (mySeat || isSpectator) && topbarOpen)}
+        visible={showV2Shell ? v2HeaderVisible : classicHeaderVisible}
         tableName={state?.name ?? "Blackjack Table"}
         tableId={safeTableId ?? "-"}
         round={Number(state?.round ?? 0)}
@@ -1431,7 +1451,7 @@ export function BlackjackTablePageClient({
               <div className="text-sm font-semibold text-rose-200">{err}</div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Link
-                  href="/casino/blackjack"
+                  href={lobbyHref}
                   className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
                 >
                   Return to lobby
@@ -1444,8 +1464,12 @@ export function BlackjackTablePageClient({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
-          <div ref={roundControlsRef} className="glass-soft glass-shine rounded-3xl p-5" data-tour="bj-round-controls">
+        <div className={`grid grid-cols-1 gap-4 ${showV2Shell ? "xl:grid-cols-[minmax(0,1.15fr)_360px]" : "lg:grid-cols-[360px_1fr]"}`}>
+          <div
+            ref={roundControlsRef}
+            className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "xl:order-2" : ""}`}
+            data-tour="bj-round-controls"
+          >
             <p className="text-sm font-medium text-white">Round controls</p>
             <div className="mt-3 text-xs text-white/60">
             {state.phase === "betting" ? (
@@ -1853,7 +1877,7 @@ export function BlackjackTablePageClient({
             )}
           </div>
 
-          <div ref={tableViewRef} className="glass-soft glass-shine rounded-3xl p-5">
+          <div ref={tableViewRef} className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "xl:order-1" : ""}`}>
             <p className="text-sm font-medium text-white">Table</p>
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="text-xs text-white/55">View</div>
@@ -1865,7 +1889,7 @@ export function BlackjackTablePageClient({
                   }`}
                   onClick={() => {
                     try {
-                      localStorage.setItem("lgc.bj.tableView", "table");
+                      localStorage.setItem(tableViewStorageKey, "table");
                     } catch {}
                     setTableView("table");
                   }}
@@ -1879,7 +1903,7 @@ export function BlackjackTablePageClient({
                   }`}
                   onClick={() => {
                     try {
-                      localStorage.setItem("lgc.bj.tableView", "list");
+                      localStorage.setItem(tableViewStorageKey, "list");
                     } catch {}
                     setTableView("list");
                   }}
@@ -2068,5 +2092,5 @@ export function BlackjackTablePageClient({
 }
 
 export default function BlackjackTablePage() {
-  return <BlackjackTablePageClient routeBase="/casino/blackjack" lobbyHref="/casino/blackjack-v2" />;
+  return <BlackjackTablePageClient routeBase="/casino/blackjack" lobbyHref="/casino/blackjack-v2" experience="classic" />;
 }
