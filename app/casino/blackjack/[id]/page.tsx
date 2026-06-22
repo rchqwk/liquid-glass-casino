@@ -1321,7 +1321,7 @@ export function BlackjackTablePageClient({
         </div>
       ) : null}
       <TurnQuickPanel
-        show={!!state && !!mySeat}
+        show={!showV2Shell && !!state && !!mySeat}
         isMyTurn={!!isMyTurn}
         myBet={Number(mySeat?.bet ?? 0)}
         handIndex={myHandIndex}
@@ -1384,10 +1384,12 @@ export function BlackjackTablePageClient({
         seatCount={Number(tableMeta?.seatCount ?? state?.seats?.filter(Boolean).length ?? 0)}
         spectatorCount={Number(tableMeta?.spectatorCount ?? state?.spectators?.length ?? 0)}
         isHost={!!isHost}
+        isMyTurn={!!isMyTurn}
         unreadChat={unreadChat}
         onOpenChat={() => setChatOpen(true)}
         onOpenCollectibles={() => setCollectiblesOpen(true)}
         onOpenHost={() => setHostOpen(true)}
+        onOpenControls={() => scrollToSection(roundControlsRef.current)}
       />
       <BlackjackV2OverviewPanel
         visible={showV2Shell && !!state}
@@ -1423,7 +1425,7 @@ export function BlackjackTablePageClient({
       />
 
       <BlackjackTurnActionBar
-        visible={!!(state && mySeat && isMyTurn)}
+        visible={!!(!showV2Shell && state && mySeat && isMyTurn)}
         myHandIndex={myHandIndex}
         myHandCount={myHandCount}
         turnLeft={turnLeft}

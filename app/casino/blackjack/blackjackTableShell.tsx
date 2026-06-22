@@ -231,10 +231,12 @@ export function BlackjackV2StatusStrip({
   seatCount,
   spectatorCount,
   isHost,
+  isMyTurn,
   unreadChat,
   onOpenChat,
   onOpenCollectibles,
   onOpenHost,
+  onOpenControls,
 }: {
   visible: boolean;
   phase: string;
@@ -243,10 +245,12 @@ export function BlackjackV2StatusStrip({
   seatCount: number;
   spectatorCount: number;
   isHost: boolean;
+  isMyTurn: boolean;
   unreadChat: number;
   onOpenChat: () => void;
   onOpenCollectibles: () => void;
   onOpenHost: () => void;
+  onOpenControls: () => void;
 }) {
   if (!visible) return null;
 
@@ -275,6 +279,15 @@ export function BlackjackV2StatusStrip({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {isMyTurn ? (
+            <button
+              type="button"
+              className="glass-soft rounded-2xl border border-emerald-300/25 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/20"
+              onClick={onOpenControls}
+            >
+              Play turn
+            </button>
+          ) : null}
           <button
             type="button"
             className="glass-soft relative rounded-2xl px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
