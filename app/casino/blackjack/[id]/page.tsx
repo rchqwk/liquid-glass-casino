@@ -328,6 +328,12 @@ export function BlackjackTablePageClient({
   const myHandIndex = Number((mySeat as any)?.activeHandIndex ?? 0) || 0;
   const myHandCount = Number((mySeat as any)?.hands?.length ?? 1) || 1;
   const myHands = (mySeat as any)?.hands ?? [];
+  const myLiveTotal = mySeat
+    ? handValue(
+        mySeat.cards ?? [],
+        Number((myHands as any)?.[myHandIndex]?.bonusPoints ?? (mySeat as any)?.bonusPoints ?? 0),
+      ).total
+    : null;
   const isHost = !!mySeat && meSeatIndex === 0;
   const chatMessages = state?.chat ?? [];
   const unreadChat = useMemo(() => {
@@ -1417,7 +1423,7 @@ export function BlackjackTablePageClient({
         phase={String(state?.phase ?? "-")}
         round={Number(state?.round ?? 0)}
         dealerTotal={dealerTotal}
-        myTotal={mySeat ? handValue(mySeat.cards ?? [], Number((myHands as any)?.[myHandIndex]?.bonusPoints ?? (mySeat as any)?.bonusPoints ?? 0)).total : null}
+        myTotal={myLiveTotal}
         myBet={mySeat ? Number(mySeat.bet ?? 0) : null}
         unreadChat={unreadChat}
         onJumpToControls={() => scrollToSection(roundControlsRef.current)}
@@ -1792,6 +1798,32 @@ export function BlackjackTablePageClient({
                         <>{roundStatusLabel}</>
                       )}
                     </div>
+                    {mySeat ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <div
+                          className={`rounded-2xl border px-3 py-2 text-xs ${
+                            mySeat?.busted
+                              ? "border-rose-400/20 bg-rose-500/10 text-rose-100"
+                              : (myLiveTotal ?? 0) >= 21
+                                ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
+                                : "border-cyan-400/20 bg-cyan-500/10 text-cyan-100"
+                          }`}
+                        >
+                          <div className="text-[10px] uppercase tracking-wide opacity-70">Your total</div>
+                          <div className="mt-1 font-mono text-sm font-semibold">{myLiveTotal ?? 0}</div>
+                        </div>
+                        <div
+                          className={`rounded-2xl border px-3 py-2 text-xs ${
+                            Number(mySeat.bet ?? 0) > 0
+                              ? "border-amber-400/20 bg-amber-500/10 text-amber-100"
+                              : "border-white/10 bg-white/5 text-white/75"
+                          }`}
+                        >
+                          <div className="text-[10px] uppercase tracking-wide opacity-70">Stake</div>
+                          <div className="mt-1 font-mono text-sm font-semibold">{Number(mySeat.bet ?? 0).toFixed(2)}</div>
+                        </div>
+                      </div>
+                    ) : null}
                     {isMyTurn ? (
                       <>
                         {mySeat?.busted ? (
