@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackTable, upsertBlackjackInventory } from "../../../../../lib/db";
 import { removeUserBlackjackDecorations, ensureBlackjackDecorations } from "../../../../../lib/blackjackDecorations";
-import { returnPlacedCollectiblesToInventory, safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { returnPlacedCollectiblesToInventory } from "../../../../../lib/blackjackInventory";
 import { saveBlackjackTableState } from "../../../../../lib/blackjackStatePersistence";
 
 export const runtime = "nodejs";

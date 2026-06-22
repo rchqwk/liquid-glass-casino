@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../lib/authServer";
 import { applyPrestige, upsertBlackjackInventory, upsertUserWalletState } from "../../lib/db";
-import { defaultInventory } from "../../lib/blackjackMultiplayer";
+import { defaultInventory } from "../../lib/blackjackInventory";
 import { randomHex, sha256Hex } from "../../lib/provablyFair";
 
 export const runtime = "nodejs";

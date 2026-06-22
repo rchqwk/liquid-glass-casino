@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackTable } from "../../../../../lib/db";
-import { safePublicStateForUser, tickTable, type InventoryCategoryId } from "../../../../../lib/blackjackMultiplayer";
+import { safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { type InventoryCategoryId } from "../../../../../lib/blackjackInventory";
 import { saveBlackjackTableState } from "../../../../../lib/blackjackStatePersistence";
 
 export const runtime = "nodejs";

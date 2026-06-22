@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../lib/authServer";
 import { getBlackjackInventory, spendPrestigePoints, upsertBlackjackInventory } from "../../../lib/db";
-import { defaultInventory, ensureInventory } from "../../../lib/blackjackMultiplayer";
+import { defaultInventory, ensureInventory } from "../../../lib/blackjackInventory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

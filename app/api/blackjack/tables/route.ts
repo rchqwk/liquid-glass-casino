@@ -6,7 +6,8 @@ import {
   upsertBlackjackTable,
   getBlackjackInventory,
 } from "../../../lib/db";
-import { defaultInventory, ensureInventory, newTableState, safePublicStateForUser, tickTable } from "../../../lib/blackjackMultiplayer";
+import { newTableState, safePublicStateForUser, tickTable } from "../../../lib/blackjackMultiplayer";
+import { defaultInventory, ensureInventory } from "../../../lib/blackjackInventory";
 import { persistBlackjackStateInventories, saveBlackjackTableState } from "../../../lib/blackjackStatePersistence";
 
 export const runtime = "nodejs";

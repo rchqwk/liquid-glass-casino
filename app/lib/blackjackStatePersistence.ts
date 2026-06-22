@@ -1,6 +1,7 @@
 "server-only";
 
-import type { Inventory, TableState } from "./blackjackMultiplayer";
+import type { TableState } from "./blackjackMultiplayer";
+import type { Inventory } from "./blackjackInventory";
 import { getBlackjackTable, listBlackjackTables, upsertBlackjackInventory, upsertBlackjackTable } from "./db";
 
 export type BlackjackTableRecordMeta = {

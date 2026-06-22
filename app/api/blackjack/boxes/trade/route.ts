@@ -4,7 +4,8 @@ import {
   getBlackjackInventory,
   upsertBlackjackInventory,
 } from "../../../../lib/db";
-import { ensureInventory, SPECIALS } from "../../../../lib/blackjackMultiplayer";
+import { SPECIALS } from "../../../../lib/blackjackMultiplayer";
+import { ensureInventory } from "../../../../lib/blackjackInventory";
 import { syncUserBlackjackInventoryIntoTables } from "../../../../lib/blackjackStatePersistence";
 
 export const runtime = "nodejs";
