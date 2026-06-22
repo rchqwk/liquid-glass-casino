@@ -65,6 +65,7 @@ export function BlackjackTableSeat({
   className,
   variant,
   isTurn,
+  experience = "classic",
   currentUserId,
   currentUserNameColor,
   currentUserPrestigeLevel,
@@ -74,6 +75,7 @@ export function BlackjackTableSeat({
   className: string;
   variant: "list" | "table";
   isTurn: boolean;
+  experience?: "classic" | "v2";
   currentUserId?: number | null;
   currentUserNameColor?: string | null;
   currentUserPrestigeLevel?: number | null;
@@ -82,7 +84,9 @@ export function BlackjackTableSeat({
     if (variant === "table") return <div className={className} />;
     return (
       <div className={className}>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/50">Empty seat</div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/50">
+          {experience === "v2" ? "Seat open" : "Empty seat"}
+        </div>
       </div>
     );
   }
@@ -114,15 +118,15 @@ export function BlackjackTableSeat({
             ) : null}
             {seat.bet ? (
               <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
-                Bet <span className="font-mono text-white/80">{Number(seat.bet).toFixed(2)}</span>
+                {experience === "v2" ? "Stake" : "Bet"} <span className="font-mono text-white/80">{Number(seat.bet).toFixed(2)}</span>
               </span>
             ) : null}
             <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
               <span className="font-mono text-white/85">{hv.total}</span>
               {seat.bonusPoints ? <span className="ml-1 text-amber-200">(+{seat.bonusPoints})</span> : null}
             </span>
-            {seat.busted ? <span className="text-rose-200">BUST</span> : null}
-            {seat.stood ? <span className="text-white/50">STAND</span> : null}
+            {seat.busted ? <span className="text-rose-200">{experience === "v2" ? "Busted" : "BUST"}</span> : null}
+            {seat.stood ? <span className="text-white/50">{experience === "v2" ? "Held" : "STAND"}</span> : null}
           </div>
           <div className="flex flex-wrap gap-2">
             {seat.cards.map((c, idx) => (
@@ -165,7 +169,7 @@ export function BlackjackTableSeat({
             ) : null}
           </div>
           <div className="text-xs text-white/60">
-            Bet: <span className="font-mono text-white/80">{seat.bet.toFixed(2)}</span>
+            {experience === "v2" ? "Stake" : "Bet"}: <span className="font-mono text-white/80">{seat.bet.toFixed(2)}</span>
           </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -174,11 +178,11 @@ export function BlackjackTableSeat({
           ))}
         </div>
         <div className="mt-2 text-xs text-white/60">
-          Total: <span className="font-mono text-white/80">{hv.total}</span>
+          {experience === "v2" ? "Hand total" : "Total"}: <span className="font-mono text-white/80">{hv.total}</span>
           {hv.soft ? <span className="ml-2 text-white/45">(soft)</span> : null}
           {seat.bonusPoints ? <span className="ml-2 text-amber-200">(+{seat.bonusPoints})</span> : null}
-          {seat.busted ? <span className="ml-2 text-rose-200">BUST</span> : null}
-          {seat.stood ? <span className="ml-2 text-white/45">STAND</span> : null}
+          {seat.busted ? <span className="ml-2 text-rose-200">{experience === "v2" ? "Busted" : "BUST"}</span> : null}
+          {seat.stood ? <span className="ml-2 text-white/45">{experience === "v2" ? "Held" : "STAND"}</span> : null}
         </div>
         {effects.length ? (
           <div className="mt-2 flex flex-wrap gap-1">

@@ -990,6 +990,7 @@ export function BlackjackTablePageClient({
         globalActive1h={globalChat.active1h}
         chatText={chatText}
         setChatText={setChatText}
+        experience={experience}
         onClose={() => setChatOpen(false)}
         onRefreshGlobal={refreshGlobalChat}
         onSendRoomMessage={async (text) => {
@@ -2376,6 +2377,7 @@ export function BlackjackTablePageClient({
                       className=""
                       variant="list"
                       isTurn={state?.phase === "player_turns" && myTurnSeat === i}
+                      experience={experience}
                       currentUserId={user?.id ?? null}
                       currentUserNameColor={((user as any)?.name_color ?? null) as string | null}
                       currentUserPrestigeLevel={Number((user as any)?.prestige_level ?? 0)}
@@ -2472,6 +2474,7 @@ export function BlackjackTablePageClient({
                               className=""
                               variant="table"
                               isTurn={state?.phase === "player_turns" && myTurnSeat === i}
+                              experience={experience}
                               currentUserId={user?.id ?? null}
                               currentUserNameColor={((user as any)?.name_color ?? null) as string | null}
                               currentUserPrestigeLevel={Number((user as any)?.prestige_level ?? 0)}

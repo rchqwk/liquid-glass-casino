@@ -32,6 +32,7 @@ export function BlackjackChatPanel({
   globalActive1h,
   chatText,
   setChatText,
+  experience = "classic",
   onClose,
   onRefreshGlobal,
   onSendRoomMessage,
@@ -46,6 +47,7 @@ export function BlackjackChatPanel({
   globalActive1h: number;
   chatText: string;
   setChatText: (value: string) => void;
+  experience?: "classic" | "v2";
   onClose: () => void;
   onRefreshGlobal: () => Promise<void>;
   onSendRoomMessage: (text: string) => Promise<void>;
@@ -70,7 +72,7 @@ export function BlackjackChatPanel({
       <div className="glass glass-shine w-full max-w-[720px] rounded-3xl border border-white/10 p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold text-white">Chat</div>
+            <div className="text-sm font-semibold text-white">{experience === "v2" ? "Live chat" : "Chat"}</div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -79,7 +81,7 @@ export function BlackjackChatPanel({
                 }`}
                 onClick={() => setScope("room")}
               >
-                Room
+                {experience === "v2" ? "Table" : "Room"}
               </button>
               <button
                 type="button"
@@ -96,7 +98,7 @@ export function BlackjackChatPanel({
                   <span className="font-mono text-white/80">{globalActive1h}</span>
                 </span>
               ) : (
-                <span className="ml-1 text-[11px] text-white/60">Room messages</span>
+                <span className="ml-1 text-[11px] text-white/60">{experience === "v2" ? "Messages from this live table" : "Room messages"}</span>
               )}
             </div>
           </div>
@@ -125,7 +127,7 @@ export function BlackjackChatPanel({
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-white/60">No messages yet.</div>
+              <div className="text-sm text-white/60">{experience === "v2" ? "No live chat yet." : "No messages yet."}</div>
             )
           ) : roomMessages.length ? (
             <div className="flex flex-col gap-2">
@@ -145,7 +147,7 @@ export function BlackjackChatPanel({
               ))}
             </div>
           ) : (
-            <div className="text-sm text-white/60">No messages yet.</div>
+            <div className="text-sm text-white/60">{experience === "v2" ? "No live chat yet." : "No messages yet."}</div>
           )}
         </div>
 
@@ -154,7 +156,7 @@ export function BlackjackChatPanel({
             type="text"
             value={chatText}
             onChange={(e) => setChatText(e.target.value)}
-            placeholder="Type a message…"
+            placeholder={experience === "v2" ? "Send a live table message…" : "Type a message…"}
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -169,7 +171,7 @@ export function BlackjackChatPanel({
             disabled={!chatText.trim()}
             onClick={() => void sendCurrentMessage()}
           >
-            Send
+            {experience === "v2" ? "Send note" : "Send"}
           </button>
         </div>
       </div>
