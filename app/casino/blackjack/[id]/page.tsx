@@ -991,6 +991,7 @@ export function BlackjackTablePageClient({
         open={inviteOpen}
         inviteUrl={inviteUrl}
         inviteCopied={inviteCopied}
+        experience={experience}
         onClose={() => {
           setInviteOpen(false);
           setInviteCopied(false);
@@ -1417,6 +1418,7 @@ export function BlackjackTablePageClient({
         round={Number(state?.round ?? 0)}
         phase={String(state?.phase ?? "-")}
         lobbyHref={lobbyHref}
+        experience={experience}
         err={err}
         onOpenInvite={() => setInviteOpen(true)}
         onLeave={() => {
@@ -1475,13 +1477,13 @@ export function BlackjackTablePageClient({
                   href={lobbyHref}
                   className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
                 >
-                  Return to lobby
+                  {showV2Shell ? "Return to V2 lobby" : "Return to lobby"}
                 </Link>
               </div>
 
             </>
           ) : (
-            "Loading…"
+            showV2Shell ? "Loading V2 table surface…" : "Loading…"
           )}
         </div>
       ) : (

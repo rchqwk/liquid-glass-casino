@@ -6,6 +6,7 @@ export function BlackjackInviteModal({
   open,
   inviteUrl,
   inviteCopied,
+  experience = "classic",
   onClose,
   onCopy,
   onOpenLink,
@@ -13,6 +14,7 @@ export function BlackjackInviteModal({
   open: boolean;
   inviteUrl: string;
   inviteCopied: boolean;
+  experience?: "classic" | "v2";
   onClose: () => void;
   onCopy: () => Promise<void>;
   onOpenLink: () => void;
@@ -24,8 +26,10 @@ export function BlackjackInviteModal({
       <div className="glass glass-shine w-full max-w-[620px] rounded-3xl border border-white/10 p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold text-white">Invite players</div>
-            <div className="mt-1 text-xs text-white/60">Share this link to join the room:</div>
+            <div className="text-sm font-semibold text-white">{experience === "v2" ? "Share table" : "Invite players"}</div>
+            <div className="mt-1 text-xs text-white/60">
+              {experience === "v2" ? "Send this V2 table link so someone can jump straight into the surface:" : "Share this link to join the room:"}
+            </div>
           </div>
           <button type="button" className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white" onClick={onClose}>
             Close
@@ -49,7 +53,7 @@ export function BlackjackInviteModal({
               disabled={!inviteUrl}
               onClick={() => void onCopy()}
             >
-              {inviteCopied ? "Copied" : "Copy link"}
+              {inviteCopied ? "Copied" : experience === "v2" ? "Copy invite" : "Copy link"}
             </button>
             <button
               type="button"
@@ -57,7 +61,7 @@ export function BlackjackInviteModal({
               onClick={onOpenLink}
               disabled={!inviteUrl}
             >
-              Open link
+              {experience === "v2" ? "Open table" : "Open link"}
             </button>
           </div>
         </div>
@@ -73,6 +77,7 @@ export function BlackjackTableHeader({
   round,
   phase,
   lobbyHref,
+  experience = "classic",
   err,
   onOpenInvite,
   onLeave,
@@ -83,6 +88,7 @@ export function BlackjackTableHeader({
   round: number;
   phase: string;
   lobbyHref: string;
+  experience?: "classic" | "v2";
   err?: string | null;
   onOpenInvite: () => void;
   onLeave: () => void;
@@ -93,15 +99,15 @@ export function BlackjackTableHeader({
     <div className="glass glass-shine rounded-3xl p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold text-white">{tableName || "Blackjack Table"}</h2>
+          <h2 className="text-xl font-semibold text-white">{tableName || (experience === "v2" ? "Blackjack V2 Table" : "Blackjack Table")}</h2>
           <p className="mt-1 text-sm text-white/60">
-            Table: <span className="font-mono">{tableId || "-"}</span> • Round <span className="font-mono">{round || "-"}</span> • Phase{" "}
+            {experience === "v2" ? "Surface" : "Table"}: <span className="font-mono">{tableId || "-"}</span> • Round <span className="font-mono">{round || "-"}</span> • Phase{" "}
             <span className="font-mono">{phase || "-"}</span>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={lobbyHref} className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10">
-            Back to lobby
+            {experience === "v2" ? "Back to V2 lobby" : "Back to lobby"}
           </Link>
           <button
             type="button"
@@ -109,10 +115,10 @@ export function BlackjackTableHeader({
             onClick={onOpenInvite}
             title="Share a link to join this table"
           >
-            Invite players
+            {experience === "v2" ? "Share table" : "Invite players"}
           </button>
           <button type="button" className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10" onClick={onLeave}>
-            Leave
+            {experience === "v2" ? "Exit table" : "Leave"}
           </button>
         </div>
       </div>
