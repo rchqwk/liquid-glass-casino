@@ -184,7 +184,7 @@ export function GamesGallery({
           href="/casino/blackjack-v2"
           className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-white/10"
         >
-          Blackjack V2
+          Blackjack
         </Link>
         <Link
           href="/casino/leaderboard"

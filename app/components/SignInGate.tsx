@@ -147,7 +147,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                 <>
                   <h3 className="text-lg font-semibold text-white">Sign in to play</h3>
                   <p className="mt-2 text-sm leading-6 text-white/70">
-                    Choose a username to start playing. (Prototype only — no passwords.)
+                    Choose a username to start playing. Quick sign-in for play-money tables.
                   </p>
 
                   {discordUrl ? (

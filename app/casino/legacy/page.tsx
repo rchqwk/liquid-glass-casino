@@ -4,7 +4,7 @@ export default function LegacyCasinoPage() {
   return (
     <GamesGallery
       title="Legacy Casino"
-      description="Slots, roulette, dice, poker, and the older prototype modes stay here while Blackjack V2 becomes the main product."
+      description="Slots, roulette, dice, poker, and the older side modes stay here while Blackjack becomes the main product."
     />
   );
 }

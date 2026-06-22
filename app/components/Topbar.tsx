@@ -323,9 +323,9 @@ export function Topbar() {
                     strokeLinejoin="round"
                   />
                 </svg>
-                Blackjack V2
+                Blackjack
               </Link>
-              <span className="hidden text-xs text-white/55 sm:inline">Play-money prototype</span>
+              <span className="hidden text-xs text-white/55 sm:inline">Play-money tables</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -335,7 +335,7 @@ export function Topbar() {
                     className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
                     href="/casino/blackjack-v2"
                   >
-                    Back to lobby
+                    Back to blackjack
                   </Link>
                   <button
                     type="button"
@@ -348,7 +348,7 @@ export function Topbar() {
                       }
                     }}
                   >
-                    Invite players
+                    Share table
                   </button>
                   <button
                     type="button"
@@ -361,7 +361,7 @@ export function Topbar() {
                       }
                     }}
                   >
-                    Leave
+                    Exit table
                   </button>
                 </>
               ) : null}

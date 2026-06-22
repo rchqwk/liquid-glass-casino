@@ -119,8 +119,9 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
             loading={loading}
             setLoading={setLoading}
             tableBasePath={tableBasePath}
+            variant={variant}
           />
-          <PublicTablesPanel sorted={sorted} now={now} tableBasePath={tableBasePath} />
+          <PublicTablesPanel sorted={sorted} now={now} tableBasePath={tableBasePath} variant={variant} />
         </div>
       </div>
     );
@@ -142,22 +143,22 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-2xl">
               <div className="inline-flex items-center rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold tracking-wide text-cyan-100">
-                BLACKJACK V2.xxx ALPHA
+                BLACKJACK LIVE
               </div>
               <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-                Blackjack first. Everything else is a minigame.
+                Blackjack is the main floor now.
               </h2>
               <p className="mt-3 text-sm leading-6 text-white/70 sm:text-[15px]">
-                This is the new main surface for the casino: a Discord-friendly blackjack home built around live tables, compact actions,
-                and a cleaner mobile-first flow for desktop, iOS, and Android Discord clients.
+                Jump into live tables built for Discord Activity, desktop, and mobile. Open a seat, watch a live room, or create a table
+                with the streamlined V2 flow that now powers the main casino home.
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:min-w-[320px]">
-              <MetricCard label="Public tables" value={String(sorted.length)} />
+              <MetricCard label="Live tables" value={String(sorted.length)} />
               <MetricCard label="Players live" value={String(livePlayers)} />
-              <MetricCard label="Table size" value="10 seats" />
-              <MetricCard label="Status" value="Alpha" />
+              <MetricCard label="Seat limit" value="10" />
+              <MetricCard label="Status" value="Live" />
             </div>
           </div>
 
@@ -165,13 +166,13 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
             <QuickLink href="/casino/profile" title="Profile" desc="Account, sign-in, and identity." />
             <QuickLink href="/casino/customizations" title="Customizations" desc="Cards, name color, and cosmetics." />
             <QuickLink href="/casino/prestige-shop" title="Prestige Shop" desc="Progression, bonds, and prestige buys." />
-            <QuickLink href="/casino/legacy" title="Legacy Casino" desc="Slots, roulette, dice, and older modes." />
+            <QuickLink href="/casino/legacy" title="Legacy Casino" desc="Slots, roulette, dice, poker, and side modes." />
           </div>
         </div>
       </section>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <PublicTablesPanel sorted={sorted} now={now} tableBasePath={tableBasePath} />
+        <PublicTablesPanel sorted={sorted} now={now} tableBasePath={tableBasePath} variant={variant} />
         <CreateTablePanel
           name={name}
           setName={setName}
@@ -182,6 +183,7 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
           loading={loading}
           setLoading={setLoading}
           tableBasePath={tableBasePath}
+          variant={variant}
           compact
         />
       </div>
@@ -217,16 +219,20 @@ function CreateTablePanel(props: {
   loading: boolean;
   setLoading: (v: boolean) => void;
   tableBasePath: string;
+  variant?: "v2" | "classic";
   compact?: boolean;
 }) {
-  const { name, setName, isPublic, setIsPublic, err, setErr, loading, setLoading, tableBasePath, compact } = props;
+  const { name, setName, isPublic, setIsPublic, err, setErr, loading, setLoading, tableBasePath, variant = "classic", compact } = props;
+  const isV2 = variant === "v2";
   return (
     <div className="glass-soft glass-shine rounded-3xl p-5" data-tour="bj-create-join">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-white">{compact ? "Create a new room" : "Create table"}</p>
-        {compact ? <span className="text-[11px] text-white/50">Discord-friendly</span> : null}
+        <p className="text-sm font-medium text-white">
+          {compact ? (isV2 ? "Open a live table" : "Create a new room") : isV2 ? "Create live table" : "Create table"}
+        </p>
+        {compact ? <span className="text-[11px] text-white/50">{isV2 ? "Live-ready" : "Discord-friendly"}</span> : null}
       </div>
-      <label className="mt-4 block text-xs text-white/60">Name</label>
+      <label className="mt-4 block text-xs text-white/60">{isV2 ? "Table name" : "Name"}</label>
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -234,7 +240,7 @@ function CreateTablePanel(props: {
       />
       <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-white/70">
         <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
-        Public table (visible in lobby)
+        {isV2 ? "Show in live lobby" : "Public table (visible in lobby)"}
       </label>
       <button
         type="button"
@@ -261,24 +267,38 @@ function CreateTablePanel(props: {
           }
         }}
       >
-        Create & Join
+        {isV2 ? "Create live table" : "Create & Join"}
       </button>
       {err ? <div className="mt-3 text-xs text-rose-200">{err}</div> : null}
       <div className="mt-4 rounded-2xl border border-white/10 bg-black/10 p-3 text-xs leading-5 text-white/60">
-        V2 keeps the current live multiplayer flow, but this shell is tuned to become the default home for Discord Activity users and
-        mobile clients.
+        {isV2
+          ? "Live tables stay synced across Discord Activity and browser clients, with the V2 shell as the primary blackjack home."
+          : "This table uses the shared live multiplayer flow."}
       </div>
     </div>
   );
 }
 
-function PublicTablesPanel({ sorted, now, tableBasePath }: { sorted: TableRow[]; now: number; tableBasePath: string }) {
+function PublicTablesPanel({
+  sorted,
+  now,
+  tableBasePath,
+  variant = "classic",
+}: {
+  sorted: TableRow[];
+  now: number;
+  tableBasePath: string;
+  variant?: "v2" | "classic";
+}) {
+  const isV2 = variant === "v2";
   return (
     <div className="glass-soft glass-shine rounded-3xl p-5" data-tour="bj-public-tables">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-white">Public tables</p>
-          <p className="mt-1 text-xs text-white/55">Jump straight into a live room or spectate first.</p>
+          <p className="text-sm font-medium text-white">{isV2 ? "Live tables" : "Public tables"}</p>
+          <p className="mt-1 text-xs text-white/55">
+            {isV2 ? "Open a live seat or watch the table first." : "Jump straight into a live room or spectate first."}
+          </p>
         </div>
         <span className="text-xs text-white/60">{sorted.length} found</span>
       </div>
@@ -295,7 +315,7 @@ function PublicTablesPanel({ sorted, now, tableBasePath }: { sorted: TableRow[];
                 <div>
                   <div className="text-sm font-semibold text-white">{t.name}</div>
                   <div className="mt-1 text-xs leading-5 text-white/60">
-                    Seats: <span className="font-mono">{t.seatsFilled}/10</span> • Spectators:{" "}
+                    {isV2 ? "Seats filled" : "Seats"}: <span className="font-mono">{t.seatsFilled}/10</span> • {isV2 ? "Watching live" : "Spectators"}:{" "}
                     <span className="font-mono">{t.spectators}</span>
                   </div>
                   <div className="mt-2 inline-flex rounded-full border border-white/10 bg-black/10 px-2.5 py-1 text-[11px] text-white/65">
@@ -305,7 +325,7 @@ function PublicTablesPanel({ sorted, now, tableBasePath }: { sorted: TableRow[];
                 <div className="text-right text-xs text-white/60">
                   <div className="font-mono text-white/80">{t.phase}</div>
                   <div className="mt-1">
-                    Betting: <span className="font-mono">{secs}s</span>
+                    {isV2 ? "Betting window" : "Betting"}: <span className="font-mono">{secs}s</span>
                   </div>
                 </div>
               </div>
@@ -314,7 +334,7 @@ function PublicTablesPanel({ sorted, now, tableBasePath }: { sorted: TableRow[];
         })}
         {sorted.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-white/10 bg-white/5 p-5 text-sm text-white/60">
-            No public tables yet. Create one and make it the first room in the new V2 lobby.
+            {isV2 ? "No live tables yet. Open the first live table." : "No public tables yet. Create one and make it the first room in the lobby."}
           </div>
         ) : null}
       </div>

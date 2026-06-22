@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useAuth } from "../lib/authClient";
 
 const nav = [
-  { href: "/casino/blackjack-v2", label: "Blackjack V2" },
+  { href: "/casino/blackjack-v2", label: "Blackjack" },
   { href: "/casino/legacy", label: "Legacy Casino" },
   { href: "/casino/dice", label: "Dice" },
   { href: "/casino/roulette", label: "Roulette" },
@@ -50,7 +50,7 @@ export function Sidebar() {
         </nav>
 
         <div className="mt-6 rounded-2xl border border-white/10 p-3 text-xs text-white/55">
-          <p className="font-medium text-white/70">Prototype only</p>
+          <p className="font-medium text-white/70">Play-money only</p>
           <p className="mt-1 leading-5">
             Local wallet + RNG demo. No real deposits or payouts.
           </p>

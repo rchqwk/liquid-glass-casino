@@ -99,7 +99,7 @@ export function BlackjackTableHeader({
     <div className="glass glass-shine rounded-3xl p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold text-white">{tableName || (experience === "v2" ? "Blackjack V2 Table" : "Blackjack Table")}</h2>
+          <h2 className="text-xl font-semibold text-white">{tableName || (experience === "v2" ? "Blackjack Table" : "Blackjack Table")}</h2>
           <p className="mt-1 text-sm text-white/60">
             {experience === "v2" ? "Surface" : "Table"}: <span className="font-mono">{tableId || "-"}</span> • Round <span className="font-mono">{round || "-"}</span> • Phase{" "}
             <span className="font-mono">{phase || "-"}</span>
@@ -363,7 +363,7 @@ export function BlackjackV2OverviewPanel({
     <div className="glass glass-shine rounded-3xl border border-fuchsia-300/15 bg-gradient-to-br from-fuchsia-500/10 via-cyan-500/5 to-transparent p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.22em] text-fuchsia-100/55">Blackjack V2</div>
+          <div className="text-[11px] uppercase tracking-[0.22em] text-fuchsia-100/55">Blackjack Live</div>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/75">
             <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1">
               Round <span className="font-mono text-white">{round || 0}</span>
