@@ -9,7 +9,7 @@ import { useAuth } from "../../../lib/authClient";
 import { BlackjackChatPanel } from "../blackjackChatPanel";
 import { blackjackCollectibleLabel, BlackjackCollectiblesPanel, BlackjackTableEditInventory } from "../blackjackCollectiblesPanel";
 import { BlackjackHostPanel } from "../blackjackHostPanel";
-import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar, BlackjackV2ControlCard, BlackjackV2OverviewPanel, BlackjackV2SectionHeader, BlackjackV2StatusStrip } from "../blackjackTableShell";
+import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar, BlackjackV2ControlCard, BlackjackV2FloatingTimer, BlackjackV2OverviewPanel, BlackjackV2SectionHeader, BlackjackV2StatusStrip } from "../blackjackTableShell";
 import { type BJState, type Seat } from "../blackjackTableTypes";
 import { CardView, cardFromIndex, handValue } from "../blackjackUiPrimitives";
 import { BlackjackTableSeat, getBlackjackChatNameClass } from "../blackjackSeatViews";
@@ -1434,6 +1434,28 @@ export function BlackjackTablePageClient({
         onJoinSpectate={() => {
           void join(true);
         }}
+      />
+      <BlackjackV2FloatingTimer
+        visible={showV2Shell && !!state}
+        label={
+          state?.phase === "betting"
+            ? "Betting window"
+            : state?.phase === "player_turns"
+              ? "Turn clock"
+              : state?.phase === "dealer_window"
+                ? "Dealer lane"
+                : "Round live"
+        }
+        seconds={
+          state?.phase === "betting"
+            ? bettingLeft
+            : state?.phase === "player_turns"
+              ? turnLeft
+              : state?.phase === "dealer_window"
+                ? dealerLeft
+                : undefined
+        }
+        phase={String(state?.phase ?? "-")}
       />
       <BlackjackTableHeader
         visible={showV2Shell ? v2HeaderVisible : classicHeaderVisible}

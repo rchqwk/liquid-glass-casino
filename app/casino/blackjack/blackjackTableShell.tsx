@@ -472,3 +472,41 @@ export function BlackjackV2ControlCard({
     </div>
   );
 }
+
+export function BlackjackV2FloatingTimer({
+  visible,
+  label,
+  seconds,
+  phase,
+}: {
+  visible: boolean;
+  label: string;
+  seconds?: number;
+  phase: string;
+}) {
+  if (!visible) return null;
+
+  const toneClass =
+    phase === "betting"
+      ? "border-amber-300/25 bg-amber-500/15 text-amber-100"
+      : phase === "player_turns"
+        ? "border-cyan-300/25 bg-cyan-500/15 text-cyan-100"
+        : phase === "dealer_window"
+          ? "border-fuchsia-300/25 bg-fuchsia-500/15 text-fuchsia-100"
+          : "border-white/10 bg-white/10 text-white/85";
+
+  return (
+    <div className="pointer-events-none fixed bottom-5 right-4 z-[82] sm:bottom-6 sm:right-6">
+      <div
+        className={`glass glass-shine min-w-[132px] rounded-3xl border px-4 py-3 shadow-[0_22px_60px_rgba(0,0,0,.35)] backdrop-blur-xl transform-gpu ${toneClass}`}
+        style={{ transform: "perspective(900px) rotateX(16deg) rotateY(-14deg) translateZ(0)" }}
+      >
+        <div className="text-[10px] uppercase tracking-[0.22em] opacity-70">Live timer</div>
+        <div className="mt-1 text-[11px] font-medium opacity-85">{label || "Live state"}</div>
+        <div className="mt-1 font-mono text-2xl font-semibold leading-none">
+          {typeof seconds === "number" ? `${seconds}s` : "LIVE"}
+        </div>
+      </div>
+    </div>
+  );
+}
