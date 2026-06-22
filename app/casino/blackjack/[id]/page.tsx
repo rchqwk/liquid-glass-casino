@@ -2295,9 +2295,9 @@ export function BlackjackTablePageClient({
           <div ref={tableViewRef} className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "order-1 xl:order-1" : ""}`}>
             {showV2Shell ? (
               <BlackjackV2SectionHeader
-                eyebrow="Table"
-                title="Felt, dealer, and player seats"
-                subtitle="Focus on the live table first, then jump back to controls only when you need to act."
+                eyebrow="Surface"
+                title="Live felt, dealer lane, and player seats"
+                subtitle="Stay on the live surface first, then jump back to controls only when you need to place stakes or use tools."
               />
             ) : null}
             {!showV2Shell ? <p className="text-sm font-medium text-white">Table</p> : null}
@@ -2316,7 +2316,7 @@ export function BlackjackTablePageClient({
                     setTableView("table");
                   }}
                 >
-                  {showV2Shell ? "Felt" : "Table"}
+                  {showV2Shell ? "Live felt" : "Table"}
                 </button>
                 <button
                   type="button"
@@ -2330,7 +2330,7 @@ export function BlackjackTablePageClient({
                     setTableView("list");
                   }}
                 >
-                  {showV2Shell ? "Seat list" : "List"}
+                  {showV2Shell ? "Seat rail" : "List"}
                 </button>
               </div>
             </div>
@@ -2344,7 +2344,7 @@ export function BlackjackTablePageClient({
                   ))}
                 </div>
                 <p className="mt-2 text-xs text-white/55">
-                  Visible total: <span className="font-mono text-white/80">{dealerTotal}</span>
+                  {showV2Shell ? "Showing total" : "Visible total"}: <span className="font-mono text-white/80">{dealerTotal}</span>
                 </p>
                 {(state as any)?.dealer?.effects?.length ? (
                   <div className="mt-2 flex flex-wrap gap-1">
@@ -2443,9 +2443,11 @@ export function BlackjackTablePageClient({
 
                     <div className="absolute left-1/2 top-8 w-[360px] -translate-x-1/2">
                       <div className="mb-2 flex items-center justify-center gap-2 text-[11px] text-white/80">
-                        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 font-semibold text-white/85">Dealer</span>
+                        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 font-semibold text-white/85">
+                          {showV2Shell ? "Dealer lane" : "Dealer"}
+                        </span>
                         <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-white/70">
-                          Visible <span className="font-mono text-white/85">{dealerTotal}</span>
+                          {showV2Shell ? "Showing" : "Visible"} <span className="font-mono text-white/85">{dealerTotal}</span>
                         </span>
                       </div>
                       <div className="flex flex-wrap justify-center gap-2">
