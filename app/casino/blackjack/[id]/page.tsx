@@ -1498,7 +1498,7 @@ export function BlackjackTablePageClient({
                 subtitle="Manage wagers, side bets, powerups, bonds, and host options from one control rail."
               />
             ) : null}
-            <p className="text-sm font-medium text-white">Round controls</p>
+            {!showV2Shell ? <p className="text-sm font-medium text-white">Round controls</p> : null}
             <div className="mt-3 text-xs text-white/60">
             {state.phase === "betting" ? (
                 <>Betting ends in <span className="font-mono text-white/80">{bettingLeft}s</span></>
@@ -2249,6 +2249,10 @@ export function BlackjackTablePageClient({
                   Missed rounds: <span className="font-mono">{mySeat.missedRounds}</span>/5
                 </div>
               </>
+            ) : showV2Shell ? (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-sm text-white/70">
+                Join or spectate from the V2 overview panel above, then come back here for betting and inventory tools.
+              </div>
             ) : (
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
@@ -2277,7 +2281,7 @@ export function BlackjackTablePageClient({
                 subtitle="Focus on the live table first, then jump back to controls only when you need to act."
               />
             ) : null}
-            <p className="text-sm font-medium text-white">Table</p>
+            {!showV2Shell ? <p className="text-sm font-medium text-white">Table</p> : null}
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="text-xs text-white/55">View</div>
               <div className="flex items-center gap-2">
