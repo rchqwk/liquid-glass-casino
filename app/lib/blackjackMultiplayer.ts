@@ -1,5 +1,6 @@
 "server-only";
 
+import { ensureBlackjackDecorations, removeUserBlackjackDecorations, syncOwnedDecorationsIntoPlacedCollectibles } from "./blackjackDecorations";
 import { safePublicBlackjackStateForUser } from "./blackjackStateView";
 
 export type Suit = "♠" | "♥" | "♦" | "♣" | "★";
@@ -1244,33 +1245,18 @@ function startRound(state: TableState, now: number) {
       if (p.missedRounds >= 5) {
         // Save their inventory. Also return any placed collectibles back into inventory so they don't stay "stuck"
         // while the player is gone (AFK kick behaves like leaving the table).
-        s.decorations = Array.isArray((s as any).decorations) ? (((s as any).decorations as any[]) ?? []) : [];
+        ensureBlackjackDecorations(s);
         p.inventory = normalizeInventory((p as any).inventory);
         p.inventory.collectibles = p.inventory.collectibles ?? { owned: {}, figurines: [], placed: [] };
         p.inventory.collectibles.placed = Array.isArray(p.inventory.collectibles.placed) ? p.inventory.collectibles.placed : [];
 
         // Ensure inventory has the current positions from the table decorations (defensive).
-        const existingIds = new Set((p.inventory.collectibles.placed ?? []).map((x: any) => String(x?.id ?? "")));
-        const mine = (s.decorations ?? []).filter((d: any) => Number(d?.ownerUserId ?? 0) === Number(p.userId));
-        for (const d of mine) {
-          const id = String(d?.id ?? "");
-          if (!id || existingIds.has(id)) continue;
-          const kind = String(d?.kind ?? "emoji") === "figurine" ? "figurine" : "emoji";
-          const x = Number(d?.x ?? 0.5);
-          const y = Number(d?.y ?? 0.5);
-          p.inventory.collectibles.placed!.push({
-            id,
-            kind,
-            key: d?.key != null ? String(d.key) : undefined,
-            imageUrl: d?.imageUrl != null ? String(d.imageUrl) : undefined,
-            x: Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0.5,
-            y: Number.isFinite(y) ? Math.max(0, Math.min(1, y)) : 0.5,
-            placedAt: Number(d?.createdAt ?? now) || now,
-          });
-          existingIds.add(id);
-        }
-        // Max 4 placed items per player.
-        p.inventory.collectibles.placed = p.inventory.collectibles.placed.slice(0, 4);
+        p.inventory.collectibles.placed = syncOwnedDecorationsIntoPlacedCollectibles(
+          s,
+          p.userId,
+          p.inventory.collectibles.placed,
+          now,
+        );
 
         // Convert placed items back into inventory.
         p.inventory = returnPlacedCollectiblesToInventory(p.inventory, s.decorations as any, now);
@@ -1280,7 +1266,7 @@ function startRound(state: TableState, now: number) {
         s.seats[i] = null;
 
         // Remove their decorations from the table.
-        s.decorations = (s.decorations ?? []).filter((d: any) => Number(d?.ownerUserId ?? 0) !== Number(p.userId));
+        removeUserBlackjackDecorations(s, p.userId);
       }
     }
   }
