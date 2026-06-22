@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { randomHex, rngFloat, rngInt, sha256Hex } from "./provablyFair";
+import { useAuth } from "./authClient";
 
 type HistoryItem = {
   ts: number;
@@ -25,6 +26,7 @@ type WalletState = {
     number,
     { game: string; wager: number; ts: number; serverSeed: string; clientSeed: string; baseWager?: number }
   >;
+  updatedAt?: number;
 };
 
 type BetRng = {
@@ -86,7 +88,7 @@ function loadState(): WalletState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as WalletState;
+    return normalizeWalletState(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -118,13 +120,48 @@ function freshState(): WalletState {
     lastRefill5000At: 0,
     lastRefill100At: 0,
     openBets: {},
+    updatedAt: Date.now(),
+  };
+}
+
+function normalizeWalletState(raw: Partial<WalletState> | null | undefined): WalletState {
+  const state = raw ?? {};
+  const serverSeed = String(state.serverSeed ?? randomHex(32));
+  const openBetsRaw = state.openBets && typeof state.openBets === "object" ? state.openBets : {};
+  const openBets: WalletState["openBets"] = {};
+  for (const [k, v] of Object.entries(openBetsRaw)) {
+    const nonce = Number(k);
+    if (!Number.isFinite(nonce) || nonce < 0) continue;
+    const bet: any = v ?? {};
+    openBets[nonce] = {
+      game: String(bet.game ?? ""),
+      wager: Number(bet.wager ?? 0) || 0,
+      ts: Number(bet.ts ?? 0) || 0,
+      serverSeed: String(bet.serverSeed ?? ""),
+      clientSeed: String(bet.clientSeed ?? ""),
+      baseWager: Number.isFinite(Number(bet.baseWager)) ? Number(bet.baseWager) : undefined,
+    };
+  }
+  return {
+    balance: Math.max(0, clampMoney(Number(state.balance ?? 1000))),
+    serverSeed,
+    serverSeedHash: String(state.serverSeedHash ?? "") || sha256Hex(serverSeed),
+    clientSeed: String(state.clientSeed ?? randomHex(16)),
+    nonce: Math.max(0, Math.floor(Number(state.nonce ?? 0) || 0)),
+    history: Array.isArray(state.history) ? state.history.slice(0, 20) : [],
+    lastRefill5000At: Math.max(0, Number(state.lastRefill5000At ?? 0) || 0),
+    lastRefill100At: Math.max(0, Number(state.lastRefill100At ?? 0) || 0),
+    openBets,
+    updatedAt: Math.max(0, Number(state.updatedAt ?? Date.now()) || Date.now()),
   };
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [state, setState] = useState<WalletState | null>(null);
+  const [serverWalletReadyFor, setServerWalletReadyFor] = useState<number | null>(null);
 
   useEffect(() => {
     const loaded = loadState();
@@ -134,6 +171,59 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (state) saveState(state);
   }, [state]);
+
+  useEffect(() => {
+    if (!state) return;
+    if (!user?.id) {
+      setServerWalletReadyFor(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/wallet", { cache: "no-store" });
+        if (!res.ok) {
+          if (!cancelled) setServerWalletReadyFor(user.id);
+          return;
+        }
+        const data = (await res.json().catch(() => ({}))) as { state?: WalletState | null };
+        if (cancelled) return;
+        if (data.state) {
+          setState(normalizeWalletState(data.state));
+        } else {
+          await fetch("/api/wallet", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "sync", state: normalizeWalletState(state) }),
+          });
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setServerWalletReadyFor(user.id);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!state) return;
+    if (!user?.id) return;
+    if (serverWalletReadyFor !== user.id) return;
+    const id = window.setTimeout(() => {
+      void fetch("/api/wallet", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "sync", state }),
+      }).catch(() => {
+        // ignore
+      });
+    }, 150);
+    return () => window.clearTimeout(id);
+  }, [state, user?.id, serverWalletReadyFor]);
 
   const value = useMemo<WalletContextValue>(() => {
     if (!state) {
@@ -169,7 +259,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (!Number.isFinite(nextBal) || nextBal < 0) return;
         setState((s) => {
           if (!s) return s;
-          return { ...s, balance: nextBal, openBets: {} };
+          return { ...s, balance: nextBal, openBets: {}, updatedAt: Date.now() };
         });
       },
       refill5000AvailableAt:
@@ -240,6 +330,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
               isRefill5000 && !bypass ? now : s.lastRefill5000At,
             lastRefill100At:
               isRefill100 && !bypass ? now : s.lastRefill100At,
+            updatedAt: now,
           };
         });
         return { ok: true };
@@ -248,7 +339,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setClientSeed: (seed) => {
         const next = seed.trim();
         if (!next) return;
-        setState((s) => (s ? { ...s, clientSeed: next } : s));
+        setState((s) => (s ? { ...s, clientSeed: next, updatedAt: Date.now() } : s));
       },
 
       rotateServerSeed: () => {
@@ -262,6 +353,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 serverSeedHash: sha256Hex(nextServerSeed),
                 nonce: 0,
                 openBets: {},
+                updatedAt: Date.now(),
               }
             : s,
         );
@@ -325,6 +417,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                   },
                   ...s.history,
                 ].slice(0, 20),
+                updatedAt: Date.now(),
               }
             : s,
         );
@@ -395,6 +488,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             balance: clampMoney(s.balance - wager),
             nonce: s.nonce + 1,
             openBets,
+            updatedAt: Date.now(),
           };
         });
 
@@ -432,6 +526,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
               },
               ...s.history,
             ].slice(0, 20),
+            updatedAt: Date.now(),
           };
         });
 

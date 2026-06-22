@@ -14,6 +14,29 @@ export type AuthedUserWithRole = {
   discord_avatar_url?: string | null;
 };
 
+type PersistedWalletState = {
+  balance: number;
+  serverSeed: string;
+  serverSeedHash: string;
+  clientSeed: string;
+  nonce: number;
+  history: Array<{
+    ts: number;
+    game: string;
+    wager: number;
+    multiplier: number;
+    profit: number;
+    outcome: string;
+  }>;
+  lastRefill5000At?: number;
+  lastRefill100At?: number;
+  openBets?: Record<
+    number,
+    { game: string; wager: number; ts: number; serverSeed: string; clientSeed: string; baseWager?: number }
+  >;
+  updatedAt?: number;
+};
+
 export function normalizeUsername(raw: string) {
   return raw.trim().toLowerCase().replace(/\s+/g, "_");
 }
@@ -83,6 +106,7 @@ type Store = {
     name_color?: string | null;
   }>;
   discord_links?: Array<{ discord_id: string; user_id: number; created_at: number }>;
+  user_wallets?: Array<{ user_id: number; state: PersistedWalletState; updated_at: number }>;
 };
 
 const STORE_PATH = (() => {
@@ -115,6 +139,7 @@ function defaultStore(): Store {
     nextGlobalChatId: 1,
     global_chat: [],
     discord_links: [],
+    user_wallets: [],
   };
 }
 
@@ -284,6 +309,14 @@ async function ensureSchema() {
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS user_wallets (
+      user_id INT PRIMARY KEY REFERENCES users(id),
+      state_json TEXT NOT NULL,
+      updated_at BIGINT NOT NULL
+    )
+  `;
+
   // Migrations / new columns
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS fingerprint TEXT`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS active_session_token TEXT`;
@@ -298,6 +331,109 @@ async function ensureSchema() {
 
   await sql`ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`;
   schemaReady = true;
+}
+
+function normalizeWalletState(raw: any): PersistedWalletState {
+  const history = Array.isArray(raw?.history) ? raw.history : [];
+  const openBetsRaw = raw?.openBets && typeof raw.openBets === "object" ? raw.openBets : {};
+  const openBets: PersistedWalletState["openBets"] = {};
+  for (const [k, v] of Object.entries(openBetsRaw)) {
+    const nonce = Number(k);
+    if (!Number.isFinite(nonce) || nonce < 0) continue;
+    const bet: any = v ?? {};
+    openBets[nonce] = {
+      game: String(bet.game ?? "").slice(0, 48),
+      wager: Number(bet.wager ?? 0) || 0,
+      ts: Number(bet.ts ?? 0) || 0,
+      serverSeed: String(bet.serverSeed ?? "").slice(0, 128),
+      clientSeed: String(bet.clientSeed ?? "").slice(0, 128),
+      baseWager: Number.isFinite(Number(bet.baseWager)) ? Number(bet.baseWager) : undefined,
+    };
+  }
+  return {
+    balance: Math.max(0, Math.round((Number(raw?.balance ?? 0) || 0) * 100) / 100),
+    serverSeed: String(raw?.serverSeed ?? "").slice(0, 128),
+    serverSeedHash: String(raw?.serverSeedHash ?? "").slice(0, 128),
+    clientSeed: String(raw?.clientSeed ?? "").slice(0, 128),
+    nonce: Math.max(0, Math.floor(Number(raw?.nonce ?? 0) || 0)),
+    history: history
+      .slice(0, 50)
+      .map((h: any) => ({
+        ts: Number(h?.ts ?? 0) || 0,
+        game: String(h?.game ?? "").slice(0, 48),
+        wager: Number(h?.wager ?? 0) || 0,
+        multiplier: Number(h?.multiplier ?? 0) || 0,
+        profit: Number(h?.profit ?? 0) || 0,
+        outcome: String(h?.outcome ?? "").slice(0, 240),
+      })),
+    lastRefill5000At: Math.max(0, Number(raw?.lastRefill5000At ?? 0) || 0),
+    lastRefill100At: Math.max(0, Number(raw?.lastRefill100At ?? 0) || 0),
+    openBets,
+    updatedAt: Math.max(0, Number(raw?.updatedAt ?? Date.now()) || Date.now()),
+  };
+}
+
+export async function getUserWalletState(userId: number): Promise<PersistedWalletState | null> {
+  const uid = Number(userId);
+  if (!Number.isFinite(uid) || uid <= 0) return null;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`SELECT state_json FROM user_wallets WHERE user_id = ${uid}`) as any[];
+    const raw = rows[0]?.state_json;
+    if (!raw) return null;
+    try {
+      return normalizeWalletState(JSON.parse(String(raw)));
+    } catch {
+      return null;
+    }
+  }
+  return withStore((s) => {
+    s.user_wallets = s.user_wallets ?? [];
+    const row = s.user_wallets.find((x) => x.user_id === uid);
+    return row?.state ? normalizeWalletState(row.state) : null;
+  });
+}
+
+export async function upsertUserWalletState(userId: number, state: PersistedWalletState): Promise<PersistedWalletState | null> {
+  const uid = Number(userId);
+  if (!Number.isFinite(uid) || uid <= 0) return null;
+  const next = normalizeWalletState(state);
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`SELECT state_json FROM user_wallets WHERE user_id = ${uid}`) as any[];
+    const existingRaw = rows[0]?.state_json;
+    let existing: PersistedWalletState | null = null;
+    if (existingRaw) {
+      try {
+        existing = normalizeWalletState(JSON.parse(String(existingRaw)));
+      } catch {
+        existing = null;
+      }
+    }
+    if (existing && Number(existing.updatedAt ?? 0) > Number(next.updatedAt ?? 0)) return existing;
+    await sql`
+      INSERT INTO user_wallets (user_id, state_json, updated_at)
+      VALUES (${uid}, ${JSON.stringify(next)}, ${Number(next.updatedAt ?? Date.now())})
+      ON CONFLICT (user_id)
+      DO UPDATE SET state_json = ${JSON.stringify(next)}, updated_at = ${Number(next.updatedAt ?? Date.now())}
+    `;
+    return next;
+  }
+
+  return withStore((s) => {
+    s.user_wallets = s.user_wallets ?? [];
+    const row = s.user_wallets.find((x) => x.user_id === uid);
+    if (row && Number(row.updated_at ?? 0) > Number(next.updatedAt ?? 0)) return normalizeWalletState(row.state);
+    if (row) {
+      row.state = next;
+      row.updated_at = Number(next.updatedAt ?? Date.now());
+      return next;
+    }
+    s.user_wallets.push({ user_id: uid, state: next, updated_at: Number(next.updatedAt ?? Date.now()) });
+    return next;
+  });
 }
 
 export async function createOrGetDiscordLinkedUser(input: { discordId: string; displayName: string; avatarUrl?: string | null }) {
