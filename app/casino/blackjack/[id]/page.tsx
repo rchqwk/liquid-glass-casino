@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
 import { useWallet } from "../../../lib/wallet";
 import { useAuth } from "../../../lib/authClient";
+import { BlackjackChatPanel } from "../blackjackChatPanel";
 import { type BJState, type Seat } from "../blackjackTableTypes";
 import { CardView, cardFromIndex, handValue } from "../blackjackUiPrimitives";
 import { BlackjackTableSeat, getBlackjackChatNameClass } from "../blackjackSeatViews";
@@ -1251,150 +1252,29 @@ export default function BlackjackTablePage() {
         </div>
       ) : null}
 
-      {chatOpen ? (
-        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
-          <div className="glass glass-shine w-full max-w-[720px] rounded-3xl border border-white/10 p-6">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-white">Chat</div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    className={`rounded-2xl px-3 py-1.5 text-xs font-medium transition ${
-                      chatScope === "room" ? "bg-white/10 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
-                    }`}
-                    onClick={() => setChatScope("room")}
-                  >
-                    Room
-                  </button>
-                  <button
-                    type="button"
-                    className={`rounded-2xl px-3 py-1.5 text-xs font-medium transition ${
-                      chatScope === "global" ? "bg-white/10 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
-                    }`}
-                    onClick={() => setChatScope("global")}
-                  >
-                    Global
-                  </button>
-                  {chatScope === "global" ? (
-                    <span className="ml-1 text-[11px] text-white/60">
-                      Online: <span className="font-mono text-white/80">{globalChat.online}</span> • Active 1h:{" "}
-                      <span className="font-mono text-white/80">{globalChat.active1h}</span>
-                    </span>
-                  ) : (
-                    <span className="ml-1 text-[11px] text-white/60">Room messages</span>
-                  )}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
-                onClick={() => setChatOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="mt-4 h-[360px] overflow-auto rounded-3xl border border-white/10 bg-white/5 p-4">
-              {chatScope === "global" ? (
-                globalChat.messages.length ? (
-                  <div className="flex flex-col gap-2">
-                    {globalChat.messages.map((m) => (
-                      <div key={m.id} className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
-                        <div className="flex items-center justify-between gap-3 text-[11px] text-white/60">
-                          <span className={`font-semibold ${getBlackjackChatNameClass((m as any).nameColor ?? null)}`}>
-                            {m.username}
-                            {(Number((m as any).prestigeLevel ?? 0) || 0) >= 1 ? (
-                              <span className="ml-1 text-yellow-300">★{Number((m as any).prestigeLevel ?? 0)}</span>
-                            ) : null}
-                          </span>
-                          <span className="font-mono">{new Date(m.ts).toLocaleTimeString()}</span>
-                        </div>
-                        <div className="mt-1 whitespace-pre-wrap text-sm text-white/85">{m.text}</div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-white/60">No messages yet.</div>
-                )
-              ) : chatMessages.length ? (
-                <div className="flex flex-col gap-2">
-                  {chatMessages.map((m) => (
-                    <div key={m.id} className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
-                      <div className="flex items-center justify-between gap-3 text-[11px] text-white/60">
-                        <span className={`font-semibold ${getBlackjackChatNameClass(m.nameColor ?? null)}`}>
-                          {m.username}
-                          {(Number(m.prestigeLevel ?? 0) || 0) >= 1 ? (
-                            <span className="ml-1 text-yellow-300">★{Number(m.prestigeLevel ?? 0)}</span>
-                          ) : null}
-                        </span>
-                        <span className="font-mono">{new Date(m.at).toLocaleTimeString()}</span>
-                      </div>
-                      <div className="mt-1 whitespace-pre-wrap text-sm text-white/85">{m.text}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-white/60">No messages yet.</div>
-              )}
-            </div>
-
-            <div className="mt-4 flex gap-2">
-              <input
-                type="text"
-                value={chatText}
-                onChange={(e) => setChatText(e.target.value)}
-                placeholder="Type a message…"
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    (e.currentTarget as any).blur?.();
-                    (async () => {
-                      if (!safeTableId) return;
-                      const text = chatText.trim();
-                      if (!text) return;
-                      setChatText("");
-                      if (chatScope === "global") {
-                        await fetch("/api/chat/global", {
-                          method: "POST",
-                          headers: { "content-type": "application/json" },
-                          body: JSON.stringify({ text }),
-                        });
-                        await refreshGlobalChat();
-                      } else {
-                        await post("chat", { text });
-                      }
-                    })();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                disabled={!chatText.trim()}
-                onClick={async () => {
-                  if (!safeTableId) return;
-                  const text = chatText.trim();
-                  if (!text) return;
-                  setChatText("");
-                  if (chatScope === "global") {
-                    await fetch("/api/chat/global", {
-                      method: "POST",
-                      headers: { "content-type": "application/json" },
-                      body: JSON.stringify({ text }),
-                    });
-                    await refreshGlobalChat();
-                  } else {
-                    await post("chat", { text });
-                  }
-                }}
-              >
-                Send
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <BlackjackChatPanel
+        open={chatOpen}
+        scope={chatScope}
+        setScope={setChatScope}
+        roomMessages={chatMessages}
+        globalMessages={globalChat.messages}
+        globalOnline={globalChat.online}
+        globalActive1h={globalChat.active1h}
+        chatText={chatText}
+        setChatText={setChatText}
+        onClose={() => setChatOpen(false)}
+        onRefreshGlobal={refreshGlobalChat}
+        onSendRoomMessage={async (text) => {
+          await post("chat", { text });
+        }}
+        onSendGlobalMessage={async (text) => {
+          await fetch("/api/chat/global", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+        }}
+      />
 
       {inviteOpen ? (
         <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
