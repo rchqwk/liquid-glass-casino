@@ -3,8 +3,7 @@ export default function BlackjackStrategyGuidePage() {
     <div className="glass glass-shine rounded-3xl p-6 text-white/80">
       <h1 className="text-2xl font-semibold text-white">Blackjack strategy guide</h1>
       <p className="mt-3 text-sm leading-6 text-white/70">
-        This is a quick, beginner-friendly guide. (This prototype is for fun—use the in-game tour for powerups + special
-        mechanics.)
+        This is a quick, beginner-friendly guide for the play-money tables. Use the in-game tour for powerups and special mechanics.
       </p>
 
       <h2 className="mt-6 text-lg font-semibold text-white">Core ideas</h2>
@@ -30,4 +29,3 @@ export default function BlackjackStrategyGuidePage() {
     </div>
   );
 }
-

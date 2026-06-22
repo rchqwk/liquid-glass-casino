@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Liquid Glass Casino (Prototype)",
+  title: "Liquid Glass Casino",
   description:
-    "A play-money crypto-casino prototype with a Liquid Glass UI and provably-fair style RNG.",
+    "A play-money casino with a Liquid Glass UI and provably-fair style RNG.",
 };
 
 export default function RootLayout({
@@ -36,7 +36,7 @@ export default function RootLayout({
         </div>
         <footer className="border-t border-white/5 bg-black/30 px-4 py-4 text-xs text-white/50">
           <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3">
-            <div>© {new Date().getFullYear()} Liquid Glass Casino (Prototype)</div>
+            <div>© {new Date().getFullYear()} Liquid Glass Casino</div>
             <div className="flex items-center gap-4">
               <Link className="hover:text-white/80" href="/privacy">
                 Privacy Policy

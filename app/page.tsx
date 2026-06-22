@@ -42,7 +42,7 @@ export default function Home({
           <div className="flex items-center justify-between gap-4">
             <div className="flex flex-col gap-1">
               <p className="text-sm tracking-wide text-[rgba(245,247,255,0.72)]">
-                Prototype • Play-money only
+                Play-money only
               </p>
               <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
                 Liquid Glass Crypto Casino
@@ -51,8 +51,7 @@ export default function Home({
           </div>
 
           <p className="text-base leading-7 text-[rgba(245,247,255,0.72)]">
-            A Next.js web prototype styled like Apple’s “liquid glass”, with
-            provably-fair style RNG and a simple local wallet.
+            A Liquid Glass casino experience with provably-fair style RNG, live blackjack tables, and a simple play-money wallet.
           </p>
 
           <div className="flex flex-col gap-3 sm:flex-row">

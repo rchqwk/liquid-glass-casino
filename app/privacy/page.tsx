@@ -6,7 +6,7 @@ export default function PrivacyPolicyPage() {
       <div className="glass glass-shine rounded-3xl p-8">
         <h1 className="text-2xl font-semibold text-white">Privacy Policy</h1>
         <p className="mt-3 text-sm leading-6 text-white/70">
-          This is a prototype application. This policy explains what data is collected and how it is used.
+          This policy explains what data is collected for the play-money service and how it is used.
         </p>
 
         <h2 className="mt-8 text-lg font-semibold text-white">What we collect</h2>
@@ -34,7 +34,7 @@ export default function PrivacyPolicyPage() {
 
         <h2 className="mt-8 text-lg font-semibold text-white">Data retention</h2>
         <p className="mt-3 text-sm leading-6 text-white/70">
-          Prototype data may be reset at any time. Do not rely on this service for long-term storage.
+          Service data may be reset at any time. Do not rely on this service for long-term storage.
         </p>
 
         <h2 className="mt-8 text-lg font-semibold text-white">Contact</h2>
@@ -45,4 +45,3 @@ export default function PrivacyPolicyPage() {
     </div>
   );
 }
-

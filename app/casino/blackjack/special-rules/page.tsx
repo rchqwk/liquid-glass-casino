@@ -3,7 +3,7 @@ export default function BlackjackSpecialRulesPage() {
     <div className="glass glass-shine rounded-3xl p-6 text-white/80">
       <h1 className="text-2xl font-semibold text-white">Special rules (Arcade Blackjack)</h1>
       <p className="mt-3 text-sm leading-6 text-white/70">
-        This prototype adds arcade mechanics on top of normal blackjack: powerups, mystery boxes, collectibles, and a
+        This version adds arcade mechanics on top of normal blackjack: powerups, mystery boxes, collectibles, and a
         multiplayer round timer.
       </p>
 
@@ -34,4 +34,3 @@ export default function BlackjackSpecialRulesPage() {
     </div>
   );
 }
-

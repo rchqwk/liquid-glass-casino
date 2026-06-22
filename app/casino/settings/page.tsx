@@ -19,7 +19,7 @@ export default function SettingsPage() {
       <div className="glass glass-shine rounded-3xl p-6">
         <h2 className="text-xl font-semibold text-white">Settings</h2>
         <p className="mt-2 text-sm leading-6 text-white/70">
-          This prototype uses a “commit → reveal” flow. The app commits to a
+          This service uses a “commit → reveal” flow. The app commits to a
           server seed hash, then uses <code>serverSeed:clientSeed:nonce</code> to
           derive outcomes.
         </p>
@@ -86,4 +86,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-

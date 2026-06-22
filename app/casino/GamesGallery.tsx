@@ -37,7 +37,7 @@ const GAMES: GameCard[] = [
   },
   { gameId: "dice", title: "Dice", desc: "Pick a target and roll under.", href: "/casino/dice" },
   { gameId: "roulette", title: "Roulette", desc: "European (0–36).", href: "/casino/roulette" },
-  { gameId: "poker", title: "Poker", desc: "Prototype poker page.", href: "/casino/poker" },
+  { gameId: "poker", title: "Poker", desc: "Poker side mode page.", href: "/casino/poker" },
 ];
 
 function money(n: number) {
@@ -46,7 +46,7 @@ function money(n: number) {
 
 export function GamesGallery({
   title = "Legacy Casino",
-  description = "The original prototype games now live here as side modes and minigames.",
+  description = "The original side modes now live here as legacy games and minigames.",
 }: {
   title?: string;
   description?: string;

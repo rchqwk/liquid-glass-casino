@@ -6,7 +6,7 @@ export default function TermsOfServicePage() {
       <div className="glass glass-shine rounded-3xl p-8">
         <h1 className="text-2xl font-semibold text-white">Terms of Service</h1>
         <p className="mt-3 text-sm leading-6 text-white/70">
-          This is a play‑money prototype for testing and entertainment. By using the site, you agree to these terms.
+          This is a play‑money service for entertainment. By using the site, you agree to these terms.
         </p>
 
         <h2 className="mt-8 text-lg font-semibold text-white">No real money</h2>
@@ -24,7 +24,7 @@ export default function TermsOfServicePage() {
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-white/70">
           <li>No harassment, hate speech, or disruptive behavior.</li>
           <li>No attempts to exploit, reverse engineer, or abuse the service.</li>
-          <li>We may remove users or reset data at any time to keep the prototype stable.</li>
+          <li>We may remove users or reset data at any time to keep the service stable.</li>
         </ul>
 
         <h2 className="mt-8 text-lg font-semibold text-white">Availability</h2>
@@ -35,4 +35,3 @@ export default function TermsOfServicePage() {
     </div>
   );
 }
-

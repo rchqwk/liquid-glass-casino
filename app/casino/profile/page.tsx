@@ -14,7 +14,7 @@ export default function ProfilePage() {
       <div className="glass glass-shine rounded-3xl p-6">
         <h2 className="text-xl font-semibold text-white">Profile</h2>
         <p className="mt-2 text-sm leading-6 text-white/70">
-          Username-only sign-in for this prototype. No passwords (not secure for
+          Username-only sign-in for the play-money service. No passwords (not secure for
           real money).
         </p>
       </div>
