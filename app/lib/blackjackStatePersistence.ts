@@ -1,7 +1,7 @@
 "server-only";
 
-import type { TableState } from "./blackjackMultiplayer";
-import { upsertBlackjackInventory, upsertBlackjackTable } from "./db";
+import type { Inventory, TableState } from "./blackjackMultiplayer";
+import { getBlackjackTable, listBlackjackTables, upsertBlackjackInventory, upsertBlackjackTable } from "./db";
 
 export type BlackjackTableRecordMeta = {
   id: string;
@@ -31,4 +31,27 @@ export async function persistBlackjackStateInventories(state: TableState) {
     await upsertBlackjackInventory(ev.userId, ev.inventory);
   }
   state.evictedInventories = [];
+}
+
+export async function syncUserBlackjackInventoryIntoTables(userId: number, inventory: Inventory, tableId?: string | null) {
+  const targetTables = tableId
+    ? [await getBlackjackTable(String(tableId).slice(0, 48))].filter(Boolean)
+    : (await Promise.all((await listBlackjackTables()).map((m) => getBlackjackTable(m.id)))).filter(Boolean);
+
+  const now = Date.now();
+  for (const t of targetTables as Array<BlackjackTableRecordMeta & { state: TableState }>) {
+    const st: any = t.state ?? {};
+    const seats: any[] = Array.isArray(st.seats) ? st.seats : [];
+    let touched = false;
+    for (const p of seats) {
+      if (p && p.userId === userId) {
+        p.inventory = inventory;
+        touched = true;
+      }
+    }
+    if (touched) {
+      st.updatedAt = now;
+      await saveBlackjackTableState(t, st as TableState);
+    }
+  }
 }

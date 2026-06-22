@@ -2,12 +2,10 @@ import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../lib/authServer";
 import {
   getBlackjackInventory,
-  getBlackjackTable,
-  listBlackjackTables,
   upsertBlackjackInventory,
-  upsertBlackjackTable,
 } from "../../../../lib/db";
 import { ensureInventory, SPECIALS } from "../../../../lib/blackjackMultiplayer";
+import { syncUserBlackjackInventoryIntoTables } from "../../../../lib/blackjackStatePersistence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,59 +80,7 @@ export async function POST(req: Request) {
 
   await upsertBlackjackInventory(user.id, inv);
 
-  // Keep active table state inventories in sync (same reason as box open endpoint).
-  const now = Date.now();
-  if (tableId) {
-    const t = await getBlackjackTable(tableId);
-    if (t) {
-      const st: any = t.state ?? {};
-      const seats: any[] = Array.isArray(st.seats) ? st.seats : [];
-      let touched = false;
-      for (const p of seats) {
-        if (p && p.userId === user.id) {
-          p.inventory = inv;
-          touched = true;
-        }
-      }
-      if (touched) {
-        st.updatedAt = now;
-        await upsertBlackjackTable({
-          id: t.id,
-          public: t.public,
-          name: t.name,
-          state: st,
-          created_at: t.created_at,
-          updated_at: now,
-        });
-      }
-    }
-  } else {
-    const metas = await listBlackjackTables();
-    for (const m of metas) {
-      const t = await getBlackjackTable(m.id);
-      if (!t) continue;
-      const st: any = t.state ?? {};
-      const seats: any[] = Array.isArray(st.seats) ? st.seats : [];
-      let touched = false;
-      for (const p of seats) {
-        if (p && p.userId === user.id) {
-          p.inventory = inv;
-          touched = true;
-        }
-      }
-      if (touched) {
-        st.updatedAt = now;
-        await upsertBlackjackTable({
-          id: t.id,
-          public: t.public,
-          name: t.name,
-          state: st,
-          created_at: t.created_at,
-          updated_at: now,
-        });
-      }
-    }
-  }
+  await syncUserBlackjackInventoryIntoTables(user.id, inv, tableId);
 
   return NextResponse.json({ ok: true });
 }

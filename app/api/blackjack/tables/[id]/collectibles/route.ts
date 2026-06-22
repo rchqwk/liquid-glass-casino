@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
-import { getBlackjackTable, upsertBlackjackInventory, upsertBlackjackTable } from "../../../../../lib/db";
+import { getBlackjackTable } from "../../../../../lib/db";
 import { ensureInventory, safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { saveBlackjackTableState } from "../../../../../lib/blackjackStatePersistence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -186,10 +187,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
-  await upsertBlackjackTable({ id: t.id, public: t.public, name: t.name, state, created_at: t.created_at, updated_at: state.updatedAt });
-  for (const p of state.seats) if (p) await upsertBlackjackInventory(p.userId, p.inventory);
-  for (const ev of state.evictedInventories ?? []) await upsertBlackjackInventory(ev.userId, ev.inventory);
-  state.evictedInventories = [];
+  await saveBlackjackTableState(t, state);
 
   return NextResponse.json({ ok: true, state: safePublicStateForUser(state, user.id) });
 }

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
-import { getBlackjackInventory, getBlackjackTable, upsertBlackjackInventory, upsertBlackjackTable } from "../../../../../lib/db";
+import { getBlackjackInventory, getBlackjackTable, upsertBlackjackInventory } from "../../../../../lib/db";
 import { defaultInventory, ensureInventory, safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
-import { persistBlackjackStateInventories } from "../../../../../lib/blackjackStatePersistence";
+import { saveBlackjackTableState } from "../../../../../lib/blackjackStatePersistence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,8 +66,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   // Persist table + all inventories.
-  await upsertBlackjackTable({ id: t.id, public: t.public, name: t.name, state, created_at: t.created_at, updated_at: state.updatedAt });
-  await persistBlackjackStateInventories(state);
+  await saveBlackjackTableState(t, state);
 
   // Ensure user has an inventory row even if something went wrong.
   const inv = (await getBlackjackInventory(user.id)) ?? defaultInventory();
