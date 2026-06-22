@@ -9,7 +9,7 @@ import { useAuth } from "../../../lib/authClient";
 import { BlackjackChatPanel } from "../blackjackChatPanel";
 import { blackjackCollectibleLabel, BlackjackCollectiblesPanel, BlackjackTableEditInventory } from "../blackjackCollectiblesPanel";
 import { BlackjackHostPanel } from "../blackjackHostPanel";
-import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar, BlackjackV2StatusStrip } from "../blackjackTableShell";
+import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar, BlackjackV2OverviewPanel, BlackjackV2StatusStrip } from "../blackjackTableShell";
 import { type BJState, type Seat } from "../blackjackTableTypes";
 import { CardView, cardFromIndex, handValue } from "../blackjackUiPrimitives";
 import { BlackjackTableSeat, getBlackjackChatNameClass } from "../blackjackSeatViews";
@@ -356,6 +356,10 @@ export function BlackjackTablePageClient({
   const showV2Shell = experience === "v2";
   const v2HeaderVisible = !!state;
   const classicHeaderVisible = !!(state && (mySeat || isSpectator) && topbarOpen);
+  const scrollToSection = (el: HTMLElement | null) => {
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   // Provide blackjack context to the global top bar.
   useEffect(() => {
@@ -1327,20 +1331,16 @@ export function BlackjackTablePageClient({
         timerSeconds={typeof timerSeconds === "number" ? timerSeconds : undefined}
         onTimerClick={() => {
           const phase = state?.phase;
-          const scroll = (el: HTMLElement | null) => {
-            if (!el) return;
-            el.scrollIntoView({ behavior: "smooth", block: "start" });
-          };
           if (phase === "betting") {
-            scroll(roundControlsRef.current);
+            scrollToSection(roundControlsRef.current);
             return;
           }
           if (phase === "dealer_window") {
-            scroll(dealerPowerupsRef.current);
+            scrollToSection(dealerPowerupsRef.current);
             return;
           }
           // "Play phase" (player_turns / dealer / settling) -> card/table view
-          scroll(tableViewRef.current);
+          scrollToSection(tableViewRef.current);
         }}
         canSplit={canSplit}
         canHit={!mySeat?.busted}
@@ -1388,6 +1388,25 @@ export function BlackjackTablePageClient({
         onOpenChat={() => setChatOpen(true)}
         onOpenCollectibles={() => setCollectiblesOpen(true)}
         onOpenHost={() => setHostOpen(true)}
+      />
+      <BlackjackV2OverviewPanel
+        visible={showV2Shell && !!state}
+        seated={!!mySeat}
+        spectating={!!isSpectator}
+        phase={String(state?.phase ?? "-")}
+        round={Number(state?.round ?? 0)}
+        dealerTotal={dealerTotal}
+        myTotal={mySeat ? handValue(mySeat.cards ?? [], Number((myHands as any)?.[myHandIndex]?.bonusPoints ?? (mySeat as any)?.bonusPoints ?? 0)).total : null}
+        myBet={mySeat ? Number(mySeat.bet ?? 0) : null}
+        unreadChat={unreadChat}
+        onJumpToControls={() => scrollToSection(roundControlsRef.current)}
+        onJumpToTable={() => scrollToSection(tableViewRef.current)}
+        onJoinSeat={() => {
+          void join(false);
+        }}
+        onJoinSpectate={() => {
+          void join(true);
+        }}
       />
       <BlackjackTableHeader
         visible={showV2Shell ? v2HeaderVisible : classicHeaderVisible}

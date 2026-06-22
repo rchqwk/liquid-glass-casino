@@ -308,3 +308,106 @@ export function BlackjackV2StatusStrip({
     </div>
   );
 }
+
+export function BlackjackV2OverviewPanel({
+  visible,
+  seated,
+  spectating,
+  phase,
+  round,
+  dealerTotal,
+  myTotal,
+  myBet,
+  unreadChat,
+  onJumpToControls,
+  onJumpToTable,
+  onJoinSeat,
+  onJoinSpectate,
+}: {
+  visible: boolean;
+  seated: boolean;
+  spectating: boolean;
+  phase: string;
+  round: number;
+  dealerTotal: number;
+  myTotal: number | null;
+  myBet: number | null;
+  unreadChat: number;
+  onJumpToControls: () => void;
+  onJumpToTable: () => void;
+  onJoinSeat: () => void;
+  onJoinSpectate: () => void;
+}) {
+  if (!visible) return null;
+
+  return (
+    <div className="glass glass-shine rounded-3xl border border-fuchsia-300/15 bg-gradient-to-br from-fuchsia-500/10 via-cyan-500/5 to-transparent p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.22em] text-fuchsia-100/55">Blackjack V2</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/75">
+            <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1">
+              Round <span className="font-mono text-white">{round || 0}</span>
+            </span>
+            <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1">
+              Phase <span className="font-mono text-white">{phase || "-"}</span>
+            </span>
+            <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1">
+              Dealer <span className="font-mono text-white">{dealerTotal}</span>
+            </span>
+            {seated ? (
+              <span className="rounded-full border border-emerald-300/15 bg-emerald-500/10 px-2.5 py-1 text-emerald-100">
+                Your hand <span className="font-mono">{myTotal ?? 0}</span>
+                {typeof myBet === "number" ? <> • Bet <span className="font-mono">{myBet.toFixed(2)}</span></> : null}
+              </span>
+            ) : spectating ? (
+              <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1 text-white/75">Spectating</span>
+            ) : (
+              <span className="rounded-full border border-yellow-300/15 bg-yellow-500/10 px-2.5 py-1 text-yellow-100">Not seated</span>
+            )}
+            {unreadChat > 0 ? (
+              <span className="rounded-full border border-fuchsia-300/15 bg-fuchsia-500/10 px-2.5 py-1 text-fuchsia-100">
+                Chat <span className="font-mono">{Math.min(99, unreadChat)}</span>
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {!seated && !spectating ? (
+            <>
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/90 hover:bg-white/10"
+                onClick={onJoinSeat}
+              >
+                Join seat
+              </button>
+              <button
+                type="button"
+                className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/80 hover:bg-white/10"
+                onClick={onJoinSpectate}
+              >
+                Spectate
+              </button>
+            </>
+          ) : null}
+          <button
+            type="button"
+            className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
+            onClick={onJumpToControls}
+          >
+            Controls
+          </button>
+          <button
+            type="button"
+            className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
+            onClick={onJumpToTable}
+          >
+            Table
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
