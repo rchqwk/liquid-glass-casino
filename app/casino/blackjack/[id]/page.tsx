@@ -9,7 +9,7 @@ import { useAuth } from "../../../lib/authClient";
 import { BlackjackChatPanel } from "../blackjackChatPanel";
 import { blackjackCollectibleLabel, BlackjackCollectiblesPanel, BlackjackTableEditInventory } from "../blackjackCollectiblesPanel";
 import { BlackjackHostPanel } from "../blackjackHostPanel";
-import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar, BlackjackV2OverviewPanel, BlackjackV2SectionHeader, BlackjackV2StatusStrip } from "../blackjackTableShell";
+import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar, BlackjackV2ControlCard, BlackjackV2OverviewPanel, BlackjackV2SectionHeader, BlackjackV2StatusStrip } from "../blackjackTableShell";
 import { type BJState, type Seat } from "../blackjackTableTypes";
 import { CardView, cardFromIndex, handValue } from "../blackjackUiPrimitives";
 import { BlackjackTableSeat, getBlackjackChatNameClass } from "../blackjackSeatViews";
@@ -1520,110 +1520,230 @@ export function BlackjackTablePageClient({
               <>
                 {state.phase === "betting" ? (
                   <>
-                    <label className="mt-4 block text-xs text-white/60">Bet amount (ⓒ)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={betAmount}
-                      onChange={(e) => setBetAmount(Number(e.target.value))}
-                      onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
-                      onKeyDown={(e) => {
-                        if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
-                      }}
-                      disabled={allIn}
-                      className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
-                    />
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
-                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                        onClick={placeBetWithWallet}
-                        data-tour="bj-place-bet"
-                      >
-                        Place bet
-                      </button>
-                      <button
-                        type="button"
-                        disabled={betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
-                        className={`glass-soft rounded-2xl px-4 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-40 ${
-                          allIn ? "border border-yellow-300/25 bg-yellow-500/10 text-yellow-100" : "text-white/80"
-                        }`}
-                        onClick={() => setAllIn((v) => !v)}
-                        title="Bet your full balance"
-                        data-tour="bj-all-in"
-                      >
-                        All in
-                      </button>
-                      <button
-                        type="button"
-                        disabled={betPending || (((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) === 0)}
-                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 disabled:opacity-40"
-                        onClick={clearBetWithWallet}
-                      >
-                        Clear bet
-                      </button>
-                      <button
-                        type="button"
-                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                        onClick={async () => {
-                          const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter(
-                            (x: any) => Number.isFinite(x) && x >= 0,
-                          );
-                          const res = await post("skip");
-                          if (res?.ok) {
-                            for (const n of nonces) await cancelServerBet({ nonce: n, outcome: "Bet canceled" });
-                          }
-                          setAllIn(false);
-                        }}
-                      >
-                        Skip round
-                      </button>
-                    </div>
+                    {showV2Shell ? (
+                      <>
+                        <BlackjackV2ControlCard
+                          title="Main bet"
+                          subtitle="Set your wager for the round, go all-in, or skip before dealing starts."
+                        >
+                          <label className="block text-xs text-white/60">Bet amount (ⓒ)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={betAmount}
+                            onChange={(e) => setBetAmount(Number(e.target.value))}
+                            onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
+                            onKeyDown={(e) => {
+                              if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+                            }}
+                            disabled={allIn}
+                            className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                          />
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
+                              className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                              onClick={placeBetWithWallet}
+                              data-tour="bj-place-bet"
+                            >
+                              Place bet
+                            </button>
+                            <button
+                              type="button"
+                              disabled={betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
+                              className={`glass-soft rounded-2xl px-4 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-40 ${
+                                allIn ? "border border-yellow-300/25 bg-yellow-500/10 text-yellow-100" : "text-white/80"
+                              }`}
+                              onClick={() => setAllIn((v) => !v)}
+                              title="Bet your full balance"
+                              data-tour="bj-all-in"
+                            >
+                              All in
+                            </button>
+                            <button
+                              type="button"
+                              disabled={betPending || (((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) === 0)}
+                              className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 disabled:opacity-40"
+                              onClick={clearBetWithWallet}
+                            >
+                              Clear bet
+                            </button>
+                            <button
+                              type="button"
+                              className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                              onClick={async () => {
+                                const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter(
+                                  (x: any) => Number.isFinite(x) && x >= 0,
+                                );
+                                const res = await post("skip");
+                                if (res?.ok) {
+                                  for (const n of nonces) await cancelServerBet({ nonce: n, outcome: "Bet canceled" });
+                                }
+                                setAllIn(false);
+                              }}
+                            >
+                              Skip round
+                            </button>
+                          </div>
+                          <div className="mt-3 text-[11px] text-white/60">
+                            Bonus points: <span className="font-mono text-white/80">{bonusPointsBalance}</span>{" "}
+                            {allInWinStreak > 0 ? (
+                              <>
+                                • All-in win streak: <span className="font-mono text-white/80">{allInWinStreak}</span>
+                              </>
+                            ) : null}{" "}
+                            • Spend: Figurine <span className="font-mono">20</span> / Bond <span className="font-mono">50</span>
+                          </div>
+                        </BlackjackV2ControlCard>
 
-                    <div className="mt-3 text-[11px] text-white/60">
-                      Bonus points: <span className="font-mono text-white/80">{bonusPointsBalance}</span>{" "}
-                      {allInWinStreak > 0 ? (
-                        <>
-                          • All-in win streak: <span className="font-mono text-white/80">{allInWinStreak}</span>
-                        </>
-                      ) : null}{" "}
-                      • Spend: Figurine <span className="font-mono">20</span> / Bond <span className="font-mono">50</span>
-                    </div>
+                        <BlackjackV2ControlCard
+                          title="Perfect Pairs"
+                          subtitle="Optional side bet that pays on your first two cards."
+                        >
+                          <label className="block text-xs text-white/60">Perfect Pairs side bet (ⓒ)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={ppAmount}
+                            onChange={(e) => setPpAmount(Number(e.target.value))}
+                            onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
+                            onKeyDown={(e) => {
+                              if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+                            }}
+                            className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                          />
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce != null}
+                              className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
+                              onClick={placePerfectPairsWithWallet}
+                              title="Pays on first 2 cards of each hand: perfect=25:1, colored=12:1, mixed=6:1"
+                            >
+                              Add PP bet
+                            </button>
+                            <button
+                              type="button"
+                              disabled={betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce == null}
+                              className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+                              onClick={clearPerfectPairsWithWallet}
+                            >
+                              Clear PP bet
+                            </button>
+                          </div>
+                        </BlackjackV2ControlCard>
+                      </>
+                    ) : (
+                      <>
+                        <label className="mt-4 block text-xs text-white/60">Bet amount (ⓒ)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={betAmount}
+                          onChange={(e) => setBetAmount(Number(e.target.value))}
+                          onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+                          }}
+                          disabled={allIn}
+                          className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                        />
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
+                            className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                            onClick={placeBetWithWallet}
+                            data-tour="bj-place-bet"
+                          >
+                            Place bet
+                          </button>
+                          <button
+                            type="button"
+                            disabled={betPending || ((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0}
+                            className={`glass-soft rounded-2xl px-4 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-40 ${
+                              allIn ? "border border-yellow-300/25 bg-yellow-500/10 text-yellow-100" : "text-white/80"
+                            }`}
+                            onClick={() => setAllIn((v) => !v)}
+                            title="Bet your full balance"
+                            data-tour="bj-all-in"
+                          >
+                            All in
+                          </button>
+                          <button
+                            type="button"
+                            disabled={betPending || (((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) === 0)}
+                            className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 disabled:opacity-40"
+                            onClick={clearBetWithWallet}
+                          >
+                            Clear bet
+                          </button>
+                          <button
+                            type="button"
+                            className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                            onClick={async () => {
+                              const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter(
+                                (x: any) => Number.isFinite(x) && x >= 0,
+                              );
+                              const res = await post("skip");
+                              if (res?.ok) {
+                                for (const n of nonces) await cancelServerBet({ nonce: n, outcome: "Bet canceled" });
+                              }
+                              setAllIn(false);
+                            }}
+                          >
+                            Skip round
+                          </button>
+                        </div>
 
-                    <label className="mt-5 block text-xs text-white/60">Perfect Pairs side bet (ⓒ)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={ppAmount}
-                      onChange={(e) => setPpAmount(Number(e.target.value))}
-                      onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
-                      onKeyDown={(e) => {
-                        if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
-                      }}
-                      className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
-                    />
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce != null}
-                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
-                        onClick={placePerfectPairsWithWallet}
-                        title="Pays on first 2 cards of each hand: perfect=25:1, colored=12:1, mixed=6:1"
-                      >
-                        Add PP bet
-                      </button>
-                      <button
-                        type="button"
-                        disabled={betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce == null}
-                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
-                        onClick={clearPerfectPairsWithWallet}
-                      >
-                        Clear PP bet
-                      </button>
-                    </div>
+                        <div className="mt-3 text-[11px] text-white/60">
+                          Bonus points: <span className="font-mono text-white/80">{bonusPointsBalance}</span>{" "}
+                          {allInWinStreak > 0 ? (
+                            <>
+                              • All-in win streak: <span className="font-mono text-white/80">{allInWinStreak}</span>
+                            </>
+                          ) : null}{" "}
+                          • Spend: Figurine <span className="font-mono">20</span> / Bond <span className="font-mono">50</span>
+                        </div>
+
+                        <label className="mt-5 block text-xs text-white/60">Perfect Pairs side bet (ⓒ)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={ppAmount}
+                          onChange={(e) => setPpAmount(Number(e.target.value))}
+                          onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+                          }}
+                          className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                        />
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce != null}
+                            className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
+                            onClick={placePerfectPairsWithWallet}
+                            title="Pays on first 2 cards of each hand: perfect=25:1, colored=12:1, mixed=6:1"
+                          >
+                            Add PP bet
+                          </button>
+                          <button
+                            type="button"
+                            disabled={betPending || (mySeat as any)?.hands?.[0]?.perfectPairsNonce == null}
+                            className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+                            onClick={clearPerfectPairsWithWallet}
+                          >
+                            Clear PP bet
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </>
                 ) : null}
 
@@ -1644,8 +1764,167 @@ export function BlackjackTablePageClient({
                 ) : null}
 
                 <div className="mt-5" data-tour="bj-specials">
+                  {showV2Shell ? (
+                    <BlackjackV2ControlCard
+                      title="Powerups and bonds"
+                      subtitle="Use turn cards, dealer cards, and active bond tools from a dedicated V2 panel."
+                    >
+                      <p className="text-xs font-medium text-white/70">Specials</p>
+                      {state.meInventory ? (
+                        <div className="mt-2 text-[11px] text-white/55">
+                          Hands played: <span className="font-mono text-white/80">{state.meInventory.handsPlayed ?? 0}</span>{" "}
+                          • Next box in{" "}
+                          <span className="font-mono text-white/80">
+                            {(() => {
+                              const hp = Number(state.meInventory.handsPlayed ?? 0);
+                              const rem = hp % 3;
+                              return rem === 0 ? 3 : 3 - rem;
+                            })()}
+                          </span>{" "}
+                          hands
+                        </div>
+                      ) : null}
+                      {Array.isArray(state.meInventory?.lastBox) && state.meInventory.lastBox.length ? (
+                        <div className="mt-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-100">
+                          Mystery Box: <span className="font-mono">{state.meInventory.lastBox.join(", ")}</span>
+                        </div>
+                      ) : null}
+                      {/* Target is selected only when needed (via the popup). */}
+                      {(() => {
+                        const inv = state.meInventory;
+                        const cats = inv?.categories;
+                        const catOrder: Array<{ id: string; label: string }> = [
+                          { id: "boosts", label: "Boosts" },
+                          { id: "saves", label: "Saves" },
+                          { id: "utility", label: "Utility" },
+                          { id: "magic", label: "Magic" },
+                          { id: "mythic", label: "Mythic" },
+                          { id: "dealer", label: "Dealer" },
+                        ];
+
+                        const groups: Array<{ label: string; items: Array<[string, number]> }> = [];
+
+                        if (cats && typeof cats === "object") {
+                          for (const c of catOrder) {
+                            const entries = Object.entries(cats[c.id] ?? {}).filter(([, v]: any) => Number(v) > 0) as Array<
+                              [string, number]
+                            >;
+                            if (entries.length) groups.push({ label: c.label, items: entries });
+                          }
+                        } else if (inv && typeof inv === "object") {
+                          const entries = Object.entries(inv)
+                            .filter(([, v]) => typeof v === "number" && v > 0)
+                            .map(([k, v]) => [k, v as number] as [string, number]);
+                          groups.push({ label: "Inventory", items: entries });
+                        }
+
+                        if (groups.length === 0) {
+                          return <div className="mt-2 text-xs text-white/50">No powerups yet.</div>;
+                        }
+
+                        return (
+                          <div ref={dealerPowerupsRef} className="mt-3">
+                            <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(110px,1fr))]">
+                              {groups.map((g) => (
+                                <div key={g.label} className="min-w-0">
+                                  <div className="mb-2 text-[11px] font-semibold text-white/60">{g.label}</div>
+                                  <div className="flex flex-col gap-2">
+                                    {g.items.map(([k, v]) => {
+                                      const isDealerWindowCard =
+                                        k.includes("DEALER") && !k.includes("TARGET") && !k.includes("MAGIC");
+                                      const isAnytimeCard = k.includes("TARGET") || k.includes("MAGIC") || k.includes("MYTHIC");
+                                      const isBettingCard = k === "BJ_PROTECTOR" || k === "DOUBLE_PAYOUT";
+                                      const enabled =
+                                        v > 0 &&
+                                        (isDealerWindowCard
+                                          ? !!canUseDealerSpecial
+                                          : isAnytimeCard
+                                            ? !!canUseAnytimeSpecial
+                                            : isBettingCard
+                                              ? state?.phase === "betting"
+                                              : !!isMyTurn);
+                                      return (
+                                        <button
+                                          key={k}
+                                          type="button"
+                                          className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
+                                          disabled={!enabled}
+                                          onClick={() => {
+                                            if (k === "REMOVE_CARD_SELF") {
+                                              setRemoveCardPopup({ open: true, specialId: k });
+                                              return;
+                                            }
+                                            if (isAnytimeCard) {
+                                              setTargetPopup({ open: true, specialId: k, target: null });
+                                              return;
+                                            }
+                                            void post("action", {
+                                              type: "special",
+                                              specialId: k,
+                                              targetUserId: null,
+                                              cardIndex: null,
+                                            });
+                                          }}
+                                          title={k}
+                                        >
+                                          <div className="flex items-center justify-between gap-1">
+                                            <div className="font-semibold text-white">{powerupLabel(k)}</div>
+                                            <div className="font-mono text-white/60">{v}</div>
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-[11px] font-semibold text-white/80">Bonds</div>
+                                <div className="text-[11px] text-white/60">
+                                  Owned: <span className="font-mono text-white/80">{bondOwned}</span>
+                                </div>
+                              </div>
+                              {bondActive ? (
+                                <button
+                                  type="button"
+                                  className="mt-2 w-full rounded-xl border border-yellow-300/15 bg-yellow-500/10 px-2 py-2 text-left text-[11px] text-yellow-100 hover:bg-yellow-500/15"
+                                  onClick={() => setBondPopup({ open: true, mode: "active" })}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="font-semibold">Active Bond</div>
+                                    <div className="font-mono">{Number(bondActive.value ?? 0).toFixed(2)} ⓒ</div>
+                                  </div>
+                                  <div className="mt-1 text-[10px] text-yellow-100/70">+20% every 60s while seated • next in {bondNextTickIn}s</div>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={bondOwned <= 0}
+                                  className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-left text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-40"
+                                  onClick={() => setBondPopup({ open: true, mode: "inactive" })}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="font-semibold">Inactive Bond</div>
+                                    <div className="font-mono text-white/60">{bondOwned > 0 ? "Tap to activate" : "Buy in Prestige Shop"}</div>
+                                  </div>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <div className="mt-2 text-[11px] text-white/50">
+                        Common cards usually work only on your turn. Rare “TARGET” / “MAGIC” cards can be played any time before the end of the round.
+                        Stacking is allowed. Use “-1/-2/-5/-10” on your turn to save yourself from bust before your turn ends.
+                      </div>
+                    </BlackjackV2ControlCard>
+                  ) : null}
+                  {!showV2Shell ? (
                   <p className="text-xs font-medium text-white/70">Specials</p>
-                  {state.meInventory ? (
+                  ) : null}
+                  {!showV2Shell && state.meInventory ? (
                     <div className="mt-2 text-[11px] text-white/55">
                       Hands played: <span className="font-mono text-white/80">{state.meInventory.handsPlayed ?? 0}</span>{" "}
                       • Next box in{" "}
@@ -1659,13 +1938,13 @@ export function BlackjackTablePageClient({
                       hands
                     </div>
                   ) : null}
-                  {Array.isArray(state.meInventory?.lastBox) && state.meInventory.lastBox.length ? (
+                  {!showV2Shell && Array.isArray(state.meInventory?.lastBox) && state.meInventory.lastBox.length ? (
                     <div className="mt-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-100">
                       Mystery Box: <span className="font-mono">{state.meInventory.lastBox.join(", ")}</span>
                     </div>
                   ) : null}
                   {/* Target is selected only when needed (via the popup). */}
-                  {(() => {
+                  {!showV2Shell && (() => {
                     const inv = state.meInventory;
                     const cats = inv?.categories;
                     const catOrder: Array<{ id: string; label: string }> = [
@@ -1792,91 +2071,176 @@ export function BlackjackTablePageClient({
                       </div>
                     );
                   })()}
+                  {!showV2Shell ? (
                   <div className="mt-2 text-[11px] text-white/50">
                     Common cards usually work only on your turn. Rare “TARGET” / “MAGIC” cards can be played any time before the end of the round.
                     Stacking is allowed. Use “-1/-2/-5/-10” on your turn to save yourself from bust before your turn ends.
                   </div>
+                  ) : null}
                 </div>
 
                 {isMyTurn ? (
-                  <div className="mt-5">
-                    <p className="text-xs font-medium text-white/70">Your turn</p>
-                    {mySeat?.busted ? (
-                      <div className="mt-2 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-100">
-                        BUSTED — play a save card (-1/-2/-5/-10) before your turn ends, or Stand to accept bust.
+                  showV2Shell ? (
+                    <BlackjackV2ControlCard
+                      title="Turn actions"
+                      subtitle="Use hit, stand, double, split, and timer tools from a dedicated in-turn action card."
+                    >
+                      {mySeat?.busted ? (
+                        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-100">
+                          BUSTED — play a save card (-1/-2/-5/-10) before your turn ends, or Stand to accept bust.
+                        </div>
+                      ) : null}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                          onClick={() => post("action", { type: "hit" })}
+                          disabled={!!mySeat?.busted}
+                        >
+                          Hit
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                          onClick={() => post("action", { type: "stand" })}
+                        >
+                          Stand
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                          onClick={async () => {
+                            const wager = Number(mySeat?.bet ?? 0);
+                            const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
+                            if ("error" in started) {
+                              setErr(started.error);
+                              return;
+                            }
+                            const res = await post("action", { type: "double_down", betNonce: started.nonce });
+                            if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
+                          }}
+                          disabled={!canDoubleDown}
+                          title="Double your bet, draw one card, and stand"
+                        >
+                          DD
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                          onClick={async () => {
+                            const wager = Number(mySeat?.bet ?? 0);
+                            const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
+                            if ("error" in started) {
+                              setErr(started.error);
+                              return;
+                            }
+                            const res = await post("action", { type: "split", betNonce: started.nonce });
+                            if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
+                          }}
+                          disabled={!canSplit}
+                          title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
+                        >
+                          Split
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10"
+                          onClick={() => post("action", { type: "vote_skip" })}
+                          title="Skip the remaining turn timer"
+                        >
+                          Vote skip timer
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+                          onClick={() => post("action", { type: "extend_timer" })}
+                          disabled={!!mySeat?.extendUsedThisTurn}
+                          title="Extend your turn timer once"
+                        >
+                          Extend timer
+                        </button>
                       </div>
-                    ) : null}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
-                        onClick={() => post("action", { type: "hit" })}
-                        disabled={!!mySeat?.busted}
-                      >
-                        Hit
-                      </button>
-                      <button
-                        type="button"
-                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
-                        onClick={() => post("action", { type: "stand" })}
-                      >
-                        Stand
-                      </button>
-                      <button
-                        type="button"
-                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                        onClick={async () => {
-                          const wager = Number(mySeat?.bet ?? 0);
-                          const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
-                          if ("error" in started) {
-                            setErr(started.error);
-                            return;
-                          }
-                          const res = await post("action", { type: "double_down", betNonce: started.nonce });
-                          if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
-                        }}
-                        disabled={!canDoubleDown}
-                        title="Double your bet, draw one card, and stand"
-                      >
-                        DD
-                      </button>
-                      <button
-                        type="button"
-                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                        onClick={async () => {
-                          const wager = Number(mySeat?.bet ?? 0);
-                          const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
-                          if ("error" in started) {
-                            setErr(started.error);
-                            return;
-                          }
-                          const res = await post("action", { type: "split", betNonce: started.nonce });
-                          if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
-                        }}
-                        disabled={!canSplit}
-                        title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
-                      >
-                        Split
-                      </button>
-                      <button
-                        type="button"
-                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10"
-                        onClick={() => post("action", { type: "vote_skip" })}
-                        title="Skip the remaining turn timer"
-                      >
-                        Vote skip timer
-                      </button>
-                      <button
-                        type="button"
-                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
-                        onClick={() => post("action", { type: "extend_timer" })}
-                        disabled={!!mySeat?.extendUsedThisTurn}
-                        title="Extend your turn timer once"
-                      >
-                        Extend timer
-                      </button>
+                    </BlackjackV2ControlCard>
+                  ) : (
+                    <div className="mt-5">
+                      <p className="text-xs font-medium text-white/70">Your turn</p>
+                      {mySeat?.busted ? (
+                        <div className="mt-2 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-100">
+                          BUSTED — play a save card (-1/-2/-5/-10) before your turn ends, or Stand to accept bust.
+                        </div>
+                      ) : null}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                          onClick={() => post("action", { type: "hit" })}
+                          disabled={!!mySeat?.busted}
+                        >
+                          Hit
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                          onClick={() => post("action", { type: "stand" })}
+                        >
+                          Stand
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                          onClick={async () => {
+                            const wager = Number(mySeat?.bet ?? 0);
+                            const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
+                            if ("error" in started) {
+                              setErr(started.error);
+                              return;
+                            }
+                            const res = await post("action", { type: "double_down", betNonce: started.nonce });
+                            if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
+                          }}
+                          disabled={!canDoubleDown}
+                          title="Double your bet, draw one card, and stand"
+                        >
+                          DD
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                          onClick={async () => {
+                            const wager = Number(mySeat?.bet ?? 0);
+                            const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
+                            if ("error" in started) {
+                              setErr(started.error);
+                              return;
+                            }
+                            const res = await post("action", { type: "split", betNonce: started.nonce });
+                            if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
+                          }}
+                          disabled={!canSplit}
+                          title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
+                        >
+                          Split
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10"
+                          onClick={() => post("action", { type: "vote_skip" })}
+                          title="Skip the remaining turn timer"
+                        >
+                          Vote skip timer
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+                          onClick={() => post("action", { type: "extend_timer" })}
+                          disabled={!!mySeat?.extendUsedThisTurn}
+                          title="Extend your turn timer once"
+                        >
+                          Extend timer
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )
                 ) : null}
 
                 <div className="mt-4 text-[11px] text-white/55">

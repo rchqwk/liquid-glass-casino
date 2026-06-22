@@ -431,3 +431,25 @@ export function BlackjackV2SectionHeader({
     </div>
   );
 }
+
+export function BlackjackV2ControlCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mt-4 rounded-3xl border border-white/10 bg-black/10 p-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold text-white/85">{title}</div>
+          <div className="mt-1 text-[11px] leading-5 text-white/50">{subtitle}</div>
+        </div>
+      </div>
+      <div className="mt-3">{children}</div>
+    </div>
+  );
+}
