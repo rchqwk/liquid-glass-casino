@@ -73,6 +73,18 @@ type WalletContextValue = {
   }) =>
     | { profit: number; multiplier: number; outcome: string; balanceAfter: number }
     | { error: string };
+  reserveServerBet: (input: {
+    game: string;
+    wager: number;
+    baseWager?: number;
+  }) => Promise<{ nonce: number } | { error: string }>;
+  settleServerBet: (input: {
+    nonce: number;
+    multiplier: number;
+    outcome: string;
+  }) => Promise<{ profit: number; balanceAfter: number } | { error: string }>;
+  cancelServerBet: (input: { nonce: number; outcome?: string }) => Promise<{ balanceAfter: number } | { error: string }>;
+  adjustServerBalance: (input: { delta: number; game?: string; outcome?: string }) => Promise<{ balanceAfter: number } | { error: string }>;
   reset: () => void;
 };
 
@@ -244,6 +256,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         placeBet: () => ({ multiplier: 0, outcome: "", profit: 0, balanceAfter: 0 }),
         beginBet: () => ({ error: "Wallet not ready" }),
         settleBet: () => ({ error: "Wallet not ready" }),
+        reserveServerBet: async () => ({ error: "Wallet not ready" }),
+        settleServerBet: async () => ({ error: "Wallet not ready" }),
+        cancelServerBet: async () => ({ error: "Wallet not ready" }),
+        adjustServerBalance: async () => ({ error: "Wallet not ready" }),
         reset: () => {},
       };
     }
@@ -551,12 +567,189 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         return { profit, multiplier: m, outcome, balanceAfter: nextBalance };
       },
 
+      reserveServerBet: async ({ game, wager, baseWager }) => {
+        if (!user?.id) {
+          const started = (() => {
+            emitClientEvent("lgc:betstart", { game, wager: clampMoney(wager), ts: Date.now() });
+            if (!Number.isFinite(wager) || wager <= 0) return { error: "Invalid wager" as const };
+            const current = state;
+            if (current.balance < wager) return { error: "Insufficient balance" as const };
+            const betNonce = current.nonce;
+            setState((s) => {
+              if (!s) return s;
+              const openBets = { ...(s.openBets ?? {}) };
+              openBets[betNonce] = {
+                game,
+                wager: clampMoney(wager),
+                ts: Date.now(),
+                serverSeed: s.serverSeed,
+                clientSeed: s.clientSeed,
+                baseWager:
+                  Number.isFinite(Number(baseWager)) && Number(baseWager) > 0 ? clampMoney(Number(baseWager)) : undefined,
+              };
+              return {
+                ...s,
+                balance: clampMoney(s.balance - wager),
+                nonce: s.nonce + 1,
+                openBets,
+                updatedAt: Date.now(),
+              };
+            });
+            return { nonce: betNonce };
+          })();
+          if ("error" in started) return started;
+          return started;
+        }
+        try {
+          const res = await fetch("/api/wallet", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "reserve_bet", game, wager, baseWager }),
+          });
+          const data = (await res.json().catch(() => ({}))) as any;
+          if (!res.ok) return { error: String(data?.error ?? "Failed to reserve bet") };
+          if (data?.state) setState(normalizeWalletState(data.state));
+          return { nonce: Number(data?.nonce ?? -1) };
+        } catch {
+          return { error: "Failed to reserve bet" };
+        }
+      },
+
+      settleServerBet: async ({ nonce: betNonce, multiplier, outcome }) => {
+        if (!user?.id) {
+          const settled = (() => {
+            const open = state.openBets?.[betNonce];
+            if (!open) return { error: "Bet not found (already settled?)" as const };
+            const m = Math.max(0, Number(multiplier) || 0);
+            const payout = open.wager * m;
+            const profit = clampMoney(payout - open.wager);
+            const nextBalance = clampMoney(state.balance + payout);
+            setState((s) => {
+              if (!s) return s;
+              const ob = { ...(s.openBets ?? {}) };
+              delete ob[betNonce];
+              return {
+                ...s,
+                balance: clampMoney(s.balance + payout),
+                openBets: ob,
+                history: [
+                  {
+                    ts: Date.now(),
+                    game: open.game,
+                    wager: open.wager,
+                    multiplier: m,
+                    profit,
+                    outcome,
+                  },
+                  ...s.history,
+                ].slice(0, 20),
+                updatedAt: Date.now(),
+              };
+            });
+            return { profit, balanceAfter: nextBalance };
+          })();
+          if ("error" in settled) return settled;
+          return settled;
+        }
+        try {
+          const res = await fetch("/api/wallet", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "settle_bet", nonce: betNonce, multiplier, outcome }),
+          });
+          const data = (await res.json().catch(() => ({}))) as any;
+          if (!res.ok) return { error: String(data?.error ?? "Failed to settle bet") };
+          if (data?.state) setState(normalizeWalletState(data.state));
+          return {
+            profit: clampMoney(Number(data?.profit ?? 0) || 0),
+            balanceAfter: clampMoney(Number(data?.balanceAfter ?? 0) || 0),
+          };
+        } catch {
+          return { error: "Failed to settle bet" };
+        }
+      },
+
+      cancelServerBet: async ({ nonce: betNonce, outcome }) => {
+        if (!user?.id) {
+          const settled = await (async () => {
+            return await Promise.resolve(
+              (() => {
+                const open = state.openBets?.[betNonce];
+                if (!open) return { error: "Bet not found (already settled?)" as const };
+                const payout = open.wager;
+                const nextBalance = clampMoney(state.balance + payout);
+                setState((s) => {
+                  if (!s) return s;
+                  const ob = { ...(s.openBets ?? {}) };
+                  delete ob[betNonce];
+                  return {
+                    ...s,
+                    balance: clampMoney(s.balance + payout),
+                    openBets: ob,
+                    history: [
+                      {
+                        ts: Date.now(),
+                        game: open.game,
+                        wager: open.wager,
+                        multiplier: 1,
+                        profit: 0,
+                        outcome: outcome ?? "Bet canceled",
+                      },
+                      ...s.history,
+                    ].slice(0, 20),
+                    updatedAt: Date.now(),
+                  };
+                });
+                return { balanceAfter: nextBalance };
+              })(),
+            );
+          })();
+          if ("error" in settled) return settled;
+          return settled;
+        }
+        try {
+          const res = await fetch("/api/wallet", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "cancel_bet", nonce: betNonce, outcome: outcome ?? "Bet canceled" }),
+          });
+          const data = (await res.json().catch(() => ({}))) as any;
+          if (!res.ok) return { error: String(data?.error ?? "Failed to cancel bet") };
+          if (data?.state) setState(normalizeWalletState(data.state));
+          return { balanceAfter: clampMoney(Number(data?.balanceAfter ?? 0) || 0) };
+        } catch {
+          return { error: "Failed to cancel bet" };
+        }
+      },
+
+      adjustServerBalance: async ({ delta, game, outcome }) => {
+        if (!user?.id) {
+          const nextBalance = clampMoney(state.balance + delta);
+          if (nextBalance < 0) return { error: "Insufficient balance" };
+          setState((s) => (s ? { ...s, balance: nextBalance, updatedAt: Date.now() } : s));
+          return { balanceAfter: nextBalance };
+        }
+        try {
+          const res = await fetch("/api/wallet", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "adjust_balance", delta, game, outcome }),
+          });
+          const data = (await res.json().catch(() => ({}))) as any;
+          if (!res.ok) return { error: String(data?.error ?? "Failed to adjust balance") };
+          if (data?.state) setState(normalizeWalletState(data.state));
+          return { balanceAfter: clampMoney(Number(data?.balanceAfter ?? 0) || 0) };
+        } catch {
+          return { error: "Failed to adjust balance" };
+        }
+      },
+
       reset: () => {
         const next = freshState();
         setState(next);
       },
     };
-  }, [state]);
+  }, [state, user?.id]);
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }

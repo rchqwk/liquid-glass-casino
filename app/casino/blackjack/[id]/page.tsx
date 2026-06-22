@@ -130,7 +130,7 @@ type BJState = {
 };
 
 export default function BlackjackTablePage() {
-  const { beginBet, settleBet, balance, setBalance } = useWallet();
+  const { beginBet, balance, reserveServerBet, settleServerBet, cancelServerBet, adjustServerBalance } = useWallet();
   const { user, discordMode } = useAuth();
   const params = useParams<{ id?: string | string[] }>();
   const tableId =
@@ -858,11 +858,18 @@ export default function BlackjackTablePage() {
     const hasNonce = Array.isArray((mySeat as any).hands?.[0]?.nonces) && ((mySeat as any).hands?.[0]?.nonces?.length ?? 0) > 0;
     if (betPending) return;
     if (!(wager > 0) || hasNonce) return;
-    const started = beginBet({ game: "Blackjack (MP)", wager });
-    if ("error" in started) return;
     setBetPending(true);
-    void post("bet", { amount: wager, betNonce: started.nonce, allIn }).finally(() => setBetPending(false));
-  }, [state?.phase, state?.round, mySeat?.bet, betPending, beginBet, allIn, balance]);
+    void (async () => {
+      const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
+      if ("error" in started) {
+        setBetPending(false);
+        return;
+      }
+      const res = await post("bet", { amount: wager, betNonce: started.nonce, allIn });
+      if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
+      setBetPending(false);
+    })();
+  }, [state?.phase, state?.round, mySeat?.bet, betPending, reserveServerBet, cancelServerBet, allIn, balance]);
 
   const dealerTotal = useMemo(() => {
     if (!state) return 0;
@@ -906,27 +913,29 @@ export default function BlackjackTablePage() {
     const key = `wallet:${safeTableId ?? "?"}:${state.round}`;
     if (walletSettledKey === key) return;
     setWalletSettledKey(key);
-    const settlements = state.lastResult.settlements ?? [];
-    for (const st of settlements) {
-      const nonce = Number(st.nonce);
-      if (!Number.isFinite(nonce) || nonce < 0) continue;
-      settleBet({
-        nonce,
-        multiplier: Number(st.multiplier ?? 0),
-        outcome: String(st.outcome ?? "Settled"),
-      });
-    }
-    const pp = state.lastResult.ppSettlements ?? [];
-    for (const st of pp) {
-      const nonce = Number(st.nonce);
-      if (!Number.isFinite(nonce) || nonce < 0) continue;
-      settleBet({
-        nonce,
-        multiplier: Number(st.multiplier ?? 0),
-        outcome: String(st.outcome ?? "Perfect Pairs"),
-      });
-    }
-  }, [state, mySeat, safeTableId, walletSettledKey, settleBet]);
+    void (async () => {
+      const settlements = state.lastResult?.settlements ?? [];
+      for (const st of settlements) {
+        const nonce = Number(st.nonce);
+        if (!Number.isFinite(nonce) || nonce < 0) continue;
+        await settleServerBet({
+          nonce,
+          multiplier: Number(st.multiplier ?? 0),
+          outcome: String(st.outcome ?? "Settled"),
+        });
+      }
+      const pp = state.lastResult?.ppSettlements ?? [];
+      for (const st of pp) {
+        const nonce = Number(st.nonce);
+        if (!Number.isFinite(nonce) || nonce < 0) continue;
+        await settleServerBet({
+          nonce,
+          multiplier: Number(st.multiplier ?? 0),
+          outcome: String(st.outcome ?? "Perfect Pairs"),
+        });
+      }
+    })();
+  }, [state, mySeat, safeTableId, walletSettledKey, settleServerBet]);
 
   const join = async (spectate?: boolean) => {
     setErr(null);
@@ -1068,7 +1077,7 @@ export default function BlackjackTablePage() {
       setErr("Bet already placed. Clear bet first.");
       return;
     }
-    const started = beginBet({ game: "Blackjack (MP)", wager });
+    const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
     if ("error" in started) {
       setErr(started.error);
       return;
@@ -1078,7 +1087,7 @@ export default function BlackjackTablePage() {
     setBetPending(false);
     // If server rejected, refund the reserved wallet bet immediately.
     if (!res?.ok) {
-      settleBet({ nonce: started.nonce, multiplier: 1, outcome: "Bet canceled" });
+      await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
     }
   };
 
@@ -1095,7 +1104,7 @@ export default function BlackjackTablePage() {
       setErr("Perfect Pairs already placed. Clear it first.");
       return;
     }
-    const started = beginBet({ game: "Blackjack PP", wager });
+    const started = await reserveServerBet({ game: "Blackjack PP", wager });
     if ("error" in started) {
       setErr(started.error);
       return;
@@ -1104,7 +1113,7 @@ export default function BlackjackTablePage() {
     const res = await post("perfectpairs", { amount: wager, betNonce: started.nonce });
     setBetPending(false);
     if (!res?.ok) {
-      settleBet({ nonce: started.nonce, multiplier: 1, outcome: "Bet canceled" });
+      await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
     }
   };
 
@@ -1112,9 +1121,11 @@ export default function BlackjackTablePage() {
     if (state?.phase !== "betting") return;
     if (betPending) return;
     const nonce = Number((mySeat as any)?.hands?.[0]?.perfectPairsNonce ?? 0);
-    if (Number.isFinite(nonce) && nonce >= 0) settleBet({ nonce, multiplier: 1, outcome: "Bet canceled" });
     setBetPending(true);
-    await post("clearperfectpairs");
+    const res = await post("clearperfectpairs");
+    if (res?.ok && Number.isFinite(nonce) && nonce >= 0) {
+      await cancelServerBet({ nonce, outcome: "Bet canceled" });
+    }
     setBetPending(false);
   };
 
@@ -1122,12 +1133,13 @@ export default function BlackjackTablePage() {
     if (state?.phase !== "betting") return;
     if (betPending) return;
     const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter((x: any) => Number.isFinite(x) && x >= 0);
-    // Refund any reserved stake(s)
-    for (const n of nonces) {
-      settleBet({ nonce: n, multiplier: 1, outcome: "Bet canceled" });
-    }
     setBetPending(true);
-    await post("clearbet");
+    const res = await post("clearbet");
+    if (res?.ok) {
+      for (const n of nonces) {
+        await cancelServerBet({ nonce: n, outcome: "Bet canceled" });
+      }
+    }
     setBetPending(false);
     setAllIn(false);
   };
@@ -1987,9 +1999,24 @@ export default function BlackjackTablePage() {
                             return;
                           }
                           setErr(null);
-                          // Prototype: wallet is client-side; we deduct locally.
-                          setBalance(Math.max(0, Number(balance ?? 0) - amt));
-                          await postBond({ type: "activate", amount: amt });
+                          const spend = await adjustServerBalance({
+                            delta: -amt,
+                            game: "Blackjack Bond",
+                            outcome: "Bond activated",
+                          });
+                          if ("error" in spend) {
+                            setErr(spend.error);
+                            return;
+                          }
+                          const bondRes = await postBond({ type: "activate", amount: amt });
+                          if (!bondRes?.ok) {
+                            await adjustServerBalance({
+                              delta: amt,
+                              game: "Blackjack Bond",
+                              outcome: "Bond activation refunded",
+                            });
+                            return;
+                          }
                           setBondPopup({ open: false, mode: "inactive" });
                         }}
                       >
@@ -2039,7 +2066,11 @@ export default function BlackjackTablePage() {
                       const res = await postBond({ type: "redeem" });
                       if (!res?.ok) return;
                       const amt = Math.max(0, Math.round(Number(res.data?.redeemedAmount ?? redeemed) * 100) / 100);
-                      setBalance(Math.max(0, Math.round((Number(balance ?? 0) + amt) * 100) / 100));
+                      await adjustServerBalance({
+                        delta: amt,
+                        game: "Blackjack Bond",
+                        outcome: "Bond redeemed",
+                      });
                       setBondPopup({ open: false, mode: "inactive" });
                     }}
                   >
@@ -2138,23 +2169,25 @@ export default function BlackjackTablePage() {
         extendUsed={!!mySeat?.extendUsedThisTurn}
         onHit={() => post("action", { type: "hit" })}
         onStand={() => post("action", { type: "stand" })}
-        onDoubleDown={() => {
+        onDoubleDown={async () => {
           const wager = Number(mySeat?.bet ?? 0);
-          const started = beginBet({ game: "Blackjack (MP)", wager });
+          const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
           if ("error" in started) {
             setErr(started.error);
             return;
           }
-          void post("action", { type: "double_down", betNonce: started.nonce });
+          const res = await post("action", { type: "double_down", betNonce: started.nonce });
+          if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
         }}
-        onSplit={() => {
+        onSplit={async () => {
           const wager = Number(mySeat?.bet ?? 0);
-          const started = beginBet({ game: "Blackjack (MP)", wager });
+          const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
           if ("error" in started) {
             setErr(started.error);
             return;
           }
-          void post("action", { type: "split", betNonce: started.nonce });
+          const res = await post("action", { type: "split", betNonce: started.nonce });
+          if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
         }}
         onExtend={() => post("action", { type: "extend_timer" })}
         dealerCards={state?.dealer?.cards ?? []}
@@ -2384,12 +2417,13 @@ export default function BlackjackTablePage() {
                         type="button"
                         className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
                         onClick={async () => {
-                          // If a bet was reserved, refund it before skipping.
                           const nonces: number[] = ((mySeat as any)?.hands?.[0]?.nonces ?? []).filter(
                             (x: any) => Number.isFinite(x) && x >= 0,
                           );
-                          for (const n of nonces) settleBet({ nonce: n, multiplier: 1, outcome: "Bet canceled" });
-                          await post("skip");
+                          const res = await post("skip");
+                          if (res?.ok) {
+                            for (const n of nonces) await cancelServerBet({ nonce: n, outcome: "Bet canceled" });
+                          }
                           setAllIn(false);
                         }}
                       >
@@ -2640,14 +2674,15 @@ export default function BlackjackTablePage() {
                       <button
                         type="button"
                         className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                        onClick={() => {
+                        onClick={async () => {
                           const wager = Number(mySeat?.bet ?? 0);
-                          const started = beginBet({ game: "Blackjack (MP)", wager });
+                          const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
                           if ("error" in started) {
                             setErr(started.error);
                             return;
                           }
-                          void post("action", { type: "double_down", betNonce: started.nonce });
+                          const res = await post("action", { type: "double_down", betNonce: started.nonce });
+                          if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
                         }}
                         disabled={!canDoubleDown}
                         title="Double your bet, draw one card, and stand"
@@ -2657,14 +2692,15 @@ export default function BlackjackTablePage() {
                       <button
                         type="button"
                         className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                        onClick={() => {
+                        onClick={async () => {
                           const wager = Number(mySeat?.bet ?? 0);
-                          const started = beginBet({ game: "Blackjack (MP)", wager });
+                          const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
                           if ("error" in started) {
                             setErr(started.error);
                             return;
                           }
-                          void post("action", { type: "split", betNonce: started.nonce });
+                          const res = await post("action", { type: "split", betNonce: started.nonce });
+                          if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
                         }}
                         disabled={!canSplit}
                         title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
