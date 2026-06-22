@@ -129,6 +129,36 @@ type BJState = {
   }>;
 };
 
+type BJTableMeta = {
+  tableId: string;
+  name: string;
+  public: boolean;
+  phase: string;
+  round: number;
+  seatCount: number;
+  spectatorCount: number;
+  meSeatIndex: number;
+  isSeated: boolean;
+  isSpectator: boolean;
+  canChat: boolean;
+  currentTurnSeatIndex: number | null;
+  currentTurnUserId: number | null;
+  bettingEndsAt: number;
+  turnEndsAt: number;
+  dealerWindowEndsAt: number;
+  updatedAt: number;
+  lastActivityAt: number;
+};
+
+type BJTablePayload = {
+  state?: BJState;
+  meta?: BJTableMeta;
+  error?: string;
+  tableId?: string;
+  ok?: boolean;
+  redeemedAmount?: number;
+};
+
 export default function BlackjackTablePage() {
   const { beginBet, balance, reserveServerBet, settleServerBet, cancelServerBet, adjustServerBalance } = useWallet();
   const { user, discordMode } = useAuth();
@@ -138,6 +168,7 @@ export default function BlackjackTablePage() {
   const safeTableId = tableId && tableId !== "undefined" ? tableId : null;
   const rpLastRef = useRef<string>("");
   const [state, setState] = useState<BJState | null>(null);
+  const [tableMeta, setTableMeta] = useState<BJTableMeta | null>(null);
   const stateRef = useRef<BJState | null>(null);
   const [betAmount, setBetAmount] = useState(10);
   const [allIn, setAllIn] = useState(false);
@@ -149,6 +180,11 @@ export default function BlackjackTablePage() {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  const applyTablePayload = (payload: BJTablePayload | null | undefined) => {
+    if (payload?.state) setState(payload.state);
+    if (payload?.meta) setTableMeta(payload.meta);
+  };
 
   // When "All in" is active, keep the bet amount synced to current balance.
   useEffect(() => {
@@ -393,10 +429,11 @@ export default function BlackjackTablePage() {
         if (!res.ok) {
           setErr(data?.error ?? "Failed to load table");
           setState(null);
+          setTableMeta(null);
           return;
         }
         setErr(null);
-        setState(data.state);
+        applyTablePayload(data);
       } catch {
         // ignore
       }
@@ -508,26 +545,27 @@ export default function BlackjackTablePage() {
   const turnLeft = Math.max(0, Math.ceil(((state?.turnEndsAt ?? 0) - now) / 1000));
   const dealerLeft = Math.max(0, Math.ceil(((state?.dealerWindowEndsAt ?? 0) - now) / 1000));
 
-  const mySeat = state?.meSeatIndex != null && state.meSeatIndex >= 0 ? state.seats[state.meSeatIndex] : null;
-  const myTurnSeat = state?.participants?.[state.turnIndex] ?? null;
+  const meSeatIndex = Number(tableMeta?.meSeatIndex ?? state?.meSeatIndex ?? -1);
+  const mySeat = meSeatIndex >= 0 && state ? state.seats[meSeatIndex] : null;
+  const myTurnSeat = tableMeta?.currentTurnSeatIndex ?? state?.participants?.[state.turnIndex] ?? null;
   const turnSeatObj = myTurnSeat != null && state ? (state.seats[myTurnSeat] as any) : null;
   const turnHandIndex = Number(turnSeatObj?.activeHandIndex ?? 0) || 0;
   const turnHandCount = Number(turnSeatObj?.hands?.length ?? 1) || 1;
-  const isMyTurn = mySeat && state?.phase === "player_turns" && myTurnSeat === state.meSeatIndex;
+  const isMyTurn = mySeat && state?.phase === "player_turns" && myTurnSeat === meSeatIndex;
   const canDoubleDown = !!isMyTurn && !mySeat?.busted && (mySeat?.cards?.length ?? 0) === 2 && (mySeat?.bet ?? 0) > 0;
   const canSplit = !!isMyTurn && !mySeat?.busted && (mySeat?.cards?.length ?? 0) === 2;
   const myHandIndex = Number((mySeat as any)?.activeHandIndex ?? 0) || 0;
   const myHandCount = Number((mySeat as any)?.hands?.length ?? 1) || 1;
   const myHands = (mySeat as any)?.hands ?? [];
-  const isHost = !!mySeat && state?.meSeatIndex === 0;
+  const isHost = !!mySeat && meSeatIndex === 0;
   const chatMessages = state?.chat ?? [];
   const unreadChat = useMemo(() => {
     if (chatOpen) return 0;
     return chatMessages.filter((m) => (Number(m.at) || 0) > chatLastReadAt).length;
   }, [chatMessages, chatLastReadAt, chatOpen]);
 
-  const isSpectator = !!user && !!state && Array.isArray(state.spectators) && state.spectators.includes(user.id);
-  const gameActive = !!state && (!!mySeat || isSpectator);
+  const isSpectator = !!tableMeta?.isSpectator || (!!user && !!state && Array.isArray(state.spectators) && state.spectators.includes(user.id));
+  const gameActive = !!state && (!!(tableMeta?.isSeated ?? mySeat) || isSpectator);
 
   const bond = (state?.meInventory as any)?.bond ?? null;
   const bondOwned = Math.max(0, Number(bond?.owned ?? 0) || 0);
@@ -557,7 +595,7 @@ export default function BlackjackTablePage() {
         new CustomEvent("lgc:blackjackCtx", {
           detail: {
             active: gameActive,
-            tableId: safeTableId,
+            tableId: tableMeta?.tableId ?? safeTableId,
             inviteUrl,
           },
         }),
@@ -565,7 +603,7 @@ export default function BlackjackTablePage() {
     } catch {
       // ignore
     }
-  }, [gameActive, safeTableId, inviteUrl]);
+  }, [gameActive, safeTableId, tableMeta?.tableId, inviteUrl]);
 
   const powerupLabel = (id: string) => {
     const m: Record<string, string> = {
@@ -741,7 +779,7 @@ export default function BlackjackTablePage() {
         });
         const data = (await res.json().catch(() => ({}))) as any;
         if (res.ok && data?.state) {
-          setState(data.state);
+          applyTablePayload(data);
           return;
         }
         // If seating fails (e.g. full), fall back to spectate.
@@ -751,7 +789,7 @@ export default function BlackjackTablePage() {
           body: JSON.stringify({ spectate: true }),
         });
         const data2 = (await res2.json().catch(() => ({}))) as any;
-        if (res2.ok && data2?.state) setState(data2.state);
+        if (res2.ok && data2?.state) applyTablePayload(data2);
       } catch {
         // ignore
       }
@@ -958,7 +996,7 @@ export default function BlackjackTablePage() {
       setErr(data?.error ?? "Failed to join");
       return;
     }
-    setState(data.state);
+    applyTablePayload(data);
   };
 
   const post = async (path: string, body?: any) => {
@@ -974,7 +1012,7 @@ export default function BlackjackTablePage() {
     });
     const data = (await res.json()) as any;
     if (!res.ok) setErr(data?.error ?? "Action failed");
-    if (data?.state) setState(data.state);
+    if (data?.state) applyTablePayload(data);
     return { ok: !!res.ok, data };
   };
 
@@ -987,7 +1025,7 @@ export default function BlackjackTablePage() {
     });
     const data = (await res.json().catch(() => ({}))) as any;
     if (!res.ok) setErr(data?.error ?? "Bond action failed");
-    if (data?.state) setState(data.state);
+    if (data?.state) applyTablePayload(data);
     return { ok: !!res.ok, data };
   };
 
@@ -1000,7 +1038,7 @@ export default function BlackjackTablePage() {
     });
     const data = (await res.json().catch(() => ({}))) as any;
     if (!res.ok) setErr(data?.error ?? "Collectibles action failed");
-    if (data?.state) setState(data.state);
+    if (data?.state) applyTablePayload(data);
     return { ok: !!res.ok, data };
   };
 

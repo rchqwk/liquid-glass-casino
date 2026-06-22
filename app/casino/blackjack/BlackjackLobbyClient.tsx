@@ -246,7 +246,9 @@ function CreateTablePanel(props: {
             });
             const data = (await res.json()) as any;
             if (!res.ok) throw new Error(data?.error ?? "Failed");
-            window.location.href = `/casino/blackjack/${data.tableId}`;
+            const tableId = String(data?.meta?.tableId ?? data?.tableId ?? "").trim();
+            if (!tableId) throw new Error("Table created but id missing");
+            window.location.href = `/casino/blackjack/${tableId}`;
           } catch (e: any) {
             setErr(String(e?.message ?? "Failed"));
           } finally {
