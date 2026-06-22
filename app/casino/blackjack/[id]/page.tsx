@@ -8,6 +8,7 @@ import { useWallet } from "../../../lib/wallet";
 import { useAuth } from "../../../lib/authClient";
 import { type BJState, type Seat } from "../blackjackTableTypes";
 import { CardView, cardFromIndex, handValue } from "../blackjackUiPrimitives";
+import { BlackjackTableSeat, getBlackjackChatNameClass } from "../blackjackSeatViews";
 import { useBlackjackTableContract } from "../useBlackjackTableContract";
 
 export default function BlackjackTablePage() {
@@ -297,66 +298,6 @@ export default function BlackjackTablePage() {
     };
   }, []);
 
-  const nameClass = (p: Seat) => {
-    const effective = p.userId === user?.id ? (((user as any)?.name_color ?? null) as any) : p.nameColor;
-    const map: Record<string, string> = {
-      brown: "text-amber-700",
-      red: "text-rose-300",
-      orange: "text-orange-300",
-      yellow: "text-yellow-200",
-      green: "text-emerald-300",
-      teal: "text-teal-300",
-      blue: "text-sky-300",
-      indigo: "text-indigo-300",
-      violet: "text-violet-300",
-      pink: "text-pink-300",
-      cyan: "text-cyan-300",
-      lime: "text-lime-300",
-    };
-    if (effective && map[String(effective)]) return map[String(effective)]!;
-    return "text-white/85";
-  };
-  const chatNameClass = (nameColor?: string | null) => {
-    const effective = String(nameColor ?? "").trim().toLowerCase();
-    const map: Record<string, string> = {
-      brown: "text-amber-700",
-      red: "text-rose-300",
-      orange: "text-orange-300",
-      yellow: "text-yellow-300",
-      green: "text-emerald-300",
-      teal: "text-teal-300",
-      blue: "text-sky-300",
-      indigo: "text-indigo-300",
-      violet: "text-violet-300",
-      pink: "text-pink-300",
-      cyan: "text-cyan-300",
-      lime: "text-lime-300",
-    };
-    return map[effective] ?? "text-white/80";
-  };
-
-  const NameBadge = ({ p }: { p: Seat }) => {
-    const effectivePrestige =
-      p.userId === user?.id ? Number((user as any)?.prestige_level ?? 0) : Number(p.prestigeLevel ?? 0);
-    const prestige = effectivePrestige;
-    const glow =
-      prestige > 0 && prestige % 5 === 0 ? "drop-shadow-[0_0_12px_rgba(250,204,21,.35)]" : "";
-    const avatarUrl = String((p as any).avatarUrl ?? "").trim();
-    return (
-      <span className={`inline-flex items-center gap-1 font-semibold ${nameClass(p)} ${glow}`}>
-        {avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt=""
-            className="h-5 w-5 rounded-full border border-white/10 object-cover"
-            referrerPolicy="no-referrer"
-          />
-        ) : null}
-        <span>{p.username}</span>
-        {prestige >= 1 ? <span className="text-yellow-300">★{prestige}</span> : null}
-      </span>
-    );
-  };
   const now = Date.now();
   const bettingLeft = Math.max(0, Math.ceil(((state?.bettingEndsAt ?? 0) - now) / 1000));
   const turnLeft = Math.max(0, Math.ceil(((state?.turnEndsAt ?? 0) - now) / 1000));
@@ -451,128 +392,6 @@ export default function BlackjackTablePage() {
       MYTHIC_COPY_HANDS: "COPY",
     };
     return (m[id] ?? id).slice(0, 12);
-  };
-
-  const TableSeat = ({
-    seatIndex,
-    p,
-    className,
-    variant,
-  }: {
-    seatIndex: number;
-    p: any | null;
-    className: string;
-    variant: "list" | "table";
-  }) => {
-    if (!p) {
-      if (variant === "table") return <div className={className} />;
-      return (
-        <div className={className}>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/50">Empty seat</div>
-        </div>
-      );
-    }
-
-    const hv = handValue(p.cards, p.bonusPoints);
-    const isTurn = state?.phase === "player_turns" && myTurnSeat === seatIndex;
-    const activeHand = (p as any)?.hands?.[(p as any)?.activeHandIndex ?? 0] ?? null;
-    const effects = (activeHand?.effects ?? []) as any[];
-
-    if (variant === "table") {
-      return (
-        <div className={className}>
-          <div className={`${isTurn ? "drop-shadow-[0_0_18px_rgba(52,211,153,.25)]" : ""}`}>
-            <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px] text-white/80">
-              <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 font-semibold text-white/85">
-                <NameBadge p={p} />
-              </span>
-              {p.allIn ? (
-                <span
-                  className="rounded-full border border-yellow-300/25 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-100"
-                  title="All in"
-                >
-                  🟡 ALL-IN{Number((p as any).allInWinStreak ?? 0) > 0 ? ` x${Number((p as any).allInWinStreak)}` : ""}
-                </span>
-              ) : null}
-              {p.bet ? (
-                <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
-                  Bet <span className="font-mono text-white/80">{Number(p.bet).toFixed(2)}</span>
-                </span>
-              ) : null}
-              <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
-                <span className="font-mono text-white/85">{hv.total}</span>
-                {p.bonusPoints ? <span className="ml-1 text-amber-200">(+{p.bonusPoints})</span> : null}
-              </span>
-              {p.busted ? <span className="text-rose-200">BUST</span> : null}
-              {p.stood ? <span className="text-white/50">STAND</span> : null}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {p.cards.map((c: number, idx: number) => (
-                <CardView key={idx} idx={c} />
-              ))}
-            </div>
-            {effects.length ? (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {effects.slice(-3).map((e: any) => (
-                  <span
-                    key={String(e.id ?? `${e.at}-${e.powerupName}`)}
-                    className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-[10px] text-white/70"
-                    title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
-                  >
-                              {String(e.powerupName ?? "Powerup")}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className={className}>
-        <div className={`rounded-2xl border border-white/10 bg-white/5 p-3 ${isTurn ? "ring-2 ring-emerald-300/50" : ""}`}>
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-sm font-semibold">
-              <NameBadge p={p} />
-              {p.allIn ? (
-                <span className="ml-2 rounded-full border border-yellow-300/25 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-semibold text-yellow-100">
-                  ALL-IN{Number((p as any).allInWinStreak ?? 0) > 0 ? ` x${Number((p as any).allInWinStreak)}` : ""}
-                </span>
-              ) : null}
-            </div>
-            <div className="text-xs text-white/60">
-              Bet: <span className="font-mono text-white/80">{p.bet.toFixed(2)}</span>
-            </div>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {p.cards.map((c: number, idx: number) => (
-              <CardView key={idx} idx={c} />
-            ))}
-          </div>
-          <div className="mt-2 text-xs text-white/60">
-            Total: <span className="font-mono text-white/80">{hv.total}</span>
-            {hv.soft ? <span className="ml-2 text-white/45">(soft)</span> : null}
-            {p.bonusPoints ? <span className="ml-2 text-amber-200">(+{p.bonusPoints})</span> : null}
-            {p.busted ? <span className="ml-2 text-rose-200">BUST</span> : null}
-            {p.stood ? <span className="ml-2 text-white/45">STAND</span> : null}
-          </div>
-          {effects.length ? (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {effects.slice(-4).map((e: any) => (
-                          <span
-                            key={String(e.id ?? `${e.at}-${e.powerupName}`)}
-                            className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/70"
-                            title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
-                          >
-                  {String(e.powerupName ?? "Powerup")}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    );
   };
 
   // Discord mode: auto-join the call table when you land on it.
@@ -1483,7 +1302,7 @@ export default function BlackjackTablePage() {
                     {globalChat.messages.map((m) => (
                       <div key={m.id} className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
                         <div className="flex items-center justify-between gap-3 text-[11px] text-white/60">
-                          <span className={`font-semibold ${chatNameClass((m as any).nameColor ?? null)}`}>
+                          <span className={`font-semibold ${getBlackjackChatNameClass((m as any).nameColor ?? null)}`}>
                             {m.username}
                             {(Number((m as any).prestigeLevel ?? 0) || 0) >= 1 ? (
                               <span className="ml-1 text-yellow-300">★{Number((m as any).prestigeLevel ?? 0)}</span>
@@ -1503,7 +1322,7 @@ export default function BlackjackTablePage() {
                   {chatMessages.map((m) => (
                     <div key={m.id} className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
                       <div className="flex items-center justify-between gap-3 text-[11px] text-white/60">
-                        <span className={`font-semibold ${chatNameClass(m.nameColor ?? null)}`}>
+                        <span className={`font-semibold ${getBlackjackChatNameClass(m.nameColor ?? null)}`}>
                           {m.username}
                           {(Number(m.prestigeLevel ?? 0) || 0) >= 1 ? (
                             <span className="ml-1 text-yellow-300">★{Number(m.prestigeLevel ?? 0)}</span>
@@ -2637,7 +2456,17 @@ export default function BlackjackTablePage() {
               {tableView === "list" ? (
                 <div className="mt-2 grid grid-cols-1 gap-3">
                   {state.seats.map((p, i) => (
-                    <TableSeat key={i} seatIndex={i} p={p as any} className="" variant="list" />
+                    <BlackjackTableSeat
+                      key={i}
+                      seatIndex={i}
+                      seat={p as any}
+                      className=""
+                      variant="list"
+                      isTurn={state?.phase === "player_turns" && myTurnSeat === i}
+                      currentUserId={user?.id ?? null}
+                      currentUserNameColor={((user as any)?.name_color ?? null) as string | null}
+                      currentUserPrestigeLevel={Number((user as any)?.prestige_level ?? 0)}
+                    />
                   ))}
                 </div>
               ) : (
@@ -2738,7 +2567,16 @@ export default function BlackjackTablePage() {
                             className={`absolute ${isLeft ? "left-4" : "right-4"} w-[260px]`}
                             style={{ top: topPx }}
                           >
-                            <TableSeat seatIndex={i} p={p as any} className="" variant="table" />
+                            <BlackjackTableSeat
+                              seatIndex={i}
+                              seat={p as any}
+                              className=""
+                              variant="table"
+                              isTurn={state?.phase === "player_turns" && myTurnSeat === i}
+                              currentUserId={user?.id ?? null}
+                              currentUserNameColor={((user as any)?.name_color ?? null) as string | null}
+                              currentUserPrestigeLevel={Number((user as any)?.prestige_level ?? 0)}
+                            />
                           </div>
                         );
                       });
