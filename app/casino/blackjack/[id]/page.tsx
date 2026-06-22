@@ -356,6 +356,23 @@ export function BlackjackTablePageClient({
   const showV2Shell = experience === "v2";
   const v2HeaderVisible = !!state;
   const classicHeaderVisible = !!(state && (mySeat || isSpectator) && topbarOpen);
+  const roundStatusLabel = !state
+    ? ""
+    : state.phase === "betting"
+      ? showV2Shell
+        ? "Betting window closes in"
+        : "Betting ends in"
+      : state.phase === "player_turns"
+        ? showV2Shell
+          ? "Turn clock"
+          : "Turn ends in"
+        : state.phase === "dealer_window"
+          ? showV2Shell
+            ? "Dealer response window"
+            : "Dealer window"
+          : showV2Shell
+            ? "Round resolving…"
+            : "In progress…";
   const scrollToSection = (el: HTMLElement | null) => {
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1503,10 +1520,10 @@ export function BlackjackTablePageClient({
             {!showV2Shell ? <p className="text-sm font-medium text-white">Round controls</p> : null}
             <div className="mt-3 text-xs text-white/60">
             {state.phase === "betting" ? (
-                <>Betting ends in <span className="font-mono text-white/80">{bettingLeft}s</span></>
+                <>{roundStatusLabel} <span className="font-mono text-white/80">{bettingLeft}s</span></>
               ) : state.phase === "player_turns" ? (
               <>
-                Turn ends in <span className="font-mono text-white/80">{turnLeft}s</span>
+                {roundStatusLabel} <span className="font-mono text-white/80">{turnLeft}s</span>
                 {turnHandCount > 1 ? (
                   <span className="ml-2 text-[11px] text-white/55">
                     (Hand {turnHandIndex + 1}/{turnHandCount})
@@ -1514,9 +1531,9 @@ export function BlackjackTablePageClient({
                 ) : null}
               </>
               ) : state.phase === "dealer_window" ? (
-                <>Dealer window <span className="font-mono text-white/80">{dealerLeft}s</span></>
+                <>{roundStatusLabel} <span className="font-mono text-white/80">{dealerLeft}s</span></>
               ) : (
-                <>In progress…</>
+                <>{roundStatusLabel}</>
               )}
             </div>
 
@@ -1773,7 +1790,7 @@ export function BlackjackTablePageClient({
                       title="Powerups and bonds"
                       subtitle="Use turn cards, dealer cards, and active bond tools from a dedicated V2 panel."
                     >
-                      <p className="text-xs font-medium text-white/70">Specials</p>
+                      {!showV2Shell ? <p className="text-xs font-medium text-white/70">Specials</p> : null}
                       {state.meInventory ? (
                         <div className="mt-2 text-[11px] text-white/55">
                           Hands played: <span className="font-mono text-white/80">{state.meInventory.handsPlayed ?? 0}</span>{" "}
@@ -1926,7 +1943,7 @@ export function BlackjackTablePageClient({
                     </BlackjackV2ControlCard>
                   ) : null}
                   {!showV2Shell ? (
-                  <p className="text-xs font-medium text-white/70">Specials</p>
+                  <p className="text-xs font-medium text-white/70">{showV2Shell ? "Classic specials" : "Specials"}</p>
                   ) : null}
                   {!showV2Shell && state.meInventory ? (
                     <div className="mt-2 text-[11px] text-white/55">
@@ -2248,7 +2265,7 @@ export function BlackjackTablePageClient({
                 ) : null}
 
                 <div className="mt-4 text-[11px] text-white/55">
-                  Missed rounds: <span className="font-mono">{mySeat.missedRounds}</span>/5
+                  {showV2Shell ? "AFK risk" : "Missed rounds"}: <span className="font-mono">{mySeat.missedRounds}</span>/5
                 </div>
               </>
             ) : showV2Shell ? (

@@ -113,7 +113,7 @@ export function BlackjackTableHeader({
             type="button"
             className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
             onClick={onOpenInvite}
-            title="Share a link to join this table"
+            title={experience === "v2" ? "Share a direct link to this V2 table" : "Share a link to join this table"}
           >
             {experience === "v2" ? "Share table" : "Invite players"}
           </button>
