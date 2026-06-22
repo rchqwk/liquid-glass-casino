@@ -411,3 +411,23 @@ export function BlackjackV2OverviewPanel({
     </div>
   );
 }
+
+export function BlackjackV2SectionHeader({
+  eyebrow,
+  title,
+  subtitle,
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <div className="text-[10px] uppercase tracking-[0.2em] text-cyan-100/45">{eyebrow}</div>
+        <div className="mt-1 text-sm font-semibold text-white">{title}</div>
+      </div>
+      <div className="max-w-[320px] text-right text-[11px] leading-5 text-white/50">{subtitle}</div>
+    </div>
+  );
+}

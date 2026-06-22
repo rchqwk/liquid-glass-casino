@@ -9,7 +9,7 @@ import { useAuth } from "../../../lib/authClient";
 import { BlackjackChatPanel } from "../blackjackChatPanel";
 import { blackjackCollectibleLabel, BlackjackCollectiblesPanel, BlackjackTableEditInventory } from "../blackjackCollectiblesPanel";
 import { BlackjackHostPanel } from "../blackjackHostPanel";
-import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar, BlackjackV2OverviewPanel, BlackjackV2StatusStrip } from "../blackjackTableShell";
+import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar, BlackjackV2OverviewPanel, BlackjackV2SectionHeader, BlackjackV2StatusStrip } from "../blackjackTableShell";
 import { type BJState, type Seat } from "../blackjackTableTypes";
 import { CardView, cardFromIndex, handValue } from "../blackjackUiPrimitives";
 import { BlackjackTableSeat, getBlackjackChatNameClass } from "../blackjackSeatViews";
@@ -1486,9 +1486,16 @@ export function BlackjackTablePageClient({
         <div className={`grid grid-cols-1 gap-4 ${showV2Shell ? "xl:grid-cols-[minmax(0,1.15fr)_360px]" : "lg:grid-cols-[360px_1fr]"}`}>
           <div
             ref={roundControlsRef}
-            className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "xl:order-2" : ""}`}
+            className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "order-2 xl:order-2" : ""}`}
             data-tour="bj-round-controls"
           >
+            {showV2Shell ? (
+              <BlackjackV2SectionHeader
+                eyebrow="Controls"
+                title="Betting, inventory, and round tools"
+                subtitle="Manage wagers, side bets, powerups, bonds, and host options from one control rail."
+              />
+            ) : null}
             <p className="text-sm font-medium text-white">Round controls</p>
             <div className="mt-3 text-xs text-white/60">
             {state.phase === "betting" ? (
@@ -1896,7 +1903,14 @@ export function BlackjackTablePageClient({
             )}
           </div>
 
-          <div ref={tableViewRef} className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "xl:order-1" : ""}`}>
+          <div ref={tableViewRef} className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "order-1 xl:order-1" : ""}`}>
+            {showV2Shell ? (
+              <BlackjackV2SectionHeader
+                eyebrow="Table"
+                title="Felt, dealer, and player seats"
+                subtitle="Focus on the live table first, then jump back to controls only when you need to act."
+              />
+            ) : null}
             <p className="text-sm font-medium text-white">Table</p>
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="text-xs text-white/55">View</div>
