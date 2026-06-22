@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackTable } from "../../../../../lib/db";
-import { applyChatMessage, safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { applyChatMessage, tickTable } from "../../../../../lib/blackjackMultiplayer";
 import { saveBlackjackTableState } from "../../../../../lib/blackjackStatePersistence";
+import { blackjackTableJsonResponse } from "../../../../../lib/blackjackTableContract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   await saveBlackjackTableState(t, res.state);
 
   if (res.error) {
-    return NextResponse.json({ error: res.error, state: safePublicStateForUser(res.state, user.id) }, { status: 400 });
+    return blackjackTableJsonResponse(res.state, user.id, { status: 400, error: res.error });
   }
-  return NextResponse.json({ state: safePublicStateForUser(res.state, user.id) });
+  return blackjackTableJsonResponse(res.state, user.id);
 }

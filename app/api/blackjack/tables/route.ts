@@ -6,9 +6,10 @@ import {
   upsertBlackjackTable,
   getBlackjackInventory,
 } from "../../../lib/db";
-import { newTableState, safePublicStateForUser, tickTable } from "../../../lib/blackjackMultiplayer";
+import { newTableState, tickTable } from "../../../lib/blackjackMultiplayer";
 import { defaultInventory, ensureInventory } from "../../../lib/blackjackInventory";
 import { persistBlackjackStateInventories, saveBlackjackTableState } from "../../../lib/blackjackStatePersistence";
+import { blackjackTableJsonResponse } from "../../../lib/blackjackTableContract";
 import { shortId } from "../../../lib/blackjackUtils";
 
 export const runtime = "nodejs";
@@ -126,5 +127,5 @@ export async function POST(req: Request) {
     );
   }
 
-  return NextResponse.json({ tableId: id, state: safePublicStateForUser(state, user.id) });
+  return blackjackTableJsonResponse(state, user.id, { extra: { tableId: id } });
 }

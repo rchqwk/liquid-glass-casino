@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackInventory, getBlackjackTable, upsertBlackjackInventory } from "../../../../../lib/db";
-import { safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { tickTable } from "../../../../../lib/blackjackMultiplayer";
 import { defaultInventory, ensureInventory } from "../../../../../lib/blackjackInventory";
 import { syncPlacedCollectiblesToBlackjackDecorations } from "../../../../../lib/blackjackDecorations";
 import { saveBlackjackTableState } from "../../../../../lib/blackjackStatePersistence";
+import { blackjackTableJsonResponse } from "../../../../../lib/blackjackTableContract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +43,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       syncPlacedCollectiblesToBlackjackDecorations(state, user.id, placed, now);
     }
     await saveBlackjackTableState(t, state);
-    return NextResponse.json({ state: safePublicStateForUser(state, user.id) });
+    return blackjackTableJsonResponse(state, user.id);
   }
 
   const seatOpen = state.seats.findIndex((p) => !p);
@@ -100,5 +101,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   await saveBlackjackTableState(t, state);
-  return NextResponse.json({ state: safePublicStateForUser(state, user.id) });
+  return blackjackTableJsonResponse(state, user.id);
 }

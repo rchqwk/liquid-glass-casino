@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../lib/authServer";
 import { getBlackjackTable, upsertBlackjackTable } from "../../../../lib/db";
-import { safePublicStateForUser, tickTable } from "../../../../lib/blackjackMultiplayer";
+import { tickTable } from "../../../../lib/blackjackMultiplayer";
 import { saveBlackjackTableState } from "../../../../lib/blackjackStatePersistence";
+import { blackjackTableJsonResponse } from "../../../../lib/blackjackTableContract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,5 +39,5 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     await saveBlackjackTableState(t, next);
   }
 
-  return NextResponse.json({ state: safePublicStateForUser(next, user.id) });
+  return blackjackTableJsonResponse(next, user.id);
 }

@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackTable, upsertBlackjackInventory } from "../../../../../lib/db";
 import { removeUserBlackjackDecorations, ensureBlackjackDecorations } from "../../../../../lib/blackjackDecorations";
-import { safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { tickTable } from "../../../../../lib/blackjackMultiplayer";
 import { returnPlacedCollectiblesToInventory } from "../../../../../lib/blackjackInventory";
 import { saveBlackjackTableState } from "../../../../../lib/blackjackStatePersistence";
+import { blackjackTableJsonResponse } from "../../../../../lib/blackjackTableContract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,5 +39,5 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
   removeUserBlackjackDecorations(state, user.id);
 
   await saveBlackjackTableState(t, state);
-  return NextResponse.json({ state: safePublicStateForUser(state, user.id) });
+  return blackjackTableJsonResponse(state, user.id);
 }

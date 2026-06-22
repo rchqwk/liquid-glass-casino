@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackInventory, getBlackjackTable, upsertBlackjackInventory } from "../../../../../lib/db";
-import { safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { tickTable } from "../../../../../lib/blackjackMultiplayer";
 import { defaultInventory, ensureInventory } from "../../../../../lib/blackjackInventory";
 import { saveBlackjackTableState } from "../../../../../lib/blackjackStatePersistence";
+import { blackjackTableJsonResponse } from "../../../../../lib/blackjackTableContract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,5 +74,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const inv = (await getBlackjackInventory(user.id)) ?? defaultInventory();
   await upsertBlackjackInventory(user.id, ensureInventory(inv));
 
-  return NextResponse.json({ ok: true, redeemedAmount, state: safePublicStateForUser(state, user.id) });
+  return blackjackTableJsonResponse(state, user.id, { extra: { ok: true, redeemedAmount } });
 }

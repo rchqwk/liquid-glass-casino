@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackTable, upsertBlackjackTable } from "../../../../../lib/db";
-import { newTableState, safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
+import { newTableState, tickTable } from "../../../../../lib/blackjackMultiplayer";
 import { persistBlackjackStateInventories } from "../../../../../lib/blackjackStatePersistence";
+import { blackjackTableJsonResponse } from "../../../../../lib/blackjackTableContract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
       created_at: now,
       updated_at: state.updatedAt,
     });
-    return NextResponse.json({ state: safePublicStateForUser(state, user.id) });
+    return blackjackTableJsonResponse(state, user.id);
   }
 
   const next = tickTable(existing.state, now);
@@ -41,5 +42,5 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
     });
     await persistBlackjackStateInventories(next);
   }
-  return NextResponse.json({ state: safePublicStateForUser(next, user.id) });
+  return blackjackTableJsonResponse(next, user.id);
 }
