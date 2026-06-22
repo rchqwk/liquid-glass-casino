@@ -1,5 +1,7 @@
 "server-only";
 
+import { safePublicBlackjackStateForUser } from "./blackjackStateView";
+
 export type Suit = "♠" | "♥" | "♦" | "♣" | "★";
 export type Rank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K" | "JOKER";
 
@@ -2355,31 +2357,7 @@ function settleRound(state: TableState, now: number): TableState {
 }
 
 export function safePublicStateForUser(state: TableState, userId: number) {
-  // Never leak table password to clients.
-  const { password: _pw, ...rest } = state as any;
-  const meSeat = state.seats.find((p) => p?.userId === userId) ?? null;
-  const peek = state.peekByUserId[String(userId)] ?? null;
-  // hide dealer hole card during player turns
-  const hideDealerHole = state.phase === "player_turns";
-  const dealerCards = hideDealerHole ? state.dealer.cards.map((c, i) => (i === 1 ? -1 : c)) : state.dealer.cards;
-  // Avoid leaking full inventories for other players; include only a few public fields we want to show.
-  const seats = (state.seats ?? []).map((p) => {
-    if (!p) return null;
-    const inv = normalizeInventory((p as any).inventory);
-    const { inventory: _inv, ...pRest } = p as any;
-    return { ...pRest, allInWinStreak: Math.max(0, Math.floor(Number(inv.allInWinStreak ?? 0) || 0)) };
-  });
-
-  return {
-    ...rest,
-    seats,
-    dealer: { ...state.dealer, cards: dealerCards },
-    // spectators list is fine
-    peekCard: peek,
-    meSeatIndex: state.seats.findIndex((p) => p?.userId === userId),
-    meInventory: meSeat?.inventory ?? null,
-    lastResult: state.lastResults?.[String(userId)] ?? null,
-  };
+  return safePublicBlackjackStateForUser(state, userId);
 }
 
 export function applyChatMessage(

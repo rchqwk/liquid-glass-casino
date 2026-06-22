@@ -4,10 +4,10 @@ import {
   getBlackjackTable,
   listBlackjackTables,
   upsertBlackjackTable,
-  upsertBlackjackInventory,
   getBlackjackInventory,
 } from "../../../lib/db";
 import { defaultInventory, ensureInventory, newTableState, safePublicStateForUser, tickTable } from "../../../lib/blackjackMultiplayer";
+import { persistBlackjackStateInventories } from "../../../lib/blackjackStatePersistence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,9 +54,7 @@ export async function GET() {
         created_at: t.created_at,
         updated_at: state.updatedAt,
       });
-      for (const p of state.seats) if (p) await upsertBlackjackInventory(p.userId, p.inventory);
-      for (const ev of state.evictedInventories ?? []) await upsertBlackjackInventory(ev.userId, ev.inventory);
-      state.evictedInventories = [];
+      await persistBlackjackStateInventories(state);
     }
     const seatsFilled = state.seats.filter(Boolean).length;
     const spectators = state.spectators.length;
@@ -128,7 +126,7 @@ export async function POST(req: Request) {
   };
 
   await upsertBlackjackTable({ id, public: pub, name, state, created_at: now, updated_at: now });
-  await upsertBlackjackInventory(user.id, inv);
+  await persistBlackjackStateInventories(state);
 
   // Verify table is readable (catches DB misconfiguration / split stores).
   const check = await getBlackjackTable(id);
