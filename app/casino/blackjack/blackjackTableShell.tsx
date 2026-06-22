@@ -72,6 +72,7 @@ export function BlackjackTableHeader({
   tableId,
   round,
   phase,
+  lobbyHref,
   err,
   onOpenInvite,
   onLeave,
@@ -81,6 +82,7 @@ export function BlackjackTableHeader({
   tableId: string;
   round: number;
   phase: string;
+  lobbyHref: string;
   err?: string | null;
   onOpenInvite: () => void;
   onLeave: () => void;
@@ -98,7 +100,7 @@ export function BlackjackTableHeader({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/casino/blackjack" className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10">
+          <Link href={lobbyHref} className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10">
             Back to lobby
           </Link>
           <button

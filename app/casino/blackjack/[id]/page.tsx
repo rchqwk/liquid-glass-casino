@@ -15,7 +15,13 @@ import { CardView, cardFromIndex, handValue } from "../blackjackUiPrimitives";
 import { BlackjackTableSeat, getBlackjackChatNameClass } from "../blackjackSeatViews";
 import { useBlackjackTableContract } from "../useBlackjackTableContract";
 
-export default function BlackjackTablePage() {
+export function BlackjackTablePageClient({
+  routeBase = "/casino/blackjack",
+  lobbyHref = "/casino/blackjack-v2",
+}: {
+  routeBase?: string;
+  lobbyHref?: string;
+}) {
   const { beginBet, balance, reserveServerBet, settleServerBet, cancelServerBet, adjustServerBalance } = useWallet();
   const { user, discordMode } = useAuth();
   const params = useParams<{ id?: string | string[] }>();
@@ -68,8 +74,8 @@ export default function BlackjackTablePage() {
       if (!id) return;
       try {
         const qs = window.location.search || "";
-        if (window.location.pathname !== `/casino/blackjack/${id}`) {
-          window.location.href = `/casino/blackjack/${id}${qs}`;
+        if (window.location.pathname !== `${routeBase}/${id}`) {
+          window.location.href = `${routeBase}/${id}${qs}`;
         }
       } catch {
         // ignore
@@ -179,7 +185,7 @@ export default function BlackjackTablePage() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discordMode, safeTableId]);
+  }, [discordMode, safeTableId, routeBase]);
 
   const [targetPopup, setTargetPopup] = useState<{ open: boolean; specialId: string | null; target: number | null }>({
     open: false,
@@ -234,8 +240,8 @@ export default function BlackjackTablePage() {
   const inviteUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
     if (!safeTableId) return "";
-    return `${window.location.origin}/casino/blackjack/${safeTableId}`;
-  }, [safeTableId]);
+    return `${window.location.origin}${routeBase}/${safeTableId}`;
+  }, [safeTableId, routeBase]);
 
   useEffect(() => {
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
@@ -261,8 +267,8 @@ export default function BlackjackTablePage() {
     if (!channelId) return;
     if (!safeTableId) return;
     if (safeTableId === channelId) return;
-    window.location.replace(`/casino/blackjack/${encodeURIComponent(channelId)}`);
-  }, [discordMode, safeTableId]);
+    window.location.replace(`${routeBase}/${encodeURIComponent(channelId)}`);
+  }, [discordMode, safeTableId, routeBase]);
 
 
   const isMobile = useMemo(() => {
@@ -1369,6 +1375,7 @@ export default function BlackjackTablePage() {
         tableId={safeTableId ?? "-"}
         round={Number(state?.round ?? 0)}
         phase={String(state?.phase ?? "-")}
+        lobbyHref={lobbyHref}
         err={err}
         onOpenInvite={() => setInviteOpen(true)}
         onLeave={() => {
@@ -2058,4 +2065,8 @@ export default function BlackjackTablePage() {
       </div>
     </div>
   );
+}
+
+export default function BlackjackTablePage() {
+  return <BlackjackTablePageClient routeBase="/casino/blackjack" lobbyHref="/casino/blackjack-v2" />;
 }

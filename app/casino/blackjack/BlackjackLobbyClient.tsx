@@ -24,6 +24,7 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
   const [autoJoining, setAutoJoining] = useState(false);
+  const tableBasePath = variant === "v2" ? "/casino/blackjack-v2" : "/casino/blackjack";
 
   useEffect(() => {
     const id = window.setInterval(() => setTick((x) => x + 1), 1200);
@@ -77,12 +78,12 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ spectate: false }),
         });
-        window.location.href = `/casino/blackjack/${encodeURIComponent(channelId)}`;
+        window.location.href = `${tableBasePath}/${encodeURIComponent(channelId)}`;
       } finally {
         setAutoJoining(false);
       }
     })();
-  }, [authLoading, discordMode, user, autoJoining]);
+  }, [authLoading, discordMode, user, autoJoining, tableBasePath]);
 
   const now = Date.now();
   const sorted = useMemo(() => [...tables].sort((a, b) => (b.bettingEndsAt ?? 0) - (a.bettingEndsAt ?? 0)), [tables]);
@@ -117,8 +118,9 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
             setErr={setErr}
             loading={loading}
             setLoading={setLoading}
+            tableBasePath={tableBasePath}
           />
-          <PublicTablesPanel sorted={sorted} now={now} />
+          <PublicTablesPanel sorted={sorted} now={now} tableBasePath={tableBasePath} />
         </div>
       </div>
     );
@@ -169,7 +171,7 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
       </section>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <PublicTablesPanel sorted={sorted} now={now} />
+        <PublicTablesPanel sorted={sorted} now={now} tableBasePath={tableBasePath} />
         <CreateTablePanel
           name={name}
           setName={setName}
@@ -179,6 +181,7 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
           setErr={setErr}
           loading={loading}
           setLoading={setLoading}
+          tableBasePath={tableBasePath}
           compact
         />
       </div>
@@ -213,9 +216,10 @@ function CreateTablePanel(props: {
   setErr: (v: string | null) => void;
   loading: boolean;
   setLoading: (v: boolean) => void;
+  tableBasePath: string;
   compact?: boolean;
 }) {
-  const { name, setName, isPublic, setIsPublic, err, setErr, loading, setLoading, compact } = props;
+  const { name, setName, isPublic, setIsPublic, err, setErr, loading, setLoading, tableBasePath, compact } = props;
   return (
     <div className="glass-soft glass-shine rounded-3xl p-5" data-tour="bj-create-join">
       <div className="flex items-center justify-between gap-3">
@@ -249,7 +253,7 @@ function CreateTablePanel(props: {
             if (!res.ok) throw new Error(data?.error ?? "Failed");
             const tableId = getBlackjackTableIdFromPayload(data);
             if (!tableId) throw new Error("Table created but id missing");
-            window.location.href = `/casino/blackjack/${tableId}`;
+            window.location.href = `${tableBasePath}/${tableId}`;
           } catch (e: any) {
             setErr(String(e?.message ?? "Failed"));
           } finally {
@@ -268,7 +272,7 @@ function CreateTablePanel(props: {
   );
 }
 
-function PublicTablesPanel({ sorted, now }: { sorted: TableRow[]; now: number }) {
+function PublicTablesPanel({ sorted, now, tableBasePath }: { sorted: TableRow[]; now: number; tableBasePath: string }) {
   return (
     <div className="glass-soft glass-shine rounded-3xl p-5" data-tour="bj-public-tables">
       <div className="flex items-center justify-between gap-3">
@@ -284,7 +288,7 @@ function PublicTablesPanel({ sorted, now }: { sorted: TableRow[]; now: number })
           return (
             <Link
               key={t.id}
-              href={`/casino/blackjack/${t.id}`}
+              href={`${tableBasePath}/${t.id}`}
               className="glass-soft rounded-3xl border border-white/10 bg-white/5 p-4 transition hover:bg-white/10"
             >
               <div className="flex items-start justify-between gap-3">
