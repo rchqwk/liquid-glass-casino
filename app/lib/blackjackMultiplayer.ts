@@ -1,6 +1,6 @@
 "server-only";
 
-import { cardFromIndex, encodeMagicCard, handTotal, perfectPairsMultiplier, ranksEqualForSplit, shuffleDeck, type MagicRank } from "./blackjackCards";
+import { cardFromIndex, encodeMagicCard, handTotal, perfectPairsMultiplier, ranksEqualForSplit, type MagicRank } from "./blackjackCards";
 import { ensureBlackjackDecorations, removeUserBlackjackDecorations, syncOwnedDecorationsIntoPlacedCollectibles } from "./blackjackDecorations";
 import {
   classifySpecial,
@@ -14,9 +14,17 @@ import {
   normalizeInventory,
   returnPlacedCollectiblesToInventory,
 } from "./blackjackInventory";
-import { appendBlackjackChatMessage, appendBlackjackEvent, initialBlackjackRoomEvents } from "./blackjackRoomFeed";
+import { appendBlackjackChatMessage, appendBlackjackEvent } from "./blackjackRoomFeed";
 import { normalizeHandsForSeat } from "./blackjackSeatState";
 import { safePublicBlackjackStateForUser } from "./blackjackStateView";
+import {
+  advanceBlackjackTurn,
+  blackjackTurnDurationMs,
+  currentBlackjackTurnSeatIndex,
+  drawBlackjackCardFromShoe,
+  newBlackjackTableState,
+  startBlackjackBetting,
+} from "./blackjackTableLifecycle";
 import { applyBondAccrual, collectibleEmoji, randomCollectibleKey, roundMoney, shortEventId, shortId } from "./blackjackUtils";
 
 export type Phase =
@@ -513,48 +521,7 @@ function rollBox(tier: "normal" | "rare" | "legendary" | "mythic", seed: number)
 }
 
 export function newTableState(input: { id: string; name: string; public: boolean; now: number }): TableState {
-  const seed = Math.floor(input.now / 1000) ^ 2654435761;
-  const shoe = shuffleDeck(seed);
-  const shoeInitialSize = shoe.length;
-  const cutRng = lcg(seed ^ 1597334677);
-  const cutMin = Math.max(40, Math.floor(shoeInitialSize * 0.65));
-  const cutMax = Math.max(cutMin, Math.floor(shoeInitialSize * 0.82));
-  const shoeCutCardAt = cutMin + Math.floor(cutRng() * (cutMax - cutMin + 1));
-  return {
-    id: input.id,
-    public: input.public,
-    name: input.name,
-    createdAt: input.now,
-    updatedAt: input.now,
-    lastActivityAt: input.now,
-    turnDurationMs: 30_000,
-    disabledCategories: [],
-    passwordEnabled: false,
-    password: null,
-    afkKickEnabled: true,
-    chat: [],
-    events: initialBlackjackRoomEvents(input.now, shoeCutCardAt),
-    decorations: [],
-    phase: "betting",
-    round: 1,
-    bettingEndsAt: input.now + 30_000,
-    turnEndsAt: 0,
-    dealerWindowEndsAt: 0,
-    seats: Array.from({ length: 10 }, () => null),
-    spectators: [],
-    participants: [],
-    turnIndex: 0,
-    shoe,
-    shoeInitialSize,
-    shoeCardsDealt: 0,
-    shoeCutCardAt,
-    shoeShufflePending: false,
-    dealer: { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false, effects: [] },
-    dealerBlackjack: false,
-    peekByUserId: {},
-    evictedInventories: [],
-    lastResults: {},
-  };
+  return newBlackjackTableState(input);
 }
 
 export function tickTable(state: TableState, now: number): TableState {
@@ -599,7 +566,7 @@ export function tickTable(state: TableState, now: number): TableState {
 
   if (s.phase === "player_turns") {
     const curSeatIdx = s.participants[s.turnIndex];
-    if (curSeatIdx == null) return startBetting(s, now);
+    if (curSeatIdx == null) return startBlackjackBetting(s, now);
     if (now >= s.turnEndsAt) {
       const seat = s.seats[curSeatIdx];
       if (seat) {
@@ -616,7 +583,7 @@ export function tickTable(state: TableState, now: number): TableState {
         seat.turnEnded = true;
         normalizeHandsForSeat(seat);
       }
-      return advanceTurn(s, now);
+      return advanceBlackjackTurn(s, now);
     }
   }
 
@@ -624,7 +591,7 @@ export function tickTable(state: TableState, now: number): TableState {
     const dVal = handTotal(s.dealer.cards, s.dealer.bonusPoints).total;
     if (dVal < 17) {
       // Dealer hits
-      const next = drawFromShoe(s);
+      const next = drawBlackjackCardFromShoe(s);
       if (next != null) s.dealer.cards.push(next);
       s.updatedAt = now;
       return s;
@@ -664,73 +631,9 @@ export function tickTable(state: TableState, now: number): TableState {
 
   if (s.phase === "settling") {
     // After a short pause, start next betting
-    if (now >= s.bettingEndsAt) return startBetting(s, now);
+    if (now >= s.bettingEndsAt) return startBlackjackBetting(s, now);
   }
 
-  return s;
-}
-
-function startBetting(state: TableState, now: number) {
-  const s: TableState = { ...state };
-  s.phase = "betting";
-  s.bettingEndsAt = now + 30_000;
-  s.turnEndsAt = 0;
-  s.dealerWindowEndsAt = 0;
-  s.participants = [];
-  s.turnIndex = 0;
-  s.dealer = { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false, effects: [] };
-  s.dealerBlackjack = false;
-  s.peekByUserId = {};
-  s.lastResults = s.lastResults ?? {};
-  s.evictedInventories = s.evictedInventories ?? [];
-
-  // Keep using the current shoe across hands until the cut card is reached.
-  // Once it is reached, shuffle a fresh shoe at the next betting phase.
-  if (!Array.isArray(s.shoe) || s.shoe.length === 0 || s.shoeShufflePending) {
-    const seed = Math.floor(now / 1000) ^ (s.round * 2654435761);
-    s.shoe = shuffleDeck(seed);
-    s.shoeInitialSize = s.shoe.length;
-    s.shoeCardsDealt = 0;
-    const cutRng = lcg(seed ^ 1597334677);
-    const cutMin = Math.max(40, Math.floor(s.shoeInitialSize * 0.65));
-    const cutMax = Math.max(cutMin, Math.floor(s.shoeInitialSize * 0.82));
-    s.shoeCutCardAt = cutMin + Math.floor(cutRng() * (cutMax - cutMin + 1));
-    s.shoeShufflePending = false;
-    appendBlackjackEvent(s, now, `The deck has been shuffled. A new shoe card was placed at card number ${s.shoeCutCardAt}.`);
-  }
-
-  // Reset round-specific flags, keep inventory
-  for (let i = 0; i < s.seats.length; i++) {
-    const p = s.seats[i];
-    if (!p) continue;
-    p.inventory = normalizeInventory(p.inventory);
-    p.skipThisRound = false;
-    normalizeHandsForSeat(p);
-    const carry = Number(p.carryBetNext ?? 0) || 0;
-    p.hands = [
-      {
-        bet: carry,
-        nonces: [],
-        perfectPairsWager: 0,
-        perfectPairsNonce: null,
-        perfectPairsSettled: false,
-        cards: [],
-        bonusPoints: 0,
-        stood: false,
-        busted: false,
-        turnEnded: false,
-        doublePayoutArmed: false,
-        usedThisRound: {},
-      },
-    ];
-    p.activeHandIndex = 0;
-    normalizeHandsForSeat(p);
-    p.carryBetNext = 0;
-    p.bjProtected = false;
-    p.extendUsedThisTurn = false;
-  }
-  s.round += 1;
-  s.updatedAt = now;
   return s;
 }
 
@@ -787,13 +690,13 @@ function startRound(state: TableState, now: number) {
 
   if (participants.length === 0) {
     // no one bet; restart betting
-    return startBetting(s, now);
+    return startBlackjackBetting(s, now);
   }
 
   s.participants = participants;
   s.turnIndex = 0;
   s.phase = "player_turns";
-  s.turnEndsAt = now + turnDurationMs(s);
+  s.turnEndsAt = now + blackjackTurnDurationMs(s);
   s.peekByUserId = {};
   s.dealerBlackjack = false;
   s.dealer = { cards: [], bonusPoints: 0, secondChanceArmed: false, secondChanceUsed: false, effects: [] };
@@ -824,14 +727,14 @@ function startRound(state: TableState, now: number) {
     // Keep bjProtected if set during betting; otherwise false.
     p.bjProtected = !!p.bjProtected;
     p.extendUsedThisTurn = false;
-    const a = drawFromShoe(s);
-    const b = drawFromShoe(s);
+    const a = drawBlackjackCardFromShoe(s);
+    const b = drawBlackjackCardFromShoe(s);
     if (a != null) p.hands[0]!.cards.push(a);
     if (b != null) p.hands[0]!.cards.push(b);
     normalizeHandsForSeat(p);
   }
-  const d1 = drawFromShoe(s);
-  const d2 = drawFromShoe(s);
+  const d1 = drawBlackjackCardFromShoe(s);
+  const d2 = drawBlackjackCardFromShoe(s);
   if (d1 != null) s.dealer.cards.push(d1);
   if (d2 != null) s.dealer.cards.push(d2);
 
@@ -853,61 +756,7 @@ function startRound(state: TableState, now: number) {
     }
   }
   // if first player is already ended, advance
-  return advanceTurn(s, now);
-}
-
-function drawFromShoe(s: TableState): number | null {
-  const next = s.shoe.pop();
-  if (typeof next === "number") {
-    s.shoeCardsDealt = Math.max(0, Number(s.shoeCardsDealt ?? 0) || 0) + 1;
-    const cutAt = Math.max(0, Number(s.shoeCutCardAt ?? 0) || 0);
-    if (!s.shoeShufflePending && cutAt > 0 && s.shoeCardsDealt >= cutAt) {
-      s.shoeShufflePending = true;
-      appendBlackjackEvent(s, Date.now(), `The shoe card has been reached at card number ${cutAt}. The deck will be shuffled after this hand.`);
-    }
-  }
-  return typeof next === "number" ? next : null;
-}
-
-function currentTurnSeatIndex(s: TableState) {
-  return s.participants[s.turnIndex] ?? null;
-}
-
-function turnDurationMs(s: TableState) {
-  // Only allow 30s or 60s (host setting).
-  const v = Number(s.turnDurationMs ?? 30_000);
-  return v === 60_000 ? 60_000 : 30_000;
-}
-
-function advanceTurn(state: TableState, now: number): TableState {
-  const s: TableState = { ...state };
-  // find next active hand (hands are played sequentially per seat)
-  while (s.turnIndex < s.participants.length) {
-    const seatIdx = s.participants[s.turnIndex]!;
-    const p = s.seats[seatIdx];
-    if (!p) {
-      s.turnIndex += 1;
-      continue;
-    }
-    normalizeHandsForSeat(p);
-    const nextHandIdx = (p.hands ?? []).findIndex((h: any) => !h?.turnEnded);
-    if (nextHandIdx < 0) {
-      // seat finished all hands
-      s.turnIndex += 1;
-      continue;
-    }
-    p.activeHandIndex = nextHandIdx;
-    normalizeHandsForSeat(p);
-    s.turnEndsAt = now + turnDurationMs(s);
-    p.extendUsedThisTurn = false;
-    s.updatedAt = now;
-    return s;
-  }
-  // all done -> dealer phase
-  s.phase = "dealer";
-  s.turnEndsAt = 0;
-  s.updatedAt = now;
-  return s;
+  return advanceBlackjackTurn(s, now);
 }
 
 export function applyBet(
@@ -1049,7 +898,7 @@ export function applyPlayerAction(
 ): { state: TableState; error?: string } {
   const s = tickTable(state, now);
   if (s.phase !== "player_turns") return { state: s, error: "Not in player turn phase." };
-  const turnSeatIdx = currentTurnSeatIndex(s);
+  const turnSeatIdx = currentBlackjackTurnSeatIndex(s);
   if (turnSeatIdx == null) return { state: s, error: "No active turn." };
   const p = s.seats[turnSeatIdx];
   if (!p) return { state: s, error: "Turn seat empty." };
@@ -1059,11 +908,11 @@ export function applyPlayerAction(
   if (action.type === "hit" && h.busted) return { state: s, error: "You are busted. Play a save card or stand." };
 
   if (action.type === "hit") {
-    const c = drawFromShoe(s);
+    const c = drawBlackjackCardFromShoe(s);
     if (c != null) h.cards.push(c);
     s.lastActivityAt = now;
     // Reset turn timer on irreversible action
-    s.turnEndsAt = now + turnDurationMs(s);
+    s.turnEndsAt = now + blackjackTurnDurationMs(s);
     const t = handTotal(h.cards, h.bonusPoints).total;
     if (t > 21) {
       // Allow "save" cards (-1/-2/-5/-10) before the turn is over.
@@ -1077,7 +926,7 @@ export function applyPlayerAction(
       h.turnEnded = true;
       h.stood = true;
       normalizeHandsForSeat(p);
-      return { state: advanceTurn(s, now) };
+      return { state: advanceBlackjackTurn(s, now) };
     }
     normalizeHandsForSeat(p);
     s.updatedAt = now;
@@ -1094,16 +943,16 @@ export function applyPlayerAction(
     // Double the bet (reserve additional stake via betNonce), draw exactly one card, then stand.
     h.bet = Math.round(h.bet * 2 * 100) / 100;
     h.nonces = [...(h.nonces ?? []), n];
-    const c = drawFromShoe(s);
+    const c = drawBlackjackCardFromShoe(s);
     if (c != null) h.cards.push(c);
     s.lastActivityAt = now;
-    s.turnEndsAt = now + turnDurationMs(s);
+    s.turnEndsAt = now + blackjackTurnDurationMs(s);
     const t = handTotal(h.cards, h.bonusPoints).total;
     if (t > 21) h.busted = true;
     h.turnEnded = true;
     h.stood = true;
     normalizeHandsForSeat(p);
-    return { state: advanceTurn(s, now) };
+    return { state: advanceBlackjackTurn(s, now) };
   }
 
   if (action.type === "split") {
@@ -1164,8 +1013,8 @@ export function applyPlayerAction(
     p.hands = hands;
 
     // Deal one card to each split hand immediately
-    const a = drawFromShoe(s);
-    const b = drawFromShoe(s);
+    const a = drawBlackjackCardFromShoe(s);
+    const b = drawBlackjackCardFromShoe(s);
     if (a != null) newHandA.cards.push(a);
     if (b != null) newHandB.cards.push(b);
 
@@ -1193,7 +1042,7 @@ export function applyPlayerAction(
     if (p.activeHandIndex < 0) p.activeHandIndex = 0;
     normalizeHandsForSeat(p);
     s.lastActivityAt = now;
-    s.turnEndsAt = now + turnDurationMs(s);
+    s.turnEndsAt = now + blackjackTurnDurationMs(s);
     s.updatedAt = now;
     return { state: s };
   }
@@ -1203,7 +1052,7 @@ export function applyPlayerAction(
     h.stood = true;
     s.lastActivityAt = now;
     normalizeHandsForSeat(p);
-    return { state: advanceTurn(s, now) };
+    return { state: advanceBlackjackTurn(s, now) };
   }
 
   return { state: s, error: "Unknown action." };
@@ -1212,7 +1061,7 @@ export function applyPlayerAction(
 export function applyVoteSkipTurn(state: TableState, userId: number, now: number): { state: TableState; error?: string } {
   const s = tickTable(state, now);
   if (s.phase !== "player_turns") return { state: s, error: "No active turn timer." };
-  const turnSeatIdx = currentTurnSeatIndex(s);
+  const turnSeatIdx = currentBlackjackTurnSeatIndex(s);
   if (turnSeatIdx == null) return { state: s, error: "No active turn." };
   const p = s.seats[turnSeatIdx];
   if (!p) return { state: s, error: "Turn seat empty." };
@@ -1223,7 +1072,7 @@ export function applyVoteSkipTurn(state: TableState, userId: number, now: number
   h.stood = true;
   normalizeHandsForSeat(p);
   s.lastActivityAt = now;
-  return { state: advanceTurn(s, now) };
+  return { state: advanceBlackjackTurn(s, now) };
 }
 
 export function applyExtendTurnTimer(
@@ -1233,7 +1082,7 @@ export function applyExtendTurnTimer(
 ): { state: TableState; error?: string } {
   const s = tickTable(state, now);
   if (s.phase !== "player_turns") return { state: s, error: "No active turn timer." };
-  const turnSeatIdx = currentTurnSeatIndex(s);
+  const turnSeatIdx = currentBlackjackTurnSeatIndex(s);
   if (turnSeatIdx == null) return { state: s, error: "No active turn." };
   const p = s.seats[turnSeatIdx];
   if (!p) return { state: s, error: "Turn seat empty." };
@@ -1279,8 +1128,8 @@ export function applySpecial(
     return { state: s, error: "Already used this round." };
   }
 
-  const isOwnTurn =
-    s.phase === "player_turns" && currentTurnSeatIndex(s) != null && s.seats[currentTurnSeatIndex(s)!]?.userId === userId;
+  const currentTurnSeatIdx = currentBlackjackTurnSeatIndex(s);
+  const isOwnTurn = s.phase === "player_turns" && currentTurnSeatIdx != null && s.seats[currentTurnSeatIdx]?.userId === userId;
   // "Anytime" magic cards are allowed any time before the end of the round:
   // during player turns, dealer phase, and the dealer-window (but not after settling starts).
   const isBeforeEndOfRound = s.phase === "player_turns" || s.phase === "dealer" || s.phase === "dealer_window";
@@ -1339,7 +1188,7 @@ export function applySpecial(
   } else if (input.id === "SWAP_ONE") {
     const h = actor.hands[actor.activeHandIndex]!;
     if (h.cards.length === 0) return { state: s, error: "No cards to swap." };
-    const next = drawFromShoe(s);
+    const next = drawBlackjackCardFromShoe(s);
     if (next == null) return { state: s, error: "Shoe empty." };
     // swap the last card
     h.cards[h.cards.length - 1] = next;
@@ -1382,7 +1231,7 @@ export function applySpecial(
       if (t > 21) th.busted = true;
     }
   } else if (input.id === "FORCE_HIT_TARGET") {
-    const c = drawFromShoe(s);
+    const c = drawBlackjackCardFromShoe(s);
     if (c == null) return { state: s, error: "Shoe empty." };
     if (!targetSeat) {
       s.dealer.cards.push(c);
@@ -1531,7 +1380,7 @@ export function applySpecial(
   actor.lastSeenAt = now;
   s.lastActivityAt = now;
   // Reset turn timer on irreversible action (using a powerup on your own turn).
-  if (isOwnTurn) s.turnEndsAt = now + turnDurationMs(s);
+  if (isOwnTurn) s.turnEndsAt = now + blackjackTurnDurationMs(s);
 
   normalizeHandsForSeat(actor);
   s.updatedAt = now;
