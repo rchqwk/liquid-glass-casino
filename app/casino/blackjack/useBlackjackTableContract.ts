@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import type { BJState } from "./blackjackTableTypes";
 
 export type BlackjackTableMeta = {
   tableId: string;
@@ -23,7 +24,7 @@ export type BlackjackTableMeta = {
   lastActivityAt: number;
 };
 
-export type BlackjackTablePayload<TState = unknown> = {
+export type BlackjackTablePayload<TState = BJState> = {
   state?: TState;
   meta?: BlackjackTableMeta;
   error?: string;
