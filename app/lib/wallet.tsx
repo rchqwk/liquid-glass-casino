@@ -57,7 +57,7 @@ type WalletContextValue = {
   deposit: (
     amount: number,
     opts?: { bypassCooldown?: boolean; refill5000?: boolean; refill100?: boolean },
-  ) => { ok: true } | { ok: false; error: string; nextAvailableAt?: number };
+  ) => Promise<{ ok: true; nextAvailableAt?: number } | { ok: false; error: string; nextAvailableAt?: number }>;
   setClientSeed: (seed: string) => void;
   rotateServerSeed: () => { revealedServerSeed: string };
   placeBet: (input: PlaceBetInput) => { multiplier: number; outcome: string; profit: number; balanceAfter: number };
@@ -85,7 +85,8 @@ type WalletContextValue = {
   }) => Promise<{ profit: number; balanceAfter: number } | { error: string }>;
   cancelServerBet: (input: { nonce: number; outcome?: string }) => Promise<{ balanceAfter: number } | { error: string }>;
   adjustServerBalance: (input: { delta: number; game?: string; outcome?: string }) => Promise<{ balanceAfter: number } | { error: string }>;
-  reset: () => void;
+  syncFromServer: () => Promise<void>;
+  reset: (opts?: { balance?: number }) => Promise<void>;
 };
 
 const STORAGE_KEY = "lgc.wallet.v1";
@@ -250,7 +251,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         getRngForNonce: () => null,
         refill5000AvailableAt: 0,
         refill100AvailableAt: 0,
-        deposit: () => ({ ok: false, error: "Wallet not ready" }),
+        deposit: async () => ({ ok: false, error: "Wallet not ready" }),
         setClientSeed: () => {},
         rotateServerSeed: () => ({ revealedServerSeed: "" }),
         placeBet: () => ({ multiplier: 0, outcome: "", profit: 0, balanceAfter: 0 }),
@@ -260,7 +261,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         settleServerBet: async () => ({ error: "Wallet not ready" }),
         cancelServerBet: async () => ({ error: "Wallet not ready" }),
         adjustServerBalance: async () => ({ error: "Wallet not ready" }),
-        reset: () => {},
+        syncFromServer: async () => {},
+        reset: async () => {},
       };
     }
 
@@ -305,7 +307,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         };
       },
 
-      deposit: (amount, opts) => {
+      deposit: async (amount, opts) => {
         if (!Number.isFinite(amount) || amount <= 0) {
           return { ok: false, error: "Invalid amount" };
         }
@@ -314,6 +316,33 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const isRefill5000 = !!opts?.refill5000 || amount === 5000;
         const isRefill100 = !!opts?.refill100 || amount === 100;
         const now = Date.now();
+
+        if (user?.id) {
+          try {
+            const res = await fetch("/api/wallet", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                action: "claim_refill",
+                kind: isRefill5000 ? "refill5000" : "refill100",
+                delta: amount,
+                bypassCooldown: bypass,
+              }),
+            });
+            const data = (await res.json().catch(() => ({}))) as any;
+            if (!res.ok) {
+              return {
+                ok: false,
+                error: String(data?.error ?? "Refill failed"),
+                nextAvailableAt: Number(data?.nextAvailableAt ?? 0) || undefined,
+              };
+            }
+            if (data?.state) setState(normalizeWalletState(data.state));
+            return { ok: true, nextAvailableAt: Number(data?.nextAvailableAt ?? 0) || undefined };
+          } catch {
+            return { ok: false, error: "Refill failed" };
+          }
+        }
 
         if (isRefill5000 && !bypass) {
           const nextAt = (state.lastRefill5000At ?? 0) + REFILL_5000_COOLDOWN_MS;
@@ -744,8 +773,38 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
       },
 
-      reset: () => {
+      syncFromServer: async () => {
+        if (!user?.id) return;
+        try {
+          const res = await fetch("/api/wallet", { cache: "no-store" });
+          if (!res.ok) return;
+          const data = (await res.json().catch(() => ({}))) as { state?: WalletState | null };
+          if (data.state) setState(normalizeWalletState(data.state));
+        } catch {
+          // ignore
+        }
+      },
+
+      reset: async (opts) => {
+        if (user?.id) {
+          try {
+            const res = await fetch("/api/wallet", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ action: "reset_wallet", balance: Number(opts?.balance ?? 1000) }),
+            });
+            const data = (await res.json().catch(() => ({}))) as any;
+            if (res.ok && data?.state) {
+              setState(normalizeWalletState(data.state));
+              return;
+            }
+          } catch {
+            // ignore
+          }
+        }
         const next = freshState();
+        if (typeof opts?.balance === "number") next.balance = clampMoney(Math.max(0, Number(opts.balance) || 0));
+        next.updatedAt = Date.now();
         setState(next);
       },
     };

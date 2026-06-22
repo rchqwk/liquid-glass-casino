@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../lib/authServer";
-import { applyPrestige, upsertBlackjackInventory } from "../../lib/db";
+import { applyPrestige, upsertBlackjackInventory, upsertUserWalletState } from "../../lib/db";
 import { defaultInventory } from "../../lib/blackjackMultiplayer";
+import { randomHex, sha256Hex } from "../../lib/provablyFair";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,23 @@ function defaultColorForPrestige(level: number) {
   return null;
 }
 
+function zeroWalletState() {
+  const serverSeed = randomHex(32);
+  const clientSeed = randomHex(16);
+  return {
+    balance: 0,
+    serverSeed,
+    serverSeedHash: sha256Hex(serverSeed),
+    clientSeed,
+    nonce: 0,
+    history: [],
+    lastRefill5000At: 0,
+    lastRefill100At: 0,
+    openBets: {},
+    updatedAt: Date.now(),
+  };
+}
+
 export async function POST(req: Request) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -33,10 +51,12 @@ export async function POST(req: Request) {
   // Apply prestige (server-side) + reset blackjack inventory (powerups/boxes).
   const updatedUser = await applyPrestige({ userId: user.id, nextColor });
   await upsertBlackjackInventory(user.id, defaultInventory());
+  const walletState = await upsertUserWalletState(user.id, zeroWalletState());
 
   return NextResponse.json({
     ok: true,
     user: updatedUser,
+    walletState,
     nextThreshold: nextPrestigeThreshold(Number((updatedUser as any)?.prestige_level ?? nextLevel)),
   });
 }

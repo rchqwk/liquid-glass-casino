@@ -31,6 +31,23 @@ async function loadWallet(userId: number) {
   return (await getUserWalletState(userId)) ?? freshWalletState();
 }
 
+function resetWalletState(balance = 1000) {
+  const serverSeed = randomHex(32);
+  const clientSeed = randomHex(16);
+  return {
+    balance: clampMoney(Math.max(0, balance)),
+    serverSeed,
+    serverSeedHash: sha256Hex(serverSeed),
+    clientSeed,
+    nonce: 0,
+    history: [],
+    lastRefill5000At: 0,
+    lastRefill100At: 0,
+    openBets: {},
+    updatedAt: Date.now(),
+  };
+}
+
 export async function GET() {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -154,6 +171,60 @@ export async function POST(req: Request) {
     };
     const saved = await upsertUserWalletState(user.id, next);
     return NextResponse.json({ ok: true, state: saved, balanceAfter: saved?.balance ?? next.balance });
+  }
+
+  if (action === "claim_refill") {
+    const kind = String(body?.outcome ?? body?.game ?? body?.state?.kind ?? body?.delta ?? body?.action ?? "").trim();
+    const refillKind = String((body as any)?.kind ?? "").trim();
+    const actualKind = refillKind || kind;
+    const bypassCooldown = !!(body as any)?.bypassCooldown;
+    const amount = clampMoney(Number(body?.delta ?? body?.wager ?? body?.baseWager ?? 0) || 0);
+    const now = Date.now();
+    const isRefill5000 = actualKind === "refill5000";
+    const isRefill100 = actualKind === "refill100";
+    if (!isRefill5000 && !isRefill100) {
+      return NextResponse.json({ error: "Invalid refill kind" }, { status: 400 });
+    }
+    if (!(amount > 0)) return NextResponse.json({ error: "Invalid refill amount" }, { status: 400 });
+    if (isRefill5000 && !bypassCooldown) {
+      const nextAt = Number(state.lastRefill5000At ?? 0) + 15 * 60 * 1000;
+      if (now < nextAt) return NextResponse.json({ error: "Refill is on cooldown.", nextAvailableAt: nextAt }, { status: 400 });
+    }
+    if (isRefill100 && !bypassCooldown) {
+      const nextAt = Number(state.lastRefill100At ?? 0) + 60 * 1000;
+      if (now < nextAt) return NextResponse.json({ error: "Refill is on cooldown.", nextAvailableAt: nextAt }, { status: 400 });
+    }
+    const next = {
+      ...state,
+      balance: clampMoney(state.balance + amount),
+      lastRefill5000At: isRefill5000 && !bypassCooldown ? now : Number(state.lastRefill5000At ?? 0),
+      lastRefill100At: isRefill100 && !bypassCooldown ? now : Number(state.lastRefill100At ?? 0),
+      history: [
+        {
+          ts: now,
+          game: "Wallet Refill",
+          wager: amount,
+          multiplier: 1,
+          profit: amount,
+          outcome: isRefill5000 ? "Large refill claimed" : "Quick refill claimed",
+        },
+        ...(state.history ?? []),
+      ].slice(0, 20),
+      updatedAt: now,
+    };
+    const saved = await upsertUserWalletState(user.id, next);
+    return NextResponse.json({
+      ok: true,
+      state: saved,
+      balanceAfter: saved?.balance ?? next.balance,
+      nextAvailableAt: isRefill5000 ? Number(saved?.lastRefill5000At ?? next.lastRefill5000At) + 15 * 60 * 1000 : Number(saved?.lastRefill100At ?? next.lastRefill100At) + 60 * 1000,
+    });
+  }
+
+  if (action === "reset_wallet") {
+    const balance = clampMoney(Number((body as any)?.balance ?? 1000) || 0);
+    const saved = await upsertUserWalletState(user.id, resetWalletState(balance));
+    return NextResponse.json({ ok: true, state: saved, balanceAfter: saved?.balance ?? balance });
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });

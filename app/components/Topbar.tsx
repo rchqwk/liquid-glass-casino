@@ -7,7 +7,7 @@ import { useAuth } from "../lib/authClient";
 import { formatChips, formatNumberWords } from "../lib/format";
 
 export function Topbar() {
-  const { balance, deposit, reset, setBalance, refill5000AvailableAt, refill100AvailableAt } = useWallet();
+  const { balance, deposit, reset, syncFromServer, refill5000AvailableAt, refill100AvailableAt } = useWallet();
   const { user, loading, refresh } = useAuth();
   const role = user?.role_level ?? 0;
   const [barOpen, setBarOpen] = useState(false);
@@ -272,9 +272,8 @@ export function Topbar() {
                     });
                     const j = (await res.json().catch(() => ({}))) as any;
                     if (!res.ok) throw new Error(j?.error ?? "Failed");
-                    // Reset local wallet (chips) client-side.
-                    reset();
-                    setBalance(0);
+                    await reset({ balance: 0 });
+                    await syncFromServer();
                     await refresh();
                     setPrestigeModalOpen(false);
                     setMsg(`Prestiged to ${nextPrestigeLevel}.`);
@@ -398,13 +397,13 @@ export function Topbar() {
               </Link>
               <button
                 className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
-                onClick={() => {
+                onClick={async () => {
                   setMsg(null);
                   if (!canRefill) {
                     setMsg("Sign in to refill.");
                     return;
                   }
-                  const res = deposit(100, { bypassCooldown: role >= 1 });
+                  const res = await deposit(100, { bypassCooldown: role >= 1, refill100: true });
                   if (!res.ok) {
                     setMsg(
                       res.nextAvailableAt
@@ -420,19 +419,21 @@ export function Topbar() {
               </button>
               <button
                 className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
-                onClick={() => {
+                onClick={async () => {
                   setMsg(null);
                   if (!canRefill) {
                     setMsg("Sign in to refill.");
                     return;
                   }
-                  const res = deposit(refillAmount, { bypassCooldown: role >= 1, refill5000: true });
+                  const res = await deposit(refillAmount, { bypassCooldown: role >= 1, refill5000: true });
                   if (!res.ok) {
                     setMsg(
                       res.nextAvailableAt
                         ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 60000)} min.`
                         : res.error,
                     );
+                  } else {
+                    setMsg(`Added ${formatChips(refillAmount)} chips.`);
                   }
                 }}
                 disabled={!canRefill || (role < 1 && refillCooldownMs > 0)}
@@ -448,7 +449,7 @@ export function Topbar() {
               {role >= 1 ? (
                 <button
                   className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
-                  onClick={reset}
+                  onClick={() => void reset()}
                   type="button"
                   title="Reset wallet + RNG seeds"
                 >
