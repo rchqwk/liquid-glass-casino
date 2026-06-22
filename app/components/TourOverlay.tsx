@@ -18,7 +18,7 @@ export function TourOverlay({ steps }: { steps: TourStep[] }) {
   const pathname = usePathname();
   const page: TourStep["page"] | null = useMemo(() => {
     if (!pathname) return null;
-    if (pathname === "/casino/blackjack") return "blackjack_lobby";
+    if (pathname === "/casino/blackjack" || pathname === "/casino/blackjack-v2") return "blackjack_lobby";
     if (pathname.startsWith("/casino/blackjack/") && pathname !== "/casino/blackjack/discord") return "blackjack_table";
     return null;
   }, [pathname]);

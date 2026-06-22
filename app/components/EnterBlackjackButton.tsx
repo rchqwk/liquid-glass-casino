@@ -29,9 +29,9 @@ export function EnterBlackjackButton() {
   return (
     <Link
       className="glass-soft glass-shine relative inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-medium text-white transition hover:bg-white/10"
-      href="/casino/blackjack"
+      href="/casino/blackjack-v2"
     >
-      Enter blackjack
+      Enter Blackjack V2
       {players > 0 ? (
         <span
           title={`${players} player(s) in Discord blackjack right now`}
@@ -43,4 +43,3 @@ export function EnterBlackjackButton() {
     </Link>
   );
 }
-

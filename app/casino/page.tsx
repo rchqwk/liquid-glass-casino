@@ -1,5 +1,5 @@
-import { GamesGallery } from "./GamesGallery";
+import { redirect } from "next/navigation";
 
 export default function CasinoLobbyPage() {
-  return <GamesGallery />;
+  redirect("/casino/blackjack-v2");
 }

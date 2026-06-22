@@ -54,7 +54,7 @@ export function OnboardingTutorial() {
     }
     setOpen(false);
     // Start tour at the blackjack lobby so we can guide into a table.
-    window.location.href = "/casino/blackjack";
+    window.location.href = "/casino/blackjack-v2";
   };
 
   const openNewTab = (path: string) => {
@@ -125,4 +125,3 @@ export function OnboardingTutorial() {
     </div>
   );
 }
-

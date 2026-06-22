@@ -37,7 +37,6 @@ const GAMES: GameCard[] = [
   },
   { gameId: "dice", title: "Dice", desc: "Pick a target and roll under.", href: "/casino/dice" },
   { gameId: "roulette", title: "Roulette", desc: "European (0–36).", href: "/casino/roulette" },
-  { gameId: "blackjack", title: "Arcade Blackjack", desc: "Basic blackjack (prototype).", href: "/casino/blackjack", tag: "UP TO 10 PLAYERS" },
   { gameId: "poker", title: "Poker", desc: "Prototype poker page.", href: "/casino/poker" },
 ];
 
@@ -45,7 +44,13 @@ function money(n: number) {
   return (Number.isFinite(n) ? n : 0).toFixed(2);
 }
 
-export function GamesGallery() {
+export function GamesGallery({
+  title = "Legacy Casino",
+  description = "The original prototype games now live here as side modes and minigames.",
+}: {
+  title?: string;
+  description?: string;
+}) {
   const [stats, setStats] = useState<Record<string, StatRow>>({});
   const [totalWagered, setTotalWagered] = useState(0);
   const [sortBy, setSortBy] = useState<"wager" | "bets">(() => {
@@ -106,9 +111,12 @@ export function GamesGallery() {
   return (
     <div className="flex flex-col gap-6">
       <div className="glass glass-shine rounded-3xl p-6">
-        <h2 className="text-xl font-semibold text-white">Games</h2>
+        <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold tracking-wide text-white/70">
+          LEGACY CASINO
+        </div>
+        <h2 className="mt-3 text-xl font-semibold text-white">{title}</h2>
         <p className="mt-2 text-sm leading-6 text-white/70">
-          Browse the active games. Stats below are for the last 24 hours.
+          {description} Stats below are for the last 24 hours.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -172,6 +180,12 @@ export function GamesGallery() {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <Link
+          href="/casino/blackjack-v2"
+          className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-white/10"
+        >
+          Blackjack V2
+        </Link>
         <Link
           href="/casino/leaderboard"
           className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-white/10"

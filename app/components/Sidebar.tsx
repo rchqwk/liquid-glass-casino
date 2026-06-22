@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useAuth } from "../lib/authClient";
 
 const nav = [
-  { href: "/casino", label: "Lobby" },
+  { href: "/casino/blackjack-v2", label: "Blackjack V2" },
+  { href: "/casino/legacy", label: "Legacy Casino" },
   { href: "/casino/dice", label: "Dice" },
   { href: "/casino/roulette", label: "Roulette" },
   { href: "/casino/slots", label: "EMOJI Hold and Win" },
   { href: "/casino/slots-5x5", label: "Fruit Bowl Super Ways" },
   { href: "/casino/slots-10x10", label: "Break Bonanza" },
-  { href: "/casino/blackjack", label: "Blackjack" },
   { href: "/casino/poker", label: "Poker" },
   { href: "/casino/leaderboard", label: "Leaderboard" },
   { href: "/casino/profile", label: "Profile" },

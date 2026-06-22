@@ -133,7 +133,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                         } catch {
                           // ignore
                         }
-                        window.location.href = "/casino/blackjack";
+                        window.location.href = "/casino/blackjack-v2";
                       }}
                     >
                       Play with username (temporary)

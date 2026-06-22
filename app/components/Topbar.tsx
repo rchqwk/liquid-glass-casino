@@ -312,7 +312,7 @@ export function Topbar() {
           <div className="glass glass-shine flex items-center justify-between gap-3 rounded-3xl px-4 py-3">
             <div className="flex items-center gap-3">
               <Link
-                href="/casino"
+                href="/casino/blackjack-v2"
                 className="glass-soft inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/10"
                 title="Home"
               >
@@ -324,7 +324,7 @@ export function Topbar() {
                     strokeLinejoin="round"
                   />
                 </svg>
-                Home
+                Blackjack V2
               </Link>
               <span className="hidden text-xs text-white/55 sm:inline">Play-money prototype</span>
             </div>
@@ -334,7 +334,7 @@ export function Topbar() {
                 <>
                   <Link
                     className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
-                    href="/casino/blackjack"
+                    href="/casino/blackjack-v2"
                   >
                     Back to lobby
                   </Link>
@@ -366,6 +366,12 @@ export function Topbar() {
                   </button>
                 </>
               ) : null}
+              <Link
+                className="hidden rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white sm:inline"
+                href="/casino/legacy"
+              >
+                Legacy Casino
+              </Link>
               <Link
                 className="hidden rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white sm:inline"
                 href="/casino/leaderboard"
