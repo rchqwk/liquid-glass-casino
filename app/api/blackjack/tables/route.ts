@@ -9,13 +9,10 @@ import {
 import { newTableState, safePublicStateForUser, tickTable } from "../../../lib/blackjackMultiplayer";
 import { defaultInventory, ensureInventory } from "../../../lib/blackjackInventory";
 import { persistBlackjackStateInventories, saveBlackjackTableState } from "../../../lib/blackjackStatePersistence";
+import { shortId } from "../../../lib/blackjackUtils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function shortId() {
-  return Math.random().toString(16).slice(2, 10);
-}
 
 export async function GET() {
   const user = await getAuthedUserAsync();

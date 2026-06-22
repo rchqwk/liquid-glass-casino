@@ -4,13 +4,10 @@ import { getBlackjackTable } from "../../../../../lib/db";
 import { safePublicStateForUser, tickTable } from "../../../../../lib/blackjackMultiplayer";
 import { ensureInventory } from "../../../../../lib/blackjackInventory";
 import { saveBlackjackTableState } from "../../../../../lib/blackjackStatePersistence";
+import { shortId, shortLongId } from "../../../../../lib/blackjackUtils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function shortId() {
-  return Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 10);
-}
 
 function clamp01(n: number) {
   if (!Number.isFinite(n)) return 0.5;
@@ -65,7 +62,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       ? seat.inventory.collectibles.figurines
       : [];
     (seat.inventory as any).bonusPoints -= cost;
-    seat.inventory.collectibles.figurines.push({ id: shortId(), imageUrl, createdAt: now });
+    seat.inventory.collectibles.figurines.push({ id: shortLongId(), imageUrl, createdAt: now });
     state.updatedAt = now;
   } else if (action === "sell_figurine") {
     const value = 15;
@@ -177,7 +174,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       seat.inventory.collectibles.owned = owned;
     } else if (deco.kind === "figurine") {
       const imageUrl = String(deco.imageUrl ?? "");
-      const fid = String(deco.key ?? decorationId ?? shortId());
+      const fid = String(deco.key ?? decorationId ?? shortLongId());
       if (imageUrl) {
         seat.inventory.collectibles.figurines = seat.inventory.collectibles.figurines ?? [];
         seat.inventory.collectibles.figurines.push({ id: fid, imageUrl, createdAt: now });

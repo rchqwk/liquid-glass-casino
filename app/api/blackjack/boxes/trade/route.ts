@@ -7,13 +7,10 @@ import {
 import { SPECIALS } from "../../../../lib/blackjackMultiplayer";
 import { ensureInventory } from "../../../../lib/blackjackInventory";
 import { syncUserBlackjackInventoryIntoTables } from "../../../../lib/blackjackStatePersistence";
+import { shortId } from "../../../../lib/blackjackUtils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function shortId() {
-  return Math.random().toString(16).slice(2, 10);
-}
 
 function rollBox(tier: "rare" | "legendary" | "mythic", seed: number) {
   const rand = (() => {
