@@ -14,9 +14,10 @@ import {
   normalizeInventory,
   returnPlacedCollectiblesToInventory,
 } from "./blackjackInventory";
+import { appendBlackjackChatMessage, appendBlackjackEvent, initialBlackjackRoomEvents } from "./blackjackRoomFeed";
 import { normalizeHandsForSeat } from "./blackjackSeatState";
 import { safePublicBlackjackStateForUser } from "./blackjackStateView";
-import { applyBondAccrual, collectibleEmoji, randomCollectibleKey, roundMoney, shortChatId, shortEventId, shortId } from "./blackjackUtils";
+import { applyBondAccrual, collectibleEmoji, randomCollectibleKey, roundMoney, shortEventId, shortId } from "./blackjackUtils";
 
 export type Phase =
   | "betting"
@@ -532,13 +533,7 @@ export function newTableState(input: { id: string; name: string; public: boolean
     password: null,
     afkKickEnabled: true,
     chat: [],
-    events: [
-      {
-        id: shortEventId(),
-        at: input.now,
-        text: `The deck has been shuffled. A new shoe card was placed at card number ${shoeCutCardAt}.`,
-      },
-    ],
+    events: initialBlackjackRoomEvents(input.now, shoeCutCardAt),
     decorations: [],
     phase: "betting",
     round: 1,
@@ -688,7 +683,6 @@ function startBetting(state: TableState, now: number) {
   s.peekByUserId = {};
   s.lastResults = s.lastResults ?? {};
   s.evictedInventories = s.evictedInventories ?? [];
-  s.events = Array.isArray(s.events) ? s.events : [];
 
   // Keep using the current shoe across hands until the cut card is reached.
   // Once it is reached, shuffle a fresh shoe at the next betting phase.
@@ -702,12 +696,7 @@ function startBetting(state: TableState, now: number) {
     const cutMax = Math.max(cutMin, Math.floor(s.shoeInitialSize * 0.82));
     s.shoeCutCardAt = cutMin + Math.floor(cutRng() * (cutMax - cutMin + 1));
     s.shoeShufflePending = false;
-    s.events.push({
-      id: shortEventId(),
-      at: now,
-      text: `The deck has been shuffled. A new shoe card was placed at card number ${s.shoeCutCardAt}.`,
-    });
-    if (s.events.length > 80) s.events = s.events.slice(-80);
+    appendBlackjackEvent(s, now, `The deck has been shuffled. A new shoe card was placed at card number ${s.shoeCutCardAt}.`);
   }
 
   // Reset round-specific flags, keep inventory
@@ -874,13 +863,7 @@ function drawFromShoe(s: TableState): number | null {
     const cutAt = Math.max(0, Number(s.shoeCutCardAt ?? 0) || 0);
     if (!s.shoeShufflePending && cutAt > 0 && s.shoeCardsDealt >= cutAt) {
       s.shoeShufflePending = true;
-      s.events = Array.isArray(s.events) ? s.events : [];
-      s.events.push({
-        id: shortEventId(),
-        at: Date.now(),
-        text: `The shoe card has been reached at card number ${cutAt}. The deck will be shuffled after this hand.`,
-      });
-      if (s.events.length > 80) s.events = s.events.slice(-80);
+      appendBlackjackEvent(s, Date.now(), `The shoe card has been reached at card number ${cutAt}. The deck will be shuffled after this hand.`);
     }
   }
   return typeof next === "number" ? next : null;
@@ -1501,7 +1484,6 @@ export function applySpecial(
   if (!invConsume(actor.inventory, input.id)) return { state: s, error: "No charges left." };
 
   // Record a table-wide event + tag the affected hand/dealer with the powerup used.
-  s.events = Array.isArray(s.events) ? s.events : [];
   const isDealerTarget = !targetSeat;
   const targetLabel =
     def.target === "self"
@@ -1511,12 +1493,7 @@ export function applySpecial(
         : targetSeat && targetSeat.userId === actor.userId
           ? ""
           : ` on ${targetSeat?.username ?? "player"}`;
-  s.events.push({
-    id: shortEventId(),
-    at: now,
-    text: `${actor.username} used ${specialLabel(input.id)}${targetLabel}`,
-  });
-  if (s.events.length > 60) s.events = s.events.slice(s.events.length - 60);
+  appendBlackjackEvent(s, now, `${actor.username} used ${specialLabel(input.id)}${targetLabel}`, 60);
 
   const effect = {
     id: shortEventId(),
@@ -1826,12 +1803,7 @@ function settleRound(state: TableState, now: number): TableState {
       for (let i = 0; i < collectibleBoxesEarned; i += 1) {
         const key = randomCollectibleKey((now ^ (s.round * 1103515245) ^ (p.userId * 2654435761) ^ i) >>> 0);
         owned[key] = Math.max(0, Math.floor(Number(owned[key] ?? 0) || 0) + 1);
-        s.events = Array.isArray(s.events) ? s.events : [];
-        s.events.push({
-          id: shortEventId(),
-          at: now,
-          text: `${p.username} found a collectible box: ${collectibleEmoji(key)}`,
-        });
+        appendBlackjackEvent(s, now, `${p.username} found a collectible box: ${collectibleEmoji(key)}`);
       }
       p.inventory.collectibles.owned = owned;
       s.updatedAt = now;
@@ -1889,10 +1861,7 @@ export function applyChatMessage(
   const username = String(input?.username ?? seat?.username ?? "Spectator");
   const prestigeLevel = Number(input?.prestigeLevel ?? (seat as any)?.prestigeLevel ?? 0) || 0;
   const nameColor = ((input?.nameColor ?? (seat as any)?.nameColor ?? null) as string | null);
-  s.chat = Array.isArray(s.chat) ? s.chat : [];
-  s.chat.push({ id: shortChatId(), userId, username, text, at: now, prestigeLevel, nameColor });
-  // Keep last 120 messages.
-  if (s.chat.length > 120) s.chat = s.chat.slice(s.chat.length - 120);
+  appendBlackjackChatMessage(s, { userId, username, text, at: now, prestigeLevel, nameColor });
 
   s.lastActivityAt = now;
   s.updatedAt = now;
