@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../lib/authClient";
+import { getBlackjackTableIdFromPayload } from "./useBlackjackTableContract";
 
 type TableRow = {
   id: string;
@@ -246,7 +247,7 @@ function CreateTablePanel(props: {
             });
             const data = (await res.json()) as any;
             if (!res.ok) throw new Error(data?.error ?? "Failed");
-            const tableId = String(data?.meta?.tableId ?? data?.tableId ?? "").trim();
+            const tableId = getBlackjackTableIdFromPayload(data);
             if (!tableId) throw new Error("Table created but id missing");
             window.location.href = `/casino/blackjack/${tableId}`;
           } catch (e: any) {

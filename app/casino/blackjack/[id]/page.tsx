@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
 import { useWallet } from "../../../lib/wallet";
 import { useAuth } from "../../../lib/authClient";
+import { useBlackjackTableContract } from "../useBlackjackTableContract";
 
 type Suit = "♠" | "♥" | "♦" | "♣";
 type Card = { rank: string; suit: Suit; value: number };
@@ -129,36 +130,6 @@ type BJState = {
   }>;
 };
 
-type BJTableMeta = {
-  tableId: string;
-  name: string;
-  public: boolean;
-  phase: string;
-  round: number;
-  seatCount: number;
-  spectatorCount: number;
-  meSeatIndex: number;
-  isSeated: boolean;
-  isSpectator: boolean;
-  canChat: boolean;
-  currentTurnSeatIndex: number | null;
-  currentTurnUserId: number | null;
-  bettingEndsAt: number;
-  turnEndsAt: number;
-  dealerWindowEndsAt: number;
-  updatedAt: number;
-  lastActivityAt: number;
-};
-
-type BJTablePayload = {
-  state?: BJState;
-  meta?: BJTableMeta;
-  error?: string;
-  tableId?: string;
-  ok?: boolean;
-  redeemedAmount?: number;
-};
-
 export default function BlackjackTablePage() {
   const { beginBet, balance, reserveServerBet, settleServerBet, cancelServerBet, adjustServerBalance } = useWallet();
   const { user, discordMode } = useAuth();
@@ -167,24 +138,18 @@ export default function BlackjackTablePage() {
     typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params?.id?.[0] : undefined;
   const safeTableId = tableId && tableId !== "undefined" ? tableId : null;
   const rpLastRef = useRef<string>("");
-  const [state, setState] = useState<BJState | null>(null);
-  const [tableMeta, setTableMeta] = useState<BJTableMeta | null>(null);
+  const [tick, setTick] = useState(0);
+  const { state, setState, tableMeta, err, setErr, applyTablePayload, requestTableRoute } =
+    useBlackjackTableContract<BJState>(safeTableId, tick);
   const stateRef = useRef<BJState | null>(null);
   const [betAmount, setBetAmount] = useState(10);
   const [allIn, setAllIn] = useState(false);
   const [ppAmount, setPpAmount] = useState(0);
-  const [err, setErr] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
   const [reportedKey, setReportedKey] = useState<string | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
-
-  const applyTablePayload = (payload: BJTablePayload | null | undefined) => {
-    if (payload?.state) setState(payload.state);
-    if (payload?.meta) setTableMeta(payload.meta);
-  };
 
   // When "All in" is active, keep the bet amount synced to current balance.
   useEffect(() => {
@@ -414,36 +379,7 @@ export default function BlackjackTablePage() {
     window.location.replace(`/casino/blackjack/${encodeURIComponent(channelId)}`);
   }, [discordMode, safeTableId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        if (!safeTableId) {
-          setErr("Invalid table id");
-          setState(null);
-          return;
-        }
-        const res = await fetch(`/api/blackjack/tables/${safeTableId}`, { cache: "no-store" });
-        const data = (await res.json()) as any;
-        if (cancelled) return;
-        if (!res.ok) {
-          setErr(data?.error ?? "Failed to load table");
-          setState(null);
-          setTableMeta(null);
-          return;
-        }
-        setErr(null);
-        applyTablePayload(data);
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [safeTableId, tick]);
 
-  const now = Date.now();
   const isMobile = useMemo(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia?.("(max-width: 640px)")?.matches ?? false;
@@ -541,6 +477,7 @@ export default function BlackjackTablePage() {
       </span>
     );
   };
+  const now = Date.now();
   const bettingLeft = Math.max(0, Math.ceil(((state?.bettingEndsAt ?? 0) - now) / 1000));
   const turnLeft = Math.max(0, Math.ceil(((state?.turnEndsAt ?? 0) - now) / 1000));
   const dealerLeft = Math.max(0, Math.ceil(((state?.dealerWindowEndsAt ?? 0) - now) / 1000));
@@ -986,60 +923,20 @@ export default function BlackjackTablePage() {
       const entered = window.prompt("Room password") ?? "";
       password = entered;
     }
-    const res = await fetch(`/api/blackjack/tables/${safeTableId}/join`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ spectate: !!spectate, password }),
-    });
-    const data = (await res.json()) as any;
-    if (!res.ok) {
-      setErr(data?.error ?? "Failed to join");
-      return;
-    }
-    applyTablePayload(data);
+    const res = await requestTableRoute("join", { spectate: !!spectate, password }, "Failed to join");
+    if (!res?.ok) return;
   };
 
   const post = async (path: string, body?: any) => {
-    setErr(null);
-    if (!safeTableId) {
-      setErr("Invalid table id");
-      return { ok: false as const };
-    }
-    const res = await fetch(`/api/blackjack/tables/${safeTableId}/${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: body ? JSON.stringify(body) : "{}",
-    });
-    const data = (await res.json()) as any;
-    if (!res.ok) setErr(data?.error ?? "Action failed");
-    if (data?.state) applyTablePayload(data);
-    return { ok: !!res.ok, data };
+    return requestTableRoute(path, body, "Action failed");
   };
 
   const postBond = async (body?: any) => {
-    if (!safeTableId) return { ok: false as const };
-    const res = await fetch(`/api/blackjack/tables/${safeTableId}/bond`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body ?? {}),
-    });
-    const data = (await res.json().catch(() => ({}))) as any;
-    if (!res.ok) setErr(data?.error ?? "Bond action failed");
-    if (data?.state) applyTablePayload(data);
-    return { ok: !!res.ok, data };
+    return requestTableRoute("bond", body ?? {}, "Bond action failed");
   };
 
   const postCollectible = async (body?: any) => {
-    if (!safeTableId) return { ok: false as const };
-    const res = await fetch(`/api/blackjack/tables/${safeTableId}/collectibles`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body ?? {}),
-    });
-    const data = (await res.json().catch(() => ({}))) as any;
-    if (!res.ok) setErr(data?.error ?? "Collectibles action failed");
-    if (data?.state) applyTablePayload(data);
-    return { ok: !!res.ok, data };
+    return requestTableRoute("collectibles", body ?? {}, "Collectibles action failed");
   };
 
   // Drag handling for table edit mode
