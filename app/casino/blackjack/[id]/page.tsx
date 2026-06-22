@@ -9,6 +9,7 @@ import { useAuth } from "../../../lib/authClient";
 import { BlackjackChatPanel } from "../blackjackChatPanel";
 import { blackjackCollectibleLabel, BlackjackCollectiblesPanel, BlackjackTableEditInventory } from "../blackjackCollectiblesPanel";
 import { BlackjackHostPanel } from "../blackjackHostPanel";
+import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar } from "../blackjackTableShell";
 import { type BJState, type Seat } from "../blackjackTableTypes";
 import { CardView, cardFromIndex, handValue } from "../blackjackUiPrimitives";
 import { BlackjackTableSeat, getBlackjackChatNameClass } from "../blackjackSeatViews";
@@ -970,70 +971,29 @@ export default function BlackjackTablePage() {
         }}
       />
 
-      {inviteOpen ? (
-        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
-          <div className="glass glass-shine w-full max-w-[620px] rounded-3xl border border-white/10 p-6">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-white">Invite players</div>
-                <div className="mt-1 text-xs text-white/60">Share this link to join the room:</div>
-              </div>
-              <button
-                type="button"
-                className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
-                onClick={() => {
-                  setInviteOpen(false);
-                  setInviteCopied(false);
-                }}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-4">
-              <a
-                href={inviteUrl || "#"}
-                className="break-all font-mono text-xs text-white/85 underline decoration-white/20 underline-offset-4 hover:text-white"
-                onClick={(e) => {
-                  if (!inviteUrl) e.preventDefault();
-                }}
-              >
-                {inviteUrl || "(loading…)"}
-              </a>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
-                  disabled={!inviteUrl}
-                  onClick={async () => {
-                    if (!inviteUrl) return;
-                    try {
-                      await navigator.clipboard.writeText(inviteUrl);
-                      setInviteCopied(true);
-                      window.setTimeout(() => setInviteCopied(false), 1500);
-                    } catch {
-                      // ignore
-                    }
-                  }}
-                >
-                  {inviteCopied ? "Copied" : "Copy link"}
-                </button>
-                <button
-                  type="button"
-                  className="glass-soft rounded-2xl px-4 py-2 text-xs font-medium text-white/70 hover:bg-white/10"
-                  onClick={() => {
-                    if (!inviteUrl) return;
-                    window.open(inviteUrl, "_blank", "noopener,noreferrer");
-                  }}
-                  disabled={!inviteUrl}
-                >
-                  Open link
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <BlackjackInviteModal
+        open={inviteOpen}
+        inviteUrl={inviteUrl}
+        inviteCopied={inviteCopied}
+        onClose={() => {
+          setInviteOpen(false);
+          setInviteCopied(false);
+        }}
+        onCopy={async () => {
+          if (!inviteUrl) return;
+          try {
+            await navigator.clipboard.writeText(inviteUrl);
+            setInviteCopied(true);
+            window.setTimeout(() => setInviteCopied(false), 1500);
+          } catch {
+            // ignore
+          }
+        }}
+        onOpenLink={() => {
+          if (!inviteUrl) return;
+          window.open(inviteUrl, "_blank", "noopener,noreferrer");
+        }}
+      />
 
       {targetPopup.open && state ? (
         <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 p-4">
@@ -1403,133 +1363,59 @@ export default function BlackjackTablePage() {
         myCards={mySeat?.cards ?? []}
         myBonusPoints={Number((myHands as any)?.[myHandIndex]?.bonusPoints ?? (mySeat as any)?.bonusPoints ?? 0)}
       />
-      {state && (mySeat || isSpectator) && topbarOpen ? (
-        <div className="glass glass-shine rounded-3xl p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-semibold text-white">{state?.name ?? "Blackjack Table"}</h2>
-              <p className="mt-1 text-sm text-white/60">
-                Table: <span className="font-mono">{safeTableId ?? "-"}</span> • Round{" "}
-                <span className="font-mono">{state?.round ?? "-"}</span> • Phase{" "}
-                <span className="font-mono">{state?.phase ?? "-"}</span>
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href="/casino/blackjack"
-                className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
-              >
-                Back to lobby
-              </Link>
-              <button
-                type="button"
-                className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
-                onClick={() => setInviteOpen(true)}
-                title="Share a link to join this table"
-              >
-                Invite players
-              </button>
-              <button
-                type="button"
-                className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
-                onClick={() => post("leave")}
-              >
-                Leave
-              </button>
-            </div>
-          </div>
-          {err ? <div className="mt-3 text-sm text-rose-200">{err}</div> : null}
-        </div>
-      ) : null}
+      <BlackjackTableHeader
+        visible={!!(state && (mySeat || isSpectator) && topbarOpen)}
+        tableName={state?.name ?? "Blackjack Table"}
+        tableId={safeTableId ?? "-"}
+        round={Number(state?.round ?? 0)}
+        phase={String(state?.phase ?? "-")}
+        err={err}
+        onOpenInvite={() => setInviteOpen(true)}
+        onLeave={() => {
+          void post("leave");
+        }}
+      />
 
-      {/* Top-of-page turn actions (non-popup) */}
-      {state && mySeat && isMyTurn ? (
-        <div className="sticky top-3 z-[60]">
-          <div className="glass glass-shine rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-white">
-                Your turn
-                {myHandCount > 1 ? (
-                  <span className="ml-2 text-xs font-medium text-white/70">
-                    (Hand {myHandIndex + 1}/{myHandCount})
-                  </span>
-                ) : null}
-              </div>
-              <div className="text-xs text-white/70">
-                Time: <span className="font-mono text-white/85">{turnLeft}s</span>
-              </div>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
-                onClick={() => post("action", { type: "hit" })}
-                disabled={!!mySeat?.busted}
-              >
-                Hit
-              </button>
-              <button
-                type="button"
-                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
-                onClick={() => post("action", { type: "stand" })}
-              >
-                Stand
-              </button>
-              <button
-                type="button"
-                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                onClick={() => {
-                  const wager = Number(mySeat?.bet ?? 0);
-                  const started = beginBet({ game: "Arcade Blackjack", wager });
-                  if ("error" in started) {
-                    setErr(started.error);
-                    return;
-                  }
-                  void post("action", { type: "double_down", betNonce: started.nonce });
-                }}
-                disabled={!canDoubleDown}
-                title="Double your bet, draw one card, and stand"
-              >
-                DD
-              </button>
-              <button
-                type="button"
-                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                onClick={() => {
-                  const wager = Number(mySeat?.bet ?? 0);
-                  const started = beginBet({ game: "Arcade Blackjack", wager });
-                  if ("error" in started) {
-                    setErr(started.error);
-                    return;
-                  }
-                  void post("action", { type: "split", betNonce: started.nonce });
-                }}
-                disabled={!canSplit}
-                title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
-              >
-                Split
-              </button>
-              <button
-                type="button"
-                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10"
-                onClick={() => post("action", { type: "vote_skip" })}
-                title="Skip the remaining turn timer"
-              >
-                Vote skip
-              </button>
-              <button
-                type="button"
-                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
-                onClick={() => post("action", { type: "extend_timer" })}
-                disabled={!!mySeat?.extendUsedThisTurn}
-                title="Extend your turn timer once"
-              >
-                Extend timer
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <BlackjackTurnActionBar
+        visible={!!(state && mySeat && isMyTurn)}
+        myHandIndex={myHandIndex}
+        myHandCount={myHandCount}
+        turnLeft={turnLeft}
+        canDoubleDown={!!canDoubleDown}
+        canSplit={!!canSplit}
+        extendUsed={!!mySeat?.extendUsedThisTurn}
+        busted={!!mySeat?.busted}
+        onHit={() => {
+          void post("action", { type: "hit" });
+        }}
+        onStand={() => {
+          void post("action", { type: "stand" });
+        }}
+        onDoubleDown={() => {
+          const wager = Number(mySeat?.bet ?? 0);
+          const started = beginBet({ game: "Arcade Blackjack", wager });
+          if ("error" in started) {
+            setErr(started.error);
+            return;
+          }
+          void post("action", { type: "double_down", betNonce: started.nonce });
+        }}
+        onSplit={() => {
+          const wager = Number(mySeat?.bet ?? 0);
+          const started = beginBet({ game: "Arcade Blackjack", wager });
+          if ("error" in started) {
+            setErr(started.error);
+            return;
+          }
+          void post("action", { type: "split", betNonce: started.nonce });
+        }}
+        onVoteSkip={() => {
+          void post("action", { type: "vote_skip" });
+        }}
+        onExtend={() => {
+          void post("action", { type: "extend_timer" });
+        }}
+      />
 
       {!state ? (
         <div className="glass-soft rounded-3xl p-5 text-white/70">
