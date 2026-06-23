@@ -88,6 +88,61 @@ body::before {
     radial-gradient(700px 260px at 85% 20%, rgba(255, 255, 255, 0.18), transparent 60%);
 }
 
+/* Cartoon: sticker-like interaction affordances */
+:root[data-lgc-skin="cartoon"] a.glass-soft,
+:root[data-lgc-skin="cartoon"] button.glass-soft,
+:root[data-lgc-skin="cartoon"] a.glass,
+:root[data-lgc-skin="cartoon"] button.glass {
+  border-width: 2px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.34), 0 16px 34px rgba(0, 0, 0, 0.42);
+  transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+:root[data-lgc-skin="cartoon"] a.glass-soft:hover,
+:root[data-lgc-skin="cartoon"] button.glass-soft:hover,
+:root[data-lgc-skin="cartoon"] a.glass:hover,
+:root[data-lgc-skin="cartoon"] button.glass:hover {
+  transform: translateY(-1px) rotate(-0.15deg);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.34), 0 22px 44px rgba(0, 0, 0, 0.46);
+}
+
+:root[data-lgc-skin="cartoon"] a.glass-soft:active,
+:root[data-lgc-skin="cartoon"] button.glass-soft:active,
+:root[data-lgc-skin="cartoon"] a.glass:active,
+:root[data-lgc-skin="cartoon"] button.glass:active {
+  transform: translateY(1px) rotate(0deg);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.36), 0 10px 24px rgba(0, 0, 0, 0.44);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-lgc-skin="cartoon"] a.glass-soft,
+  :root[data-lgc-skin="cartoon"] button.glass-soft,
+  :root[data-lgc-skin="cartoon"] a.glass,
+  :root[data-lgc-skin="cartoon"] button.glass {
+    transition: none;
+  }
+  :root[data-lgc-skin="cartoon"] a.glass-soft:hover,
+  :root[data-lgc-skin="cartoon"] button.glass-soft:hover,
+  :root[data-lgc-skin="cartoon"] a.glass:hover,
+  :root[data-lgc-skin="cartoon"] button.glass:hover,
+  :root[data-lgc-skin="cartoon"] a.glass-soft:active,
+  :root[data-lgc-skin="cartoon"] button.glass-soft:active,
+  :root[data-lgc-skin="cartoon"] a.glass:active,
+  :root[data-lgc-skin="cartoon"] button.glass:active {
+    transform: none;
+  }
+}
+
+/* Cartoon: felt texture overlay (used by Blackjack table surface) */
+:root[data-lgc-skin="cartoon"] .lgc-felt {
+  background-image: radial-gradient(800px 320px at 20% 0%, rgba(255, 255, 255, 0.18), transparent 55%),
+    radial-gradient(900px 360px at 85% 20%, rgba(255, 255, 255, 0.10), transparent 60%),
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(34, 197, 94, 0.22), rgba(6, 10, 26, 0.35));
+  background-size: auto, auto, 12px 12px, auto;
+  background-blend-mode: screen, screen, overlay, normal;
+}
+
 /* Prevent number input spinners (wheel/steppers are too easy to mis-scroll on bet inputs) */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {

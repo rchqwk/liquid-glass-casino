@@ -2523,7 +2523,7 @@ export function BlackjackTablePageClient({
                         );
                       })}
                     </div>
-                    <div className="mx-auto h-[560px] w-full rounded-[48px] border border-white/10 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-black/25 shadow-[0_40px_120px_rgba(0,0,0,.45)]" />
+                    <div className="lgc-felt mx-auto h-[560px] w-full rounded-[48px] border border-white/10 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-black/25 shadow-[0_40px_120px_rgba(0,0,0,.45)]" />
                     <div className="pointer-events-none absolute inset-0 rounded-[48px] ring-1 ring-white/10" />
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                       <div className="h-[480px] w-[320px] rounded-[999px] border border-white/10 bg-gradient-to-b from-emerald-500/12 to-black/20" />
