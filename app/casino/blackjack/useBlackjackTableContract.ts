@@ -70,6 +70,9 @@ export function useBlackjackTableContract<TState>(tableId: string | null, refres
         applyTablePayload(data);
       } catch {
         if (cancelled) return;
+        setErr("Temporary server issue. Retry in a moment.");
+        setState(null);
+        setTableMeta(null);
       }
     })();
     return () => {
