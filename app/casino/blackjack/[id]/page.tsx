@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
 import { useWallet } from "../../../lib/wallet";
 import { useAuth } from "../../../lib/authClient";
+import { useUiLayout } from "../../../lib/uiLayout";
 import { BlackjackChatPanel } from "../blackjackChatPanel";
 import { blackjackCollectibleLabel, BlackjackCollectiblesPanel, BlackjackTableEditInventory } from "../blackjackCollectiblesPanel";
 import { BlackjackHostPanel } from "../blackjackHostPanel";
@@ -26,6 +27,7 @@ export function BlackjackTablePageClient({
 }) {
   const { beginBet, balance, reserveServerBet, settleServerBet, cancelServerBet, adjustServerBalance } = useWallet();
   const { user, discordMode } = useAuth();
+  const { layout: uiLayout } = useUiLayout();
   const params = useParams<{ id?: string | string[] }>();
   const tableId =
     typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params?.id?.[0] : undefined;
@@ -360,8 +362,14 @@ export function BlackjackTablePageClient({
   const figurines = (collectibles?.figurines ?? []) as Array<{ id: string; imageUrl: string }>;
   const decorations = (state?.decorations ?? []) as any[];
   const showV2Shell = experience === "v2";
+  const horizontalMode = showV2Shell && uiLayout === "horizontal";
   const v2HeaderVisible = !!(state && topbarOpen);
   const classicHeaderVisible = !!(state && (mySeat || isSpectator) && topbarOpen);
+  const [hControlsOpen, setHControlsOpen] = useState(false);
+  const [hMenuOpen, setHMenuOpen] = useState(false);
+  const myHasLockedStake =
+    !!mySeat && (Number(mySeat?.bet ?? 0) > 0 || (((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0));
+  const showHorizontalStakeDock = horizontalMode && !!state && state.phase === "betting" && !!mySeat && !myHasLockedStake;
   const roundStatusLabel = !state
     ? ""
     : state.phase === "betting"
@@ -383,6 +391,13 @@ export function BlackjackTablePageClient({
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  useEffect(() => {
+    if (!horizontalMode) {
+      setHControlsOpen(false);
+      setHMenuOpen(false);
+    }
+  }, [horizontalMode]);
 
   // Provide blackjack context to the global top bar.
   useEffect(() => {
@@ -1533,10 +1548,24 @@ export function BlackjackTablePageClient({
           )}
         </div>
       ) : (
-        <div className={`grid grid-cols-1 gap-4 ${showV2Shell ? "xl:grid-cols-[minmax(0,1.15fr)_360px]" : "lg:grid-cols-[360px_1fr]"}`}>
+        <div className={`grid grid-cols-1 gap-4 ${!horizontalMode ? (showV2Shell ? "xl:grid-cols-[minmax(0,1.15fr)_360px]" : "lg:grid-cols-[360px_1fr]") : ""}`}>
+          {horizontalMode && hControlsOpen ? (
+            <button
+              type="button"
+              className="fixed inset-0 z-[83] cursor-default bg-black/80"
+              onClick={() => setHControlsOpen(false)}
+              aria-label="Close controls"
+            />
+          ) : null}
           <div
             ref={roundControlsRef}
-            className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "order-2 xl:order-2" : ""}`}
+            className={
+              horizontalMode
+                ? hControlsOpen
+                  ? "fixed left-1/2 top-1/2 z-[84] w-[min(460px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 glass-soft glass-shine rounded-3xl p-5"
+                  : "hidden"
+                : `glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "order-2 xl:order-2" : ""}`
+            }
             data-tour="bj-round-controls"
           >
             {showV2Shell ? (
@@ -1545,6 +1574,17 @@ export function BlackjackTablePageClient({
                 title="Betting, inventory, and round tools"
                 subtitle="Manage wagers, side bets, powerups, bonds, and host options from one control rail."
               />
+            ) : null}
+            {horizontalMode ? (
+              <div className="mb-2 flex items-center justify-end">
+                <button
+                  type="button"
+                  className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+                  onClick={() => setHControlsOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
             ) : null}
             {!showV2Shell ? <p className="text-sm font-medium text-white">Round controls</p> : null}
             <div className="mt-3 text-xs text-white/60">
@@ -2588,6 +2628,172 @@ export function BlackjackTablePageClient({
               </div>
             </div>
           </div>
+        {/* keep grid open for horizontal fixed overlays */}
+
+        {horizontalMode ? (
+          <>
+            {/* Horizontal UI: minimized side controls */}
+            <div className="pointer-events-none fixed inset-y-0 left-3 z-[82] flex items-center">
+              <div className="pointer-events-auto flex flex-col gap-2">
+                <button
+                  type="button"
+                  className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
+                  onClick={() => setHControlsOpen(true)}
+                >
+                  Controls
+                </button>
+                <button
+                  type="button"
+                  className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
+                  onClick={() => setChatOpen(true)}
+                >
+                  Chat
+                </button>
+              </div>
+            </div>
+            <div className="pointer-events-none fixed inset-y-0 right-3 z-[82] flex items-center">
+              <div className="pointer-events-auto flex flex-col gap-2">
+                <button
+                  type="button"
+                  className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
+                  onClick={() => setCollectiblesOpen(true)}
+                >
+                  Items
+                </button>
+                {isHost ? (
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
+                    onClick={() => setHostOpen(true)}
+                  >
+                    Host
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
+                  onClick={() => setHMenuOpen(true)}
+                >
+                  Menu
+                </button>
+              </div>
+            </div>
+
+            {/* Horizontal UI: persistent stake dock (only when seated + no stake locked) */}
+            {showHorizontalStakeDock ? (
+              <div className="pointer-events-none fixed bottom-4 left-1/2 z-[84] w-[min(520px,calc(100vw-2rem))] -translate-x-1/2">
+                <div className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold text-white/90">Stake window</div>
+                      <div className="mt-1 text-[11px] text-white/60">Visible until you lock a stake for this hand.</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+                      onClick={() => setHControlsOpen(true)}
+                      title="Open full controls"
+                    >
+                      More
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <div className="w-full">
+                      <label className="block text-[11px] text-white/60">Stake (ⓒ)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={betAmount}
+                        onChange={(e) => setBetAmount(Number(e.target.value))}
+                        onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
+                        onKeyDown={(e) => {
+                          if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+                        }}
+                        disabled={allIn}
+                        className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className={`glass-soft rounded-2xl px-4 py-2 text-sm font-semibold hover:bg-white/10 ${
+                          allIn ? "border border-yellow-300/25 bg-yellow-500/10 text-yellow-100" : "text-white/85"
+                        }`}
+                        onClick={() => setAllIn((v) => !v)}
+                        title="Stake your full balance"
+                      >
+                        All in
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/15 disabled:opacity-40"
+                        disabled={betPending}
+                        onClick={placeBetWithWallet}
+                      >
+                        Lock stake
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Horizontal UI: compact menu */}
+            {hMenuOpen ? (
+              <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
+                <div className="glass glass-shine w-full max-w-[520px] rounded-3xl border border-white/10 p-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-white">Menu</div>
+                      <div className="mt-1 text-xs text-white/60">Quick access while keeping the felt full-screen.</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
+                      onClick={() => setHMenuOpen(false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button type="button" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => { setHMenuOpen(false); setHControlsOpen(true); }}>
+                      Controls
+                    </button>
+                    <button type="button" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => { setHMenuOpen(false); setChatOpen(true); }}>
+                      Chat
+                    </button>
+                    <button type="button" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => { setHMenuOpen(false); setCollectiblesOpen(true); }}>
+                      Felt items
+                    </button>
+                    {isHost ? (
+                      <button type="button" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => { setHMenuOpen(false); setHostOpen(true); }}>
+                        Host tools
+                      </button>
+                    ) : (
+                      <Link href={lobbyHref} className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => setHMenuOpen(false)}>
+                        Back to lobby
+                      </Link>
+                    )}
+                    <button type="button" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => { setHMenuOpen(false); setInviteOpen(true); }}>
+                      Share table
+                    </button>
+                    <button
+                      type="button"
+                      className="glass-soft rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-500/15"
+                      onClick={() => {
+                        setHMenuOpen(false);
+                        void post("leave");
+                      }}
+                    >
+                      Exit table
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
         </div>
       )}
 
