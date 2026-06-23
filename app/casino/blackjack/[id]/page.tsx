@@ -370,6 +370,40 @@ export function BlackjackTablePageClient({
   const myHasLockedStake =
     !!mySeat && (Number(mySeat?.bet ?? 0) > 0 || (((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0));
   const showHorizontalStakeDock = horizontalMode && !!state && state.phase === "betting" && !!mySeat && !myHasLockedStake;
+  const horizontalShowLiveDock = horizontalMode && !!state && state.phase !== "betting" && !!mySeat;
+  const horizontalApplicablePowerups: Array<[string, number]> = (() => {
+    if (!horizontalShowLiveDock || !state?.meInventory) return [];
+
+    const inv = state.meInventory;
+    const cats = inv?.categories;
+    const entries: Array<[string, number]> = [];
+
+    if (cats && typeof cats === "object") {
+      for (const bucket of Object.values(cats) as Array<Record<string, number>>) {
+        for (const [k, v] of Object.entries(bucket ?? {})) {
+          if (Number(v) > 0) entries.push([k, Number(v)]);
+        }
+      }
+    } else {
+      for (const [k, v] of Object.entries(inv ?? {})) {
+        if (typeof v === "number" && v > 0) entries.push([k, Number(v)]);
+      }
+    }
+
+    return entries.filter(([k, v]) => {
+      if (v <= 0) return false;
+      const isDealerWindowCard = k.includes("DEALER") && !k.includes("TARGET") && !k.includes("MAGIC");
+      const isAnytimeCard = k.includes("TARGET") || k.includes("MAGIC") || k.includes("MYTHIC");
+      const isBettingCard = k === "BJ_PROTECTOR" || k === "DOUBLE_PAYOUT";
+      return isDealerWindowCard
+        ? !!canUseDealerSpecial
+        : isAnytimeCard
+          ? !!canUseAnytimeSpecial
+          : isBettingCard
+            ? state?.phase === "betting"
+            : !!isMyTurn;
+    });
+  })();
   const roundStatusLabel = !state
     ? ""
     : state.phase === "betting"
@@ -398,6 +432,23 @@ export function BlackjackTablePageClient({
       setHMenuOpen(false);
     }
   }, [horizontalMode]);
+
+  const usePowerupQuick = (specialId: string) => {
+    if (specialId === "REMOVE_CARD_SELF") {
+      setRemoveCardPopup({ open: true, specialId });
+      return;
+    }
+    if (specialId.includes("TARGET") || specialId.includes("MAGIC") || specialId.includes("MYTHIC")) {
+      setTargetPopup({ open: true, specialId, target: null });
+      return;
+    }
+    void post("action", {
+      type: "special",
+      specialId,
+      targetUserId: null,
+      cardIndex: null,
+    });
+  };
 
   // Provide blackjack context to the global top bar.
   useEffect(() => {
@@ -2656,9 +2707,9 @@ export function BlackjackTablePageClient({
                 <button
                   type="button"
                   className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
-                  onClick={() => setCollectiblesOpen(true)}
+                  onClick={() => setHControlsOpen(true)}
                 >
-                  Items
+                  Powerups
                 </button>
                 {isHost ? (
                   <button
@@ -2735,6 +2786,154 @@ export function BlackjackTablePageClient({
                       </button>
                     </div>
                   </div>
+                </div>
+              </div>
+            ) : null}
+
+            {horizontalShowLiveDock ? (
+              <div className="pointer-events-none fixed bottom-4 left-1/2 z-[84] w-[min(620px,calc(100vw-2rem))] -translate-x-1/2">
+                <div className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold text-white/90">Live controls</div>
+                      <div className="mt-1 text-[11px] text-white/60">
+                        {state?.phase === "player_turns"
+                          ? "Your active round tools now stay in the old stake slot."
+                          : state?.phase === "dealer_window"
+                            ? "Dealer-window tools stay visible here while the hand resolves."
+                            : "This dock keeps only the current round tools on screen."}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+                      onClick={() => setHControlsOpen(true)}
+                      title="Open full controls"
+                    >
+                      More
+                    </button>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <div
+                      className={`rounded-2xl border px-3 py-2 text-xs ${
+                        mySeat?.busted
+                          ? "border-rose-400/20 bg-rose-500/10 text-rose-100"
+                          : (myLiveTotal ?? 0) >= 21
+                            ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
+                            : "border-cyan-400/20 bg-cyan-500/10 text-cyan-100"
+                      }`}
+                    >
+                      <div className="text-[10px] uppercase tracking-wide opacity-70">Your total</div>
+                      <div className="mt-1 font-mono text-sm font-semibold">{myLiveTotal ?? 0}</div>
+                    </div>
+                    <div
+                      className={`rounded-2xl border px-3 py-2 text-xs ${
+                        Number(mySeat?.bet ?? 0) > 0
+                          ? "border-amber-400/20 bg-amber-500/10 text-amber-100"
+                          : "border-white/10 bg-white/5 text-white/75"
+                      }`}
+                    >
+                      <div className="text-[10px] uppercase tracking-wide opacity-70">Stake</div>
+                      <div className="mt-1 font-mono text-sm font-semibold">{Number(mySeat?.bet ?? 0).toFixed(2)}</div>
+                    </div>
+                  </div>
+
+                  {isMyTurn ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                        onClick={() => post("action", { type: "hit" })}
+                        disabled={!!mySeat?.busted}
+                      >
+                        Hit
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                        onClick={() => post("action", { type: "stand" })}
+                      >
+                        Stand
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                        onClick={async () => {
+                          const wager = Number(mySeat?.bet ?? 0);
+                          const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
+                          if ("error" in started) {
+                            setErr(started.error);
+                            return;
+                          }
+                          const res = await post("action", { type: "double_down", betNonce: started.nonce });
+                          if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
+                        }}
+                        disabled={!canDoubleDown}
+                      >
+                        DD
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                        onClick={async () => {
+                          const wager = Number(mySeat?.bet ?? 0);
+                          const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
+                          if ("error" in started) {
+                            setErr(started.error);
+                            return;
+                          }
+                          const res = await post("action", { type: "split", betNonce: started.nonce });
+                          if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
+                        }}
+                        disabled={!canSplit}
+                      >
+                        Split hand
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10"
+                        onClick={() => post("action", { type: "vote_skip" })}
+                      >
+                        Skip timer vote
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+                        onClick={() => post("action", { type: "extend_timer" })}
+                        disabled={!!mySeat?.extendUsedThisTurn}
+                      >
+                        Add turn time
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-white/70">
+                      {state.phase === "dealer_window"
+                        ? "Dealer tools can still be played if you have them."
+                        : "Only the useful round controls stay here while you wait for your turn."}
+                    </div>
+                  )}
+
+                  {horizontalApplicablePowerups.length ? (
+                    <div className="mt-3 border-t border-white/10 pt-3">
+                      <div className="mb-2 text-[11px] font-semibold text-white/70">Usable powerups</div>
+                      <div className="flex flex-wrap gap-2">
+                        {horizontalApplicablePowerups.slice(0, 8).map(([k, v]) => (
+                          <button
+                            key={k}
+                            type="button"
+                            className="glass-soft flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
+                            onClick={() => usePowerupQuick(k)}
+                            title={k}
+                          >
+                            <PowerupStickerIcon id={k} className="text-white/90" />
+                            <span>{powerupLabel(k)}</span>
+                            <span className="font-mono text-white/60">{v}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}
