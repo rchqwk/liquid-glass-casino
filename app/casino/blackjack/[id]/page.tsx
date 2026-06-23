@@ -376,6 +376,8 @@ export function BlackjackTablePageClient({
   const bonusPointsBalance = Math.max(0, Math.floor(Number((state?.meInventory as any)?.bonusPoints ?? 0) || 0));
   const allInWinStreak = Math.max(0, Math.floor(Number((state?.meInventory as any)?.allInWinStreak ?? 0) || 0));
   const bondAmountPercents = [10, 25, 50, 75, 90, 100] as const;
+  const prestigeLevel = Math.max(0, Number((user as any)?.prestige_level ?? 0) || 0);
+  const largeRefillAmount = Math.max(0, 5000 + 10000 * prestigeLevel);
 
   const collectibles = (state?.meInventory as any)?.collectibles ?? { owned: {}, figurines: [] };
   const ownedCollectibles = (collectibles?.owned ?? {}) as Record<string, number>;
@@ -1013,12 +1015,12 @@ export function BlackjackTablePageClient({
                 className="glass-soft rounded-3xl border border-cyan-300/20 bg-cyan-500/10 p-4 text-left text-cyan-100 hover:bg-cyan-500/15 disabled:opacity-40"
                 disabled={refill5000Left > 0}
                 onClick={async () => {
-                  const res = await deposit(5000, { refill5000: true });
+                  const res = await deposit(largeRefillAmount, { refill5000: true });
                   if (!res.ok) setErr(res.error);
                 }}
               >
                 <div className="text-sm font-semibold">Large top-up</div>
-                <div className="mt-1 font-mono text-lg">+5000 ⓒ</div>
+                <div className="mt-1 font-mono text-lg">+{largeRefillAmount} ⓒ</div>
                 <div className="mt-2 text-xs text-cyan-100/75">
                   {refill5000Left > 0 ? `Available in ${formatCooldown(refill5000Left)}` : "Available now"}
                 </div>
@@ -2859,13 +2861,6 @@ export function BlackjackTablePageClient({
                 <button
                   type="button"
                   className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
-                  onClick={() => setHControlsOpen(true)}
-                >
-                  Controls
-                </button>
-                <button
-                  type="button"
-                  className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
                   onClick={() => setChatOpen(true)}
                 >
                   Chat
@@ -2877,13 +2872,6 @@ export function BlackjackTablePageClient({
                 className="pointer-events-auto flex flex-col gap-2"
                 style={{ transform: `scale(${horizontalUiScale})`, transformOrigin: "right center" }}
               >
-                <button
-                  type="button"
-                  className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
-                  onClick={() => setHControlsOpen(true)}
-                >
-                  Powerups
-                </button>
                 {isHost ? (
                   <button
                     type="button"
@@ -3166,7 +3154,7 @@ export function BlackjackTablePageClient({
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <button type="button" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => { setHMenuOpen(false); setHControlsOpen(true); }}>
-                      Controls
+                      Powerups
                     </button>
                     <button type="button" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => { setHMenuOpen(false); setChatOpen(true); }}>
                       Chat
