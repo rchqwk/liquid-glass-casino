@@ -88,6 +88,38 @@ body::before {
     radial-gradient(700px 260px at 85% 20%, rgba(255, 255, 255, 0.18), transparent 60%);
 }
 
+/* Cartoon: typography (chunkier headings) */
+:root[data-lgc-skin="cartoon"] h1,
+:root[data-lgc-skin="cartoon"] h2,
+:root[data-lgc-skin="cartoon"] h3 {
+  letter-spacing: -0.015em;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.38), 0 14px 38px rgba(0, 0, 0, 0.35);
+}
+
+@supports (-webkit-text-stroke: 1px black) {
+  :root[data-lgc-skin="cartoon"] h1,
+  :root[data-lgc-skin="cartoon"] h2,
+  :root[data-lgc-skin="cartoon"] h3 {
+    -webkit-text-stroke: 0.6px rgba(0, 0, 0, 0.35);
+  }
+}
+
+/* Cartoon: small sticker icons for powerups */
+:root[data-lgc-skin="cartoon"] .lgc-powerup-icon {
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.42));
+}
+
+/* Cartoon: sticker-style playing cards (CSS-only) */
+:root[data-lgc-skin="cartoon"] .lgc-card {
+  outline: 2px solid rgba(0, 0, 0, 0.45);
+  outline-offset: -2px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.16), 0 18px 38px rgba(0, 0, 0, 0.42) !important;
+}
+:root[data-lgc-skin="cartoon"] .lgc-card--back {
+  outline-color: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12), 0 18px 38px rgba(0, 0, 0, 0.38) !important;
+}
+
 /* Cartoon: sticker-like interaction affordances */
 :root[data-lgc-skin="cartoon"] a.glass-soft,
 :root[data-lgc-skin="cartoon"] button.glass-soft,

@@ -11,7 +11,7 @@ import { blackjackCollectibleLabel, BlackjackCollectiblesPanel, BlackjackTableEd
 import { BlackjackHostPanel } from "../blackjackHostPanel";
 import { BlackjackInviteModal, BlackjackTableHeader, BlackjackTurnActionBar, BlackjackV2ControlCard, BlackjackV2FloatingTimer, BlackjackV2OverviewPanel, BlackjackV2SectionHeader, BlackjackV2StatusStrip } from "../blackjackTableShell";
 import { type BJState, type Seat } from "../blackjackTableTypes";
-import { CardView, cardFromIndex, handValue } from "../blackjackUiPrimitives";
+import { CardView, cardFromIndex, handValue, PowerupStickerIcon } from "../blackjackUiPrimitives";
 import { BlackjackTableSeat, getBlackjackChatNameClass } from "../blackjackSeatViews";
 import { useBlackjackTableContract } from "../useBlackjackTableContract";
 
@@ -405,13 +405,13 @@ export function BlackjackTablePageClient({
     const m: Record<string, string> = {
       ADD2_SELF: "+2",
       ADD1_SELF: "+1",
-      PEEK_NEXT: "👀➡️",
-      BJ_PROTECTOR: "BJ🚫",
+      PEEK_NEXT: "PEEK",
+      BJ_PROTECTOR: "PROTECT",
       FREE_SPLIT: "SPLIT",
       SWAP_ONE: "SWAP",
       DOUBLE_PAYOUT: "x2",
-      REMOVE_RANDOM_SELF: "DEL🎲",
-      REMOVE_CARD_SELF: "DEL🎯",
+      REMOVE_RANDOM_SELF: "DEL RNG",
+      REMOVE_CARD_SELF: "DEL CARD",
       ADD2_DEALER: "D+2",
       DEALER_SECOND_CHANCE: "2nd",
       ADD2_TARGET: "+2",
@@ -426,7 +426,7 @@ export function BlackjackTablePageClient({
       MAGIC_KING: "K★",
       MAGIC_QUEEN: "Q★",
       MAGIC_JACK: "J★",
-      MAGIC_JOKER: "🃏★",
+      MAGIC_JOKER: "JOKER★",
       MYTHIC_COPY_HANDS: "COPY",
     };
     return (m[id] ?? id).slice(0, 12);
@@ -2057,7 +2057,10 @@ export function BlackjackTablePageClient({
                                           title={k}
                                         >
                                           <div className="flex items-center justify-between gap-1">
-                                            <div className="font-semibold text-white">{powerupLabel(k)}</div>
+                                            <div className="flex min-w-0 items-center gap-1.5 font-semibold text-white">
+                                              <PowerupStickerIcon id={k} className="text-white/90" />
+                                              <span className="truncate">{powerupLabel(k)}</span>
+                                            </div>
                                             <div className="font-mono text-white/60">{v}</div>
                                           </div>
                                         </button>
@@ -2212,7 +2215,10 @@ export function BlackjackTablePageClient({
                                       title={k}
                                     >
                                       <div className="flex items-center justify-between gap-1">
-                                        <div className="font-semibold text-white">{powerupLabel(k)}</div>
+                                        <div className="flex min-w-0 items-center gap-1.5 font-semibold text-white">
+                                          <PowerupStickerIcon id={k} className="text-white/90" />
+                                          <span className="truncate">{powerupLabel(k)}</span>
+                                        </div>
                                         <div className="font-mono text-white/60">{v}</div>
                                       </div>
                                     </button>
