@@ -55,6 +55,7 @@ export function BlackjackTablePageClient({
   const [reportedKey, setReportedKey] = useState<string | null>(null);
   const [showLowBalanceTopup, setShowLowBalanceTopup] = useState(false);
   const [lastLowBalanceCheckKey, setLastLowBalanceCheckKey] = useState<string | null>(null);
+  const [settlementToastKey, setSettlementToastKey] = useState<string | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -245,6 +246,7 @@ export function BlackjackTablePageClient({
     active1h: number;
   }>({ messages: [], online: 0, active1h: 0 });
   const [powerupToasts, setPowerupToasts] = useState<Array<{ id: string; text: string }>>([]);
+  const [settlementToast, setSettlementToast] = useState<null | { id: string; title: string; detail: string; tone: "good" | "bad" | "neutral" }>(null);
   const [lastEventAt, setLastEventAt] = useState(0);
   const [discordAutoJoinTried, setDiscordAutoJoinTried] = useState(false);
   const tableViewStorageKey = experience === "v2" ? "lgc.bj.v2.tableView" : "lgc.bj.tableView";
@@ -457,6 +459,14 @@ export function BlackjackTablePageClient({
     const seconds = total % 60;
     return `${minutes}:${String(seconds).padStart(2, "0")}`;
   };
+  const formatChipValue = (value: number) => {
+    const n = Math.round((Number(value) || 0) * 100) / 100;
+    return Number.isInteger(n) ? String(Math.trunc(n)) : n.toFixed(2);
+  };
+  const formatRatio = (value: number) => {
+    const n = Math.round((Number(value) || 0) * 100) / 100;
+    return Number.isInteger(n) ? String(Math.trunc(n)) : n.toFixed(2);
+  };
 
   useEffect(() => {
     if (!state || state.phase !== "betting") return;
@@ -471,6 +481,42 @@ export function BlackjackTablePageClient({
       setShowLowBalanceTopup(false);
     }
   }, [balance]);
+
+  useEffect(() => {
+    if (!state || state.phase !== "settling" || !state.lastResult || !mySeat) return;
+    const key = `settlement:${safeTableId ?? "?"}:${state.round}`;
+    if (settlementToastKey === key) return;
+    const wager = Number(state.lastResult.wager ?? mySeat.bet ?? 0) || 0;
+    const multiplier = Number(state.lastResult.multiplier ?? 0) || 0;
+    const profit = Math.round(wager * (multiplier - 1) * 100) / 100;
+    const toast =
+      profit > 0
+        ? {
+            id: key,
+            title: `Won ${formatRatio(Math.max(0, multiplier - 1))}:1`,
+            detail: `+${formatChipValue(profit)} ⓒ`,
+            tone: "good" as const,
+          }
+        : profit < 0
+          ? {
+              id: key,
+              title: `Lost ${formatChipValue(Math.abs(profit))}`,
+              detail: String(state.lastResult.outcome ?? "Hand lost"),
+              tone: "bad" as const,
+            }
+          : {
+              id: key,
+              title: "Push",
+              detail: String(state.lastResult.outcome ?? "Stake returned"),
+              tone: "neutral" as const,
+            };
+    setSettlementToastKey(key);
+    setSettlementToast(toast);
+    const timer = window.setTimeout(() => {
+      setSettlementToast((current) => (current?.id === key ? null : current));
+    }, 3200);
+    return () => window.clearTimeout(timer);
+  }, [state, mySeat, safeTableId, settlementToastKey]);
 
   const scrollToSection = (el: HTMLElement | null) => {
     if (!el) return;
@@ -979,6 +1025,23 @@ export function BlackjackTablePageClient({
               {t.text}
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {settlementToast ? (
+        <div className="pointer-events-none fixed top-24 left-1/2 z-[91] w-[min(440px,calc(100vw-2rem))] -translate-x-1/2">
+          <div
+            className={`glass glass-shine rounded-3xl border px-5 py-4 text-center shadow-[0_24px_60px_rgba(0,0,0,.45)] ${
+              settlementToast.tone === "good"
+                ? "border-emerald-300/25 bg-emerald-500/12 text-emerald-50"
+                : settlementToast.tone === "bad"
+                  ? "border-rose-300/25 bg-rose-500/12 text-rose-50"
+                  : "border-white/10 bg-white/10 text-white"
+            }`}
+          >
+            <div className="text-lg font-semibold tracking-tight">{settlementToast.title}</div>
+            <div className="mt-1 text-sm text-inherit/80">{settlementToast.detail}</div>
+          </div>
         </div>
       ) : null}
 
