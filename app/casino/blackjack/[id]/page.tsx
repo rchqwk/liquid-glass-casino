@@ -331,7 +331,6 @@ export function BlackjackTablePageClient({
   const dealerLeft = Math.max(0, Math.ceil(((state?.dealerWindowEndsAt ?? 0) - now) / 1000));
   const refill5000Left = Math.max(0, refill5000AvailableAt - now);
   const refill100Left = Math.max(0, refill100AvailableAt - now);
-  const showLowBalanceTopup = Number(balance ?? 0) <= 0;
 
   const meSeatIndex = Number(tableMeta?.meSeatIndex ?? state?.meSeatIndex ?? -1);
   const mySeat = meSeatIndex >= 0 && state ? state.seats[meSeatIndex] : null;
@@ -345,6 +344,11 @@ export function BlackjackTablePageClient({
   const myHandIndex = Number((mySeat as any)?.activeHandIndex ?? 0) || 0;
   const myHandCount = Number((mySeat as any)?.hands?.length ?? 1) || 1;
   const myHands = (mySeat as any)?.hands ?? [];
+  const myHasActiveWager =
+    !!mySeat &&
+    (Number((mySeat as any)?.bet ?? 0) > 0 ||
+      myHands.some((hand: any) => Number(hand?.bet ?? 0) > 0 || ((hand?.nonces?.length ?? 0) > 0) || hand?.perfectPairsNonce != null || Number(hand?.perfectPairsWager ?? 0) > 0));
+  const showLowBalanceTopup = Number(balance ?? 0) <= 0 && !myHasActiveWager;
   const myLiveTotal = mySeat
     ? handValue(
         mySeat.cards ?? [],
