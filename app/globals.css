@@ -41,6 +41,53 @@ body::before {
   mix-blend-mode: overlay;
 }
 
+/*
+  UI skin: Cartoon
+  Goal: make the app feel more “Discord Activity / comfy / playful” while keeping the same layout and components.
+  Implementation: swap background + adjust glass shadows/blur to look more like outlined “stickers”.
+*/
+:root[data-lgc-skin="cartoon"] {
+  --bg0: #070a1a;
+  --bg1: #0a1030;
+  --fg0: #fbfbff;
+  --fg1: rgba(251, 251, 255, 0.78);
+  --glass0: rgba(255, 255, 255, 0.14);
+  --glass1: rgba(255, 255, 255, 0.18);
+  --border0: rgba(255, 255, 255, 0.22);
+  --border1: rgba(255, 255, 255, 0.14);
+  --shadow0: 0 0 0 2px rgba(0, 0, 0, 0.35), 0 18px 50px rgba(0, 0, 0, 0.42);
+}
+
+:root[data-lgc-skin="cartoon"] body {
+  background: radial-gradient(900px 700px at 18% 12%, rgba(34, 211, 238, 0.35), transparent 55%),
+    radial-gradient(900px 700px at 82% 22%, rgba(251, 113, 133, 0.28), transparent 55%),
+    radial-gradient(1100px 900px at 60% 90%, rgba(250, 204, 21, 0.18), transparent 60%),
+    linear-gradient(180deg, var(--bg1), var(--bg0));
+  color: var(--fg0);
+}
+
+:root[data-lgc-skin="cartoon"] body::before {
+  opacity: 0.03;
+  mix-blend-mode: soft-light;
+}
+
+:root[data-lgc-skin="cartoon"] .glass {
+  backdrop-filter: blur(10px) saturate(180%);
+  -webkit-backdrop-filter: blur(10px) saturate(180%);
+}
+
+:root[data-lgc-skin="cartoon"] .glass-soft {
+  background: rgba(255, 255, 255, 0.10);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.28), 0 14px 32px rgba(0, 0, 0, 0.36);
+  backdrop-filter: blur(8px) saturate(165%);
+  -webkit-backdrop-filter: blur(8px) saturate(165%);
+}
+
+:root[data-lgc-skin="cartoon"] .glass-shine::after {
+  background: radial-gradient(600px 240px at 20% 0%, rgba(255, 255, 255, 0.35), transparent 55%),
+    radial-gradient(700px 260px at 85% 20%, rgba(255, 255, 255, 0.18), transparent 60%);
+}
+
 /* Prevent number input spinners (wheel/steppers are too easy to mis-scroll on bet inputs) */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {

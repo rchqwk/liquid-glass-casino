@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../lib/authClient";
+import { useSkin } from "../../lib/skin";
 
 type ApiResp =
   | { ok: true; user?: any; prestige_level?: number; prestige_points?: number; name_color?: string | null }
@@ -10,6 +11,7 @@ type ApiResp =
 
 export default function CustomizationsPage() {
   const { user, loading, refresh } = useAuth();
+  const { skin, setSkin } = useSkin();
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [nameColor, setNameColor] = useState<string | null>(null);
@@ -87,6 +89,42 @@ export default function CustomizationsPage() {
 
       {user ? (
         <div className="mt-6 grid gap-4">
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+            <div className="text-sm font-semibold text-white">UI skin</div>
+            <div className="mt-1 text-xs text-white/60">
+              Pick a visual style that fits Discord Activities. This is a local preference on this device.
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={`rounded-2xl border px-3 py-2 text-xs ${
+                  skin === "glass"
+                    ? "border-cyan-300/25 bg-cyan-500/10 text-cyan-100"
+                    : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                }`}
+                onClick={() => setSkin("glass")}
+              >
+                Liquid Glass
+              </button>
+              <button
+                type="button"
+                className={`rounded-2xl border px-3 py-2 text-xs ${
+                  skin === "cartoon"
+                    ? "border-yellow-300/30 bg-yellow-500/10 text-yellow-100"
+                    : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                }`}
+                onClick={() => setSkin("cartoon")}
+              >
+                Cartoon
+              </button>
+            </div>
+
+            <div className="mt-3 text-xs text-white/55">
+              Tip: the cartoon skin uses thicker “sticker” shadows and brighter gradients while keeping the same layout.
+            </div>
+          </div>
+
           <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
             <div className="text-sm font-semibold text-white">Name color</div>
             <div className="mt-1 text-xs text-white/60">Controls how your name appears at the Blackjack table.</div>
