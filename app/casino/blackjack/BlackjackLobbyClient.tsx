@@ -33,21 +33,74 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    let timer: number | null = null;
+    let retryCount = 0;
+
+    const clearTimer = () => {
+      if (timer != null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    };
+
+    const scheduleNext = (ok: boolean) => {
+      if (cancelled) return;
+      const visible = typeof document === "undefined" ? true : document.visibilityState === "visible";
+      const base = visible ? 5000 : 15000;
+      const wait = ok ? base : Math.min(30000, base * 2 ** Math.min(retryCount, 3));
+      clearTimer();
+      timer = window.setTimeout(() => {
+        void run();
+      }, wait);
+    };
+
+    const run = async () => {
       try {
         const res = await fetch("/api/blackjack/tables", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { tables?: TableRow[] };
+        if (!res.ok) {
+          retryCount += 1;
+          scheduleNext(false);
+          return;
+        }
+        const data = (await res.json().catch(() => ({}))) as { tables?: TableRow[] };
         if (cancelled) return;
         setTables(data.tables ?? []);
+        retryCount = 0;
+        scheduleNext(true);
+      } catch {
+        if (cancelled) return;
+        retryCount += 1;
+        // Keep existing lobby state on transient failures.
+        scheduleNext(false);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (cancelled) return;
+      if (document.visibilityState === "visible") {
+        retryCount = 0;
+        clearTimer();
+        void run();
+      }
+    };
+
+    void run();
+    try {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      cancelled = true;
+      clearTimer();
+      try {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
       } catch {
         // ignore
       }
-    })();
-    return () => {
-      cancelled = true;
     };
-  }, [tick]);
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;

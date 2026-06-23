@@ -35,7 +35,7 @@ export function BlackjackTablePageClient({
   const rpLastRef = useRef<string>("");
   const [tick, setTick] = useState(0);
   const { state, setState, tableMeta, err, setErr, applyTablePayload, requestTableRoute } =
-    useBlackjackTableContract<BJState>(safeTableId, tick);
+    useBlackjackTableContract<BJState>(safeTableId);
   const stateRef = useRef<BJState | null>(null);
   const [betAmount, setBetAmount] = useState(10);
   const [allIn, setAllIn] = useState(false);
@@ -579,15 +579,53 @@ export function BlackjackTablePageClient({
     if (!chatOpen) return;
     if (chatScope !== "global") return;
     let cancelled = false;
+    let timer: number | null = null;
+
+    const clearTimer = () => {
+      if (timer != null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    };
+
+    const schedule = () => {
+      if (cancelled) return;
+      const visible = typeof document === "undefined" ? true : document.visibilityState === "visible";
+      const wait = visible ? 5000 : 15000;
+      clearTimer();
+      timer = window.setTimeout(() => {
+        void tick();
+      }, wait);
+    };
+
     const tick = async () => {
       if (cancelled) return;
       await refreshGlobalChat();
+      schedule();
     };
-    const id = window.setInterval(tick, 5000);
+
+    const onVisibilityChange = () => {
+      if (cancelled) return;
+      if (document.visibilityState === "visible") {
+        clearTimer();
+        void tick();
+      }
+    };
+
+    try {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    } catch {
+      // ignore
+    }
     void tick();
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      clearTimer();
+      try {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      } catch {
+        // ignore
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatOpen, chatScope]);

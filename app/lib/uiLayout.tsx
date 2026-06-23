@@ -32,11 +32,11 @@ function readStoredLayout(): UiLayoutMode | null {
 }
 
 export function UiLayoutProvider({ children }: { children: React.ReactNode }) {
-  const [layout, setLayoutState] = useState<UiLayoutMode>("standard");
+  const [layout, setLayoutState] = useState<UiLayoutMode>("horizontal");
 
   useEffect(() => {
     const stored = readStoredLayout();
-    const initial: UiLayoutMode = stored ?? "standard";
+    const initial: UiLayoutMode = stored ?? "horizontal";
     setLayoutState(initial);
     applyLayoutToDocument(initial);
   }, []);
@@ -63,7 +63,6 @@ export function UiLayoutProvider({ children }: { children: React.ReactNode }) {
 
 export function useUiLayout() {
   const ctx = useContext(UiLayoutContext);
-  if (!ctx) return { layout: "standard" as UiLayoutMode, setLayout: (_: UiLayoutMode) => {} };
+  if (!ctx) return { layout: "horizontal" as UiLayoutMode, setLayout: (_: UiLayoutMode) => {} };
   return ctx;
 }
-
