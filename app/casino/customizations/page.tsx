@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../lib/authClient";
 import { useSkin } from "../../lib/skin";
 import { useUiLayout } from "../../lib/uiLayout";
+import { useUiScale } from "../../lib/uiScale";
 
 type ApiResp =
   | { ok: true; user?: any; prestige_level?: number; prestige_points?: number; name_color?: string | null }
@@ -14,6 +15,7 @@ export default function CustomizationsPage() {
   const { user, loading, refresh } = useAuth();
   const { skin, setSkin } = useSkin();
   const { layout, setLayout } = useUiLayout();
+  const { uiScale, setUiScale } = useUiScale();
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [nameColor, setNameColor] = useState<string | null>(null);
@@ -162,6 +164,33 @@ export default function CustomizationsPage() {
               In horizontal mode, controls collapse to side buttons and open as centered panels. Betting stake stays visible while you’re seated and
               haven’t locked a stake yet.
             </div>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+            <div className="text-sm font-semibold text-white">UI scale</div>
+            <div className="mt-1 text-xs text-white/60">
+              Scales the floating horizontal HUD and menus. Default is <span className="font-mono text-white/80">150%</span> because it reads better
+              in Discord Activities.
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[100, 125, 150, 175].map((scale) => (
+                <button
+                  key={scale}
+                  type="button"
+                  className={`rounded-2xl border px-3 py-2 text-xs ${
+                    uiScale === scale
+                      ? "border-fuchsia-300/25 bg-fuchsia-500/10 text-fuchsia-100"
+                      : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                  }`}
+                  onClick={() => setUiScale(scale as 100 | 125 | 150 | 175)}
+                >
+                  {scale}%
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 text-xs text-white/55">This is a local preference on this device and mainly affects the horizontal blackjack HUD.</div>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/5 p-5">

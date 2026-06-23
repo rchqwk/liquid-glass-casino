@@ -5,14 +5,17 @@ import { WalletProvider } from "./lib/wallet";
 import { AuthProvider } from "./lib/authClient";
 import { SkinProvider } from "./lib/skin";
 import { UiLayoutProvider } from "./lib/uiLayout";
+import { UiScaleProvider } from "./lib/uiScale";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SkinProvider>
       <UiLayoutProvider>
-        <AuthProvider>
-          <WalletProvider>{children}</WalletProvider>
-        </AuthProvider>
+        <UiScaleProvider>
+          <AuthProvider>
+            <WalletProvider>{children}</WalletProvider>
+          </AuthProvider>
+        </UiScaleProvider>
       </UiLayoutProvider>
     </SkinProvider>
   );

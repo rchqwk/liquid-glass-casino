@@ -7,6 +7,7 @@ import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
 import { useWallet } from "../../../lib/wallet";
 import { useAuth } from "../../../lib/authClient";
 import { useUiLayout } from "../../../lib/uiLayout";
+import { useUiScale } from "../../../lib/uiScale";
 import { BlackjackChatPanel } from "../blackjackChatPanel";
 import { blackjackCollectibleLabel, BlackjackCollectiblesPanel, BlackjackTableEditInventory } from "../blackjackCollectiblesPanel";
 import { BlackjackHostPanel } from "../blackjackHostPanel";
@@ -28,6 +29,7 @@ export function BlackjackTablePageClient({
   const { beginBet, balance, reserveServerBet, settleServerBet, cancelServerBet, adjustServerBalance } = useWallet();
   const { user, discordMode } = useAuth();
   const { layout: uiLayout } = useUiLayout();
+  const { uiScale } = useUiScale();
   const params = useParams<{ id?: string | string[] }>();
   const tableId =
     typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params?.id?.[0] : undefined;
@@ -363,6 +365,7 @@ export function BlackjackTablePageClient({
   const decorations = (state?.decorations ?? []) as any[];
   const showV2Shell = experience === "v2";
   const horizontalMode = showV2Shell && uiLayout === "horizontal";
+  const horizontalUiScale = uiScale / 100;
   const v2HeaderVisible = !!(state && topbarOpen);
   const classicHeaderVisible = !!(state && (mySeat || isSpectator) && topbarOpen);
   const [hControlsOpen, setHControlsOpen] = useState(false);
@@ -1654,6 +1657,11 @@ export function BlackjackTablePageClient({
                   : "hidden"
                 : `glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "order-2 xl:order-2" : ""}`
             }
+            style={
+              horizontalMode && hControlsOpen
+                ? { transform: `translate(-50%, -50%) scale(${horizontalUiScale})`, transformOrigin: "center center" }
+                : undefined
+            }
             data-tour="bj-round-controls"
           >
             {showV2Shell ? (
@@ -2722,7 +2730,10 @@ export function BlackjackTablePageClient({
           <>
             {/* Horizontal UI: minimized side controls */}
             <div className="pointer-events-none fixed inset-y-0 left-3 z-[82] flex items-center">
-              <div className="pointer-events-auto flex flex-col gap-2">
+              <div
+                className="pointer-events-auto flex flex-col gap-2"
+                style={{ transform: `scale(${horizontalUiScale})`, transformOrigin: "left center" }}
+              >
                 <button
                   type="button"
                   className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
@@ -2740,7 +2751,10 @@ export function BlackjackTablePageClient({
               </div>
             </div>
             <div className="pointer-events-none fixed inset-y-0 right-3 z-[82] flex items-center">
-              <div className="pointer-events-auto flex flex-col gap-2">
+              <div
+                className="pointer-events-auto flex flex-col gap-2"
+                style={{ transform: `scale(${horizontalUiScale})`, transformOrigin: "right center" }}
+              >
                 <button
                   type="button"
                   className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
@@ -2770,7 +2784,10 @@ export function BlackjackTablePageClient({
             {/* Horizontal UI: persistent stake dock (only when seated + no stake locked) */}
             {showHorizontalStakeDock ? (
               <div className="pointer-events-none fixed bottom-4 left-1/2 z-[84] w-[min(520px,calc(100vw-2rem))] -translate-x-1/2">
-                <div className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 p-4">
+                <div
+                  className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 p-4"
+                  style={{ transform: `scale(${horizontalUiScale})`, transformOrigin: "center bottom" }}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold text-white/90">Stake window</div>
@@ -2829,7 +2846,10 @@ export function BlackjackTablePageClient({
 
             {horizontalShowLiveDock ? (
               <div className="pointer-events-none fixed bottom-4 left-1/2 z-[84] w-[min(620px,calc(100vw-2rem))] -translate-x-1/2">
-                <div className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 p-4">
+                <div
+                  className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 p-4"
+                  style={{ transform: `scale(${horizontalUiScale})`, transformOrigin: "center bottom" }}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold text-white/90">Live controls</div>
@@ -2978,7 +2998,10 @@ export function BlackjackTablePageClient({
             {/* Horizontal UI: compact menu */}
             {hMenuOpen ? (
               <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
-                <div className="glass glass-shine w-full max-w-[520px] rounded-3xl border border-white/10 p-6">
+                <div
+                  className="glass glass-shine w-full max-w-[520px] rounded-3xl border border-white/10 p-6"
+                  style={{ transform: `scale(${horizontalUiScale})`, transformOrigin: "center center" }}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-white">Menu</div>
