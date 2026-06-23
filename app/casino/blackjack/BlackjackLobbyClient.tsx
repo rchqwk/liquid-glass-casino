@@ -215,7 +215,8 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <QuickLink href="/casino/tutorial" title="Tutorial" desc="Walk through betting, powerups, and table flow." />
             <QuickLink href="/casino/profile" title="Profile" desc="Account, sign-in, and identity." />
             <QuickLink href="/casino/customizations" title="Customizations" desc="Cards, name color, and cosmetics." />
             <QuickLink href="/casino/prestige-shop" title="Prestige Shop" desc="Progression, bonds, and prestige buys." />

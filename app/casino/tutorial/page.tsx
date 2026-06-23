@@ -276,13 +276,22 @@ export default function TutorialPage() {
         >
           Back
         </button>
-        <button
-          type="button"
-          className="glass-soft rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/15"
-          onClick={() => setStepIdx((s) => Math.min(steps.length - 1, s + 1))}
-        >
-          {stepIdx >= steps.length - 1 ? "Finish" : "Next"}
-        </button>
+        {stepIdx >= steps.length - 1 ? (
+          <Link
+            href="/casino/blackjack-v2"
+            className="glass-soft rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/15"
+          >
+            Enter lobby
+          </Link>
+        ) : (
+          <button
+            type="button"
+            className="glass-soft rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/15"
+            onClick={() => setStepIdx((s) => Math.min(steps.length - 1, s + 1))}
+          >
+            Next
+          </button>
+        )}
       </div>
     </>
   );
@@ -309,13 +318,18 @@ export default function TutorialPage() {
         </div>
       </div>
 
-      {/* Mobile: tutorial text inline */}
-      <div className={`glass-soft glass-shine rounded-3xl p-5 lg:hidden ${focusClass("table")}`}>{panelInner}</div>
+      {/* Mobile: floating tutorial bubble */}
+      <div className="lg:hidden">
+        <div className={`fixed inset-x-3 bottom-3 z-[70] max-h-[46vh] overflow-auto glass-soft glass-shine rounded-3xl p-5 ${focusClass("table")}`}>
+          {panelInner}
+        </div>
+        <div className="h-[320px]" />
+      </div>
 
       <div className="relative">
-        {/* Desktop: floating tutorial bubble pinned to the right */}
+        {/* Desktop: floating tutorial bubble pinned to the bottom-right */}
         <div
-          className={`hidden lg:block fixed right-4 top-24 bottom-4 z-[70] w-[380px] overflow-auto glass-soft glass-shine rounded-3xl p-5 ${focusClass("table")}`}
+          className={`hidden lg:block fixed bottom-4 right-4 z-[70] w-[380px] max-h-[min(460px,calc(100dvh-2rem))] overflow-auto glass-soft glass-shine rounded-3xl p-5 ${focusClass("table")}`}
         >
           {panelInner}
         </div>
