@@ -371,6 +371,9 @@ export function BlackjackTablePageClient({
     !!mySeat && (Number(mySeat?.bet ?? 0) > 0 || (((mySeat as any)?.hands?.[0]?.nonces?.length ?? 0) > 0));
   const showHorizontalStakeDock = horizontalMode && !!state && state.phase === "betting" && !!mySeat && !myHasLockedStake;
   const horizontalShowLiveDock = horizontalMode && !!state && state.phase !== "betting" && !!mySeat;
+  const canUseDealerSpecial = state?.phase === "dealer_window";
+  const canUseAnytimeSpecial =
+    state?.phase === "player_turns" || state?.phase === "dealer" || state?.phase === "dealer_window";
   const horizontalApplicablePowerups: Array<[string, number]> = (() => {
     if (!horizontalShowLiveDock || !state?.meInventory) return [];
 
@@ -692,10 +695,6 @@ export function BlackjackTablePageClient({
     const visible = state.dealer.cards.filter((c) => c >= 0);
     return handValue(visible, state.dealer.bonusPoints).total;
   }, [state]);
-
-  const canUseDealerSpecial = state?.phase === "dealer_window";
-  const canUseAnytimeSpecial =
-    state?.phase === "player_turns" || state?.phase === "dealer" || state?.phase === "dealer_window";
 
   // Report wager/profit for stats once per round (so Games gallery updates per-game totals).
   useEffect(() => {
