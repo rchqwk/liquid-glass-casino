@@ -53,6 +53,8 @@ export function BlackjackTablePageClient({
   const [allIn, setAllIn] = useState(false);
   const [ppAmount, setPpAmount] = useState(0);
   const [reportedKey, setReportedKey] = useState<string | null>(null);
+  const [showLowBalanceTopup, setShowLowBalanceTopup] = useState(false);
+  const [lastLowBalanceCheckKey, setLastLowBalanceCheckKey] = useState<string | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -348,7 +350,6 @@ export function BlackjackTablePageClient({
     !!mySeat &&
     (Number((mySeat as any)?.bet ?? 0) > 0 ||
       myHands.some((hand: any) => Number(hand?.bet ?? 0) > 0 || ((hand?.nonces?.length ?? 0) > 0) || hand?.perfectPairsNonce != null || Number(hand?.perfectPairsWager ?? 0) > 0));
-  const showLowBalanceTopup = Number(balance ?? 0) <= 0 && !myHasActiveWager;
   const myLiveTotal = mySeat
     ? handValue(
         mySeat.cards ?? [],
@@ -451,6 +452,21 @@ export function BlackjackTablePageClient({
     const seconds = total % 60;
     return `${minutes}:${String(seconds).padStart(2, "0")}`;
   };
+
+  useEffect(() => {
+    if (!state || state.phase !== "betting") return;
+    const key = `${safeTableId ?? "?"}:${state.round}`;
+    if (lastLowBalanceCheckKey === key) return;
+    setLastLowBalanceCheckKey(key);
+    setShowLowBalanceTopup(Number(balance ?? 0) <= 0 && !myHasActiveWager);
+  }, [state, state?.phase, state?.round, safeTableId, balance, myHasActiveWager, lastLowBalanceCheckKey]);
+
+  useEffect(() => {
+    if (Number(balance ?? 0) > 0) {
+      setShowLowBalanceTopup(false);
+    }
+  }, [balance]);
+
   const scrollToSection = (el: HTMLElement | null) => {
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "start" });
