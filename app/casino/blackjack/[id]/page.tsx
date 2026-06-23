@@ -386,6 +386,7 @@ export function BlackjackTablePageClient({
   const horizontalUiScale = uiScale / 100;
   const horizontalLiveControlsScale = uiScale === 150 ? 1 : horizontalUiScale;
   const horizontalPowerupsWindow = horizontalMode && showV2Shell;
+  const horizontalPowerupsScale = 1;
   const v2HeaderVisible = !!(state && topbarOpen);
   const classicHeaderVisible = !!(state && (mySeat || isSpectator) && topbarOpen);
   const [hControlsOpen, setHControlsOpen] = useState(false);
@@ -1756,7 +1757,10 @@ export function BlackjackTablePageClient({
             }
             style={
               horizontalMode && hControlsOpen
-                ? { transform: `translate(-50%, -50%) scale(${horizontalUiScale})`, transformOrigin: "center center" }
+                ? {
+                    transform: `translate(-50%, -50%) scale(${horizontalPowerupsWindow ? horizontalPowerupsScale : horizontalUiScale})`,
+                    transformOrigin: "center center",
+                  }
                 : undefined
             }
             data-tour="bj-round-controls"
