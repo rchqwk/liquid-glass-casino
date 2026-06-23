@@ -385,6 +385,7 @@ export function BlackjackTablePageClient({
   const horizontalMode = showV2Shell && uiLayout === "horizontal";
   const horizontalUiScale = uiScale / 100;
   const horizontalLiveControlsScale = uiScale === 150 ? 1 : horizontalUiScale;
+  const horizontalPowerupsWindow = horizontalMode && showV2Shell;
   const v2HeaderVisible = !!(state && topbarOpen);
   const classicHeaderVisible = !!(state && (mySeat || isSpectator) && topbarOpen);
   const [hControlsOpen, setHControlsOpen] = useState(false);
@@ -1762,9 +1763,13 @@ export function BlackjackTablePageClient({
           >
             {showV2Shell ? (
               <BlackjackV2SectionHeader
-                eyebrow="Controls"
-                title="Betting, inventory, and round tools"
-                subtitle="Manage wagers, side bets, powerups, bonds, and host options from one control rail."
+                eyebrow={horizontalPowerupsWindow ? "Powerups" : "Controls"}
+                title={horizontalPowerupsWindow ? "Cards, boosts, and bonds" : "Betting, inventory, and round tools"}
+                subtitle={
+                  horizontalPowerupsWindow
+                    ? "Use only your card effects, boosts, and bond actions from this focused window."
+                    : "Manage wagers, side bets, powerups, bonds, and host options from one control rail."
+                }
               />
             ) : null}
             {horizontalMode ? (
@@ -1778,36 +1783,38 @@ export function BlackjackTablePageClient({
                 </button>
               </div>
             ) : null}
-            {!showV2Shell ? <p className="text-sm font-medium text-white">Round controls</p> : null}
-            <div className="mt-3 text-xs text-white/60">
-            {state.phase === "betting" ? (
-                <>{roundStatusLabel} <span className="font-mono text-white/80">{bettingLeft}s</span></>
-              ) : state.phase === "player_turns" ? (
+            {!horizontalPowerupsWindow ? (
               <>
-                {roundStatusLabel} <span className="font-mono text-white/80">{turnLeft}s</span>
-                {turnHandCount > 1 ? (
-                  <span className="ml-2 text-[11px] text-white/55">
-                    (Hand {turnHandIndex + 1}/{turnHandCount})
-                  </span>
-                ) : null}
-              </>
-              ) : state.phase === "dealer_window" ? (
-                <>{roundStatusLabel} <span className="font-mono text-white/80">{dealerLeft}s</span></>
-              ) : (
-                <>{roundStatusLabel}</>
-              )}
-            </div>
-
-            {mySeat ? (
-              <>
+                {!showV2Shell ? <p className="text-sm font-medium text-white">Round controls</p> : null}
+                <div className="mt-3 text-xs text-white/60">
                 {state.phase === "betting" ? (
+                    <>{roundStatusLabel} <span className="font-mono text-white/80">{bettingLeft}s</span></>
+                  ) : state.phase === "player_turns" ? (
                   <>
-                    {showV2Shell ? (
+                    {roundStatusLabel} <span className="font-mono text-white/80">{turnLeft}s</span>
+                    {turnHandCount > 1 ? (
+                      <span className="ml-2 text-[11px] text-white/55">
+                        (Hand {turnHandIndex + 1}/{turnHandCount})
+                      </span>
+                    ) : null}
+                  </>
+                  ) : state.phase === "dealer_window" ? (
+                    <>{roundStatusLabel} <span className="font-mono text-white/80">{dealerLeft}s</span></>
+                  ) : (
+                    <>{roundStatusLabel}</>
+                  )}
+                </div>
+
+                {mySeat ? (
+                  <>
+                    {state.phase === "betting" ? (
                       <>
-                        <BlackjackV2ControlCard
-                          title="Main bet"
-                          subtitle="Lock your main stake for the next hand, go all-in, or sit this hand out before dealing starts."
-                        >
+                        {showV2Shell ? (
+                          <>
+                            <BlackjackV2ControlCard
+                              title="Main bet"
+                              subtitle="Lock your main stake for the next hand, go all-in, or sit this hand out before dealing starts."
+                            >
                           <label className="block text-xs text-white/60">Main stake (ⓒ)</label>
                           <input
                             type="number"
@@ -1916,9 +1923,9 @@ export function BlackjackTablePageClient({
                               Reset side stake
                             </button>
                           </div>
-                        </BlackjackV2ControlCard>
-                      </>
-                    ) : (
+                            </BlackjackV2ControlCard>
+                          </>
+                        ) : (
                       <>
                         <label className="mt-4 block text-xs text-white/60">Bet amount (ⓒ)</label>
                         <input
@@ -2025,15 +2032,15 @@ export function BlackjackTablePageClient({
                           </button>
                         </div>
                       </>
-                    )}
-                  </>
-                ) : null}
+                        )}
+                      </>
+                    ) : null}
 
-                {showV2Shell && state.phase !== "betting" ? (
-                  <BlackjackV2ControlCard
-                    title="Live controls"
-                    subtitle="In-round actions now live in the same control slot that betting uses before the deal."
-                  >
+                    {showV2Shell && state.phase !== "betting" ? (
+                      <BlackjackV2ControlCard
+                        title="Live controls"
+                        subtitle="In-round actions now live in the same control slot that betting uses before the deal."
+                      >
                     <div className="text-[11px] text-white/60">
                       {state.phase === "player_turns" ? (
                         <>
@@ -2165,24 +2172,28 @@ export function BlackjackTablePageClient({
                             : "The hand is resolving. Watch the felt or get ready for the next betting window."}
                       </div>
                     )}
-                  </BlackjackV2ControlCard>
-                ) : null}
+                      </BlackjackV2ControlCard>
+                    ) : null}
 
-                {state.peekCard != null ? (
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
-                    Peek:{" "}
-                    <span className="font-mono text-white/90">
-                      {state.peekCard < 0 ? "None" : `${cardFromIndex(state.peekCard).rank}${cardFromIndex(state.peekCard).suit}`}
-                    </span>
-                  </div>
-                ) : null}
+                    {state.peekCard != null ? (
+                      <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
+                        Peek:{" "}
+                        <span className="font-mono text-white/90">
+                          {state.peekCard < 0 ? "None" : `${cardFromIndex(state.peekCard).rank}${cardFromIndex(state.peekCard).suit}`}
+                        </span>
+                      </div>
+                    ) : null}
 
-                {state.lastResult ? (
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
-                    Last result: <span className="text-white/90">{state.lastResult.outcome}</span> •{" "}
-                    <span className="font-mono text-white/90">{state.lastResult.multiplier.toFixed(2)}x</span>
-                  </div>
+                    {state.lastResult ? (
+                      <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
+                        Last result: <span className="text-white/90">{state.lastResult.outcome}</span> •{" "}
+                        <span className="font-mono text-white/90">{state.lastResult.multiplier.toFixed(2)}x</span>
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
+              </>
+            ) : null}
 
                 <div className="mt-5" data-tour="bj-specials">
                   {showV2Shell ? (
@@ -2506,115 +2517,119 @@ export function BlackjackTablePageClient({
                   ) : null}
                 </div>
 
-                {isMyTurn ? (
-                  !showV2Shell ? (
-                    <div className="mt-5">
-                      <p className="text-xs font-medium text-white/70">Your turn</p>
-                      {mySeat?.busted ? (
-                        <div className="mt-2 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-100">
-                          BUSTED — play a save card (-1/-2/-5/-10) before your turn ends, or Stand to accept bust.
-                        </div>
+                {!horizontalPowerupsWindow ? (
+                  mySeat ? (
+                    <>
+                      {isMyTurn ? (
+                        !showV2Shell ? (
+                          <div className="mt-5">
+                            <p className="text-xs font-medium text-white/70">Your turn</p>
+                            {mySeat?.busted ? (
+                              <div className="mt-2 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-100">
+                                BUSTED — play a save card (-1/-2/-5/-10) before your turn ends, or Stand to accept bust.
+                              </div>
+                            ) : null}
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                                onClick={() => post("action", { type: "hit" })}
+                                disabled={!!mySeat?.busted}
+                              >
+                                Hit
+                              </button>
+                              <button
+                                type="button"
+                                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                                onClick={() => post("action", { type: "stand" })}
+                              >
+                                Stand
+                              </button>
+                              <button
+                                type="button"
+                                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                                onClick={async () => {
+                                  const wager = Number(mySeat?.bet ?? 0);
+                                  const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
+                                  if ("error" in started) {
+                                    setErr(started.error);
+                                    return;
+                                  }
+                                  const res = await post("action", { type: "double_down", betNonce: started.nonce });
+                                  if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
+                                }}
+                                disabled={!canDoubleDown}
+                                title="Double your bet, draw one card, and stand"
+                              >
+                                DD
+                              </button>
+                              <button
+                                type="button"
+                                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+                                onClick={async () => {
+                                  const wager = Number(mySeat?.bet ?? 0);
+                                  const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
+                                  if ("error" in started) {
+                                    setErr(started.error);
+                                    return;
+                                  }
+                                  const res = await post("action", { type: "split", betNonce: started.nonce });
+                                  if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
+                                }}
+                                disabled={!canSplit}
+                                title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
+                              >
+                                Split
+                              </button>
+                              <button
+                                type="button"
+                                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10"
+                                onClick={() => post("action", { type: "vote_skip" })}
+                                title="Skip the remaining turn timer"
+                              >
+                                Vote skip timer
+                              </button>
+                              <button
+                                type="button"
+                                className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+                                onClick={() => post("action", { type: "extend_timer" })}
+                                disabled={!!mySeat?.extendUsedThisTurn}
+                                title="Extend your turn timer once"
+                              >
+                                Extend timer
+                              </button>
+                            </div>
+                          </div>
+                        ) : null
                       ) : null}
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
-                          onClick={() => post("action", { type: "hit" })}
-                          disabled={!!mySeat?.busted}
-                        >
-                          Hit
-                        </button>
-                        <button
-                          type="button"
-                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
-                          onClick={() => post("action", { type: "stand" })}
-                        >
-                          Stand
-                        </button>
-                        <button
-                          type="button"
-                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                          onClick={async () => {
-                            const wager = Number(mySeat?.bet ?? 0);
-                            const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
-                            if ("error" in started) {
-                              setErr(started.error);
-                              return;
-                            }
-                            const res = await post("action", { type: "double_down", betNonce: started.nonce });
-                            if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
-                          }}
-                          disabled={!canDoubleDown}
-                          title="Double your bet, draw one card, and stand"
-                        >
-                          DD
-                        </button>
-                        <button
-                          type="button"
-                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
-                          onClick={async () => {
-                            const wager = Number(mySeat?.bet ?? 0);
-                            const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
-                            if ("error" in started) {
-                              setErr(started.error);
-                              return;
-                            }
-                            const res = await post("action", { type: "split", betNonce: started.nonce });
-                            if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
-                          }}
-                          disabled={!canSplit}
-                          title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
-                        >
-                          Split
-                        </button>
-                        <button
-                          type="button"
-                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10"
-                          onClick={() => post("action", { type: "vote_skip" })}
-                          title="Skip the remaining turn timer"
-                        >
-                          Vote skip timer
-                        </button>
-                        <button
-                          type="button"
-                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
-                          onClick={() => post("action", { type: "extend_timer" })}
-                          disabled={!!mySeat?.extendUsedThisTurn}
-                          title="Extend your turn timer once"
-                        >
-                          Extend timer
-                        </button>
-                      </div>
-                    </div>
-                  ) : null
-                ) : null}
 
-                <div className="mt-4 text-[11px] text-white/55">
-                  {showV2Shell ? "AFK risk" : "Missed rounds"}: <span className="font-mono">{mySeat.missedRounds}</span>/5
-                </div>
-              </>
-            ) : showV2Shell ? (
-              <div className="mt-4 rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-sm text-white/70">
-                Join or spectate from the V2 overview panel above, then come back here for betting and inventory tools.
-              </div>
-            ) : (
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
-                  onClick={() => join(false)}
-                >
-                  Join (seat)
-                </button>
-                <button
-                  type="button"
-                  className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
-                  onClick={() => join(true)}
-                >
-                  Spectate
-                </button>
-              </div>
-            )}
+                      <div className="mt-4 text-[11px] text-white/55">
+                        {showV2Shell ? "AFK risk" : "Missed rounds"}: <span className="font-mono">{mySeat.missedRounds}</span>/5
+                      </div>
+                    </>
+                  ) : showV2Shell ? (
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-sm text-white/70">
+                      Join or spectate from the V2 overview panel above, then come back here for betting and inventory tools.
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                        onClick={() => join(false)}
+                      >
+                        Join (seat)
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+                        onClick={() => join(true)}
+                      >
+                        Spectate
+                      </button>
+                    </div>
+                  )
+                ) : null}
           </div>
 
           <div
