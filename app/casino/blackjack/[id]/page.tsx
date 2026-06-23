@@ -26,7 +26,17 @@ export function BlackjackTablePageClient({
   lobbyHref?: string;
   experience?: "classic" | "v2";
 }) {
-  const { beginBet, balance, reserveServerBet, settleServerBet, cancelServerBet, adjustServerBalance } = useWallet();
+  const {
+    beginBet,
+    balance,
+    refill5000AvailableAt,
+    refill100AvailableAt,
+    deposit,
+    reserveServerBet,
+    settleServerBet,
+    cancelServerBet,
+    adjustServerBalance,
+  } = useWallet();
   const { user, discordMode } = useAuth();
   const { layout: uiLayout } = useUiLayout();
   const { uiScale } = useUiScale();
@@ -319,6 +329,9 @@ export function BlackjackTablePageClient({
   const bettingLeft = Math.max(0, Math.ceil(((state?.bettingEndsAt ?? 0) - now) / 1000));
   const turnLeft = Math.max(0, Math.ceil(((state?.turnEndsAt ?? 0) - now) / 1000));
   const dealerLeft = Math.max(0, Math.ceil(((state?.dealerWindowEndsAt ?? 0) - now) / 1000));
+  const refill5000Left = Math.max(0, refill5000AvailableAt - now);
+  const refill100Left = Math.max(0, refill100AvailableAt - now);
+  const showLowBalanceTopup = Number(balance ?? 0) <= 0;
 
   const meSeatIndex = Number(tableMeta?.meSeatIndex ?? state?.meSeatIndex ?? -1);
   const mySeat = meSeatIndex >= 0 && state ? state.seats[meSeatIndex] : null;
@@ -377,6 +390,7 @@ export function BlackjackTablePageClient({
   const canUseDealerSpecial = state?.phase === "dealer_window";
   const canUseAnytimeSpecial =
     state?.phase === "player_turns" || state?.phase === "dealer" || state?.phase === "dealer_window";
+  const fullHeightFeltMode = showV2Shell && !topbarOpen && tableView === "table";
   const horizontalApplicablePowerups: Array<[string, number]> = (() => {
     if (!horizontalShowLiveDock || !state?.meInventory) return [];
 
@@ -427,6 +441,12 @@ export function BlackjackTablePageClient({
           : showV2Shell
             ? "Round resolving…"
             : "In progress…";
+  const formatCooldown = (ms: number) => {
+    const total = Math.max(0, Math.ceil(ms / 1000));
+    const minutes = Math.floor(total / 60);
+    const seconds = total % 60;
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  };
   const scrollToSection = (el: HTMLElement | null) => {
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -937,6 +957,58 @@ export function BlackjackTablePageClient({
         </div>
       ) : null}
 
+      {showLowBalanceTopup ? (
+        <div className="fixed inset-0 z-[91] flex items-center justify-center bg-black/70 p-4">
+          <div className="glass glass-shine w-full max-w-[560px] rounded-3xl border border-yellow-300/20 p-6 text-white shadow-[0_30px_90px_rgba(0,0,0,.5)]">
+            <div className="inline-flex rounded-full border border-yellow-300/20 bg-yellow-500/10 px-3 py-1 text-[11px] font-semibold tracking-wide text-yellow-100">
+              OUT OF CHIPS
+            </div>
+            <h2 className="mt-4 text-2xl font-semibold text-white">Grab a timed top-up to keep playing.</h2>
+            <p className="mt-2 text-sm leading-6 text-white/70">
+              Your balance is empty. Claim any refill that’s available now, or wait for the next cooldown to finish.
+            </p>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                className="glass-soft rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 text-left text-emerald-100 hover:bg-emerald-500/15 disabled:opacity-40"
+                disabled={refill100Left > 0}
+                onClick={async () => {
+                  const res = await deposit(100, { refill100: true });
+                  if (!res.ok) setErr(res.error);
+                }}
+              >
+                <div className="text-sm font-semibold">Quick top-up</div>
+                <div className="mt-1 font-mono text-lg">+100 ⓒ</div>
+                <div className="mt-2 text-xs text-emerald-100/75">
+                  {refill100Left > 0 ? `Available in ${formatCooldown(refill100Left)}` : "Available now"}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className="glass-soft rounded-3xl border border-cyan-300/20 bg-cyan-500/10 p-4 text-left text-cyan-100 hover:bg-cyan-500/15 disabled:opacity-40"
+                disabled={refill5000Left > 0}
+                onClick={async () => {
+                  const res = await deposit(5000, { refill5000: true });
+                  if (!res.ok) setErr(res.error);
+                }}
+              >
+                <div className="text-sm font-semibold">Large top-up</div>
+                <div className="mt-1 font-mono text-lg">+5000 ⓒ</div>
+                <div className="mt-2 text-xs text-cyan-100/75">
+                  {refill5000Left > 0 ? `Available in ${formatCooldown(refill5000Left)}` : "Available now"}
+                </div>
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/65">
+              Timers keep counting down while you stay on the table, so you can claim the next refill as soon as it unlocks.
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Host options (seat 1 only) */}
       {false && isHost ? (
         <div className="pointer-events-none fixed bottom-40 left-4 z-[65]">
@@ -1117,30 +1189,32 @@ export function BlackjackTablePageClient({
         }}
       />
 
-      <BlackjackInviteModal
-        open={inviteOpen}
-        inviteUrl={inviteUrl}
-        inviteCopied={inviteCopied}
-        experience={experience}
-        onClose={() => {
-          setInviteOpen(false);
-          setInviteCopied(false);
-        }}
-        onCopy={async () => {
-          if (!inviteUrl) return;
-          try {
-            await navigator.clipboard.writeText(inviteUrl);
-            setInviteCopied(true);
-            window.setTimeout(() => setInviteCopied(false), 1500);
-          } catch {
-            // ignore
-          }
-        }}
-        onOpenLink={() => {
-          if (!inviteUrl) return;
-          window.open(inviteUrl, "_blank", "noopener,noreferrer");
-        }}
-      />
+      {!discordMode ? (
+        <BlackjackInviteModal
+          open={inviteOpen}
+          inviteUrl={inviteUrl}
+          inviteCopied={inviteCopied}
+          experience={experience}
+          onClose={() => {
+            setInviteOpen(false);
+            setInviteCopied(false);
+          }}
+          onCopy={async () => {
+            if (!inviteUrl) return;
+            try {
+              await navigator.clipboard.writeText(inviteUrl);
+              setInviteCopied(true);
+              window.setTimeout(() => setInviteCopied(false), 1500);
+            } catch {
+              // ignore
+            }
+          }}
+          onOpenLink={() => {
+            if (!inviteUrl) return;
+            window.open(inviteUrl, "_blank", "noopener,noreferrer");
+          }}
+        />
+      ) : null}
 
       {targetPopup.open && state ? (
         <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 p-4">
@@ -1572,6 +1646,7 @@ export function BlackjackTablePageClient({
         lobbyHref={lobbyHref}
         experience={experience}
         err={err}
+        showInvite={!discordMode}
         onOpenInvite={() => setInviteOpen(true)}
         onLeave={() => {
           void post("leave");
@@ -2521,7 +2596,11 @@ export function BlackjackTablePageClient({
             )}
           </div>
 
-          <div ref={tableViewRef} className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "order-1 xl:order-1" : ""}`}>
+          <div
+            ref={tableViewRef}
+            className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "order-1 xl:order-1" : ""}`}
+            style={fullHeightFeltMode ? { minHeight: "calc(100dvh - 1rem)" } : undefined}
+          >
             {showV2Shell ? (
               <BlackjackV2SectionHeader
                 eyebrow="Surface"
@@ -2665,7 +2744,10 @@ export function BlackjackTablePageClient({
                         );
                       })}
                     </div>
-                    <div className="lgc-felt mx-auto h-[560px] w-full rounded-[48px] border border-white/10 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-black/25 shadow-[0_40px_120px_rgba(0,0,0,.45)]" />
+                    <div
+                      className="lgc-felt mx-auto h-[560px] w-full rounded-[48px] border border-white/10 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-black/25 shadow-[0_40px_120px_rgba(0,0,0,.45)]"
+                      style={fullHeightFeltMode ? { height: "calc(100dvh - 7.5rem)" } : undefined}
+                    />
                     <div className="pointer-events-none absolute inset-0 rounded-[48px] ring-1 ring-white/10" />
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                       <div className="h-[480px] w-[320px] rounded-[999px] border border-white/10 bg-gradient-to-b from-emerald-500/12 to-black/20" />
@@ -3034,9 +3116,11 @@ export function BlackjackTablePageClient({
                         Back to lobby
                       </Link>
                     )}
-                    <button type="button" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => { setHMenuOpen(false); setInviteOpen(true); }}>
-                      Share table
-                    </button>
+                    {!discordMode ? (
+                      <button type="button" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => { setHMenuOpen(false); setInviteOpen(true); }}>
+                        Share table
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="glass-soft rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-500/15"

@@ -79,6 +79,7 @@ export function BlackjackTableHeader({
   lobbyHref,
   experience = "classic",
   err,
+  showInvite = true,
   onOpenInvite,
   onLeave,
 }: {
@@ -90,6 +91,7 @@ export function BlackjackTableHeader({
   lobbyHref: string;
   experience?: "classic" | "v2";
   err?: string | null;
+  showInvite?: boolean;
   onOpenInvite: () => void;
   onLeave: () => void;
 }) {
@@ -109,14 +111,16 @@ export function BlackjackTableHeader({
           <Link href={lobbyHref} className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10">
             {experience === "v2" ? "Back to V2 lobby" : "Back to lobby"}
           </Link>
-          <button
-            type="button"
-            className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
-            onClick={onOpenInvite}
-            title={experience === "v2" ? "Share a direct link to this V2 table" : "Share a link to join this table"}
-          >
-            {experience === "v2" ? "Share table" : "Invite players"}
-          </button>
+          {showInvite ? (
+            <button
+              type="button"
+              className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10"
+              onClick={onOpenInvite}
+              title={experience === "v2" ? "Share a direct link to this V2 table" : "Share a link to join this table"}
+            >
+              {experience === "v2" ? "Share table" : "Invite players"}
+            </button>
+          ) : null}
           <button type="button" className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10" onClick={onLeave}>
             {experience === "v2" ? "Exit table" : "Leave"}
           </button>
