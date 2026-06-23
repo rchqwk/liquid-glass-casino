@@ -1,7 +1,5 @@
 import Link from "next/link";
-import { EnterBlackjackButton } from "./components/EnterBlackjackButton";
 import { DiscordRootCallback } from "./components/DiscordRootCallback";
-import { StartTutorialButton } from "./components/StartTutorialButton";
 import { redirect } from "next/navigation";
 
 export default function Home({
@@ -57,17 +55,15 @@ export default function Home({
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
               className="glass-soft glass-shine inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-medium text-white transition hover:bg-white/10"
-              href="/casino"
+              href="/casino/blackjack-v2"
             >
-              Enter casino
+              Enter V2 Blackjack
             </Link>
-            <EnterBlackjackButton />
-            <StartTutorialButton />
             <Link
-              className="inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-medium text-[rgba(245,247,255,0.72)] transition hover:text-white"
-              href="/casino/settings"
+              className="glass-soft inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-medium text-[rgba(245,247,255,0.85)] transition hover:bg-white/10 hover:text-white"
+              href="/casino/tutorial"
             >
-              RNG / wallet settings
+              Open tutorial
             </Link>
           </div>
 
