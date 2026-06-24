@@ -3,7 +3,7 @@ import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackInventory, getBlackjackTable, upsertBlackjackInventory } from "../../../../../lib/db";
 import { tickTable } from "../../../../../lib/blackjackMultiplayer";
 import { defaultInventory, ensureInventory } from "../../../../../lib/blackjackInventory";
-import { saveBlackjackTableState } from "../../../../../lib/blackjackStatePersistence";
+import { saveBlackjackTableState, syncUserBlackjackInventoryIntoTables } from "../../../../../lib/blackjackStatePersistence";
 import { blackjackTableJsonResponse } from "../../../../../lib/blackjackTableContract";
 
 export const runtime = "nodejs";
@@ -70,9 +70,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   // Persist table + all inventories.
   await saveBlackjackTableState(t, state);
 
-  // Ensure user has an inventory row even if something went wrong.
-  const inv = (await getBlackjackInventory(user.id)) ?? defaultInventory();
-  await upsertBlackjackInventory(user.id, ensureInventory(inv));
+  // Re-broadcast the updated inventory into active live table copies for this user.
+  // Without this, another stale table state can later overwrite the DB copy.
+  const latestInventory = ensureInventory(seat.inventory);
+  await upsertBlackjackInventory(user.id, latestInventory);
+  await syncUserBlackjackInventoryIntoTables(user.id, latestInventory);
 
   return blackjackTableJsonResponse(state, user.id, { extra: { ok: true, redeemedAmount } });
 }
