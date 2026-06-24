@@ -30,6 +30,8 @@ export type BJState = {
   id: string;
   name: string;
   public: boolean;
+  createdAt?: number;
+  updatedAt?: number;
   phase: string;
   round: number;
   bettingEndsAt: number;

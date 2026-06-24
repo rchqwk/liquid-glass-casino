@@ -74,6 +74,7 @@ export function BlackjackTableHeader({
   visible,
   tableName,
   tableId,
+  joinCode,
   round,
   phase,
   lobbyHref,
@@ -86,6 +87,7 @@ export function BlackjackTableHeader({
   visible: boolean;
   tableName: string;
   tableId: string;
+  joinCode?: string | null;
   round: number;
   phase: string;
   lobbyHref: string;
@@ -106,6 +108,11 @@ export function BlackjackTableHeader({
             {experience === "v2" ? "Surface" : "Table"}: <span className="font-mono">{tableId || "-"}</span> • Round <span className="font-mono">{round || "-"}</span> • Phase{" "}
             <span className="font-mono">{phase || "-"}</span>
           </p>
+          {joinCode ? (
+            <p className="mt-1 text-xs text-cyan-100/80">
+              Join code: <span className="font-mono tracking-[0.2em] text-cyan-100">{joinCode}</span>
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={lobbyHref} className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10">

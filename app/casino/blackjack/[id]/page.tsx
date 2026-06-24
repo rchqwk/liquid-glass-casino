@@ -8,6 +8,7 @@ import { useWallet } from "../../../lib/wallet";
 import { useAuth } from "../../../lib/authClient";
 import { useUiLayout } from "../../../lib/uiLayout";
 import { useUiScale } from "../../../lib/uiScale";
+import { blackjackJoinCodeFromTable } from "../../../lib/blackjackJoinCode";
 import { BlackjackChatPanel } from "../blackjackChatPanel";
 import { blackjackCollectibleLabel, BlackjackCollectiblesPanel, BlackjackTableEditInventory } from "../blackjackCollectiblesPanel";
 import { BlackjackHostPanel } from "../blackjackHostPanel";
@@ -249,6 +250,7 @@ export function BlackjackTablePageClient({
   const [settlementToast, setSettlementToast] = useState<null | { id: string; title: string; detail: string; tone: "good" | "bad" | "neutral" }>(null);
   const [lastEventAt, setLastEventAt] = useState(0);
   const [discordAutoJoinTried, setDiscordAutoJoinTried] = useState(false);
+  const [joinCodeCopied, setJoinCodeCopied] = useState(false);
   const tableViewStorageKey = experience === "v2" ? "lgc.bj.v2.tableView" : "lgc.bj.tableView";
   const [tableView, setTableView] = useState<"table" | "list">(() => {
     try {
@@ -263,6 +265,11 @@ export function BlackjackTablePageClient({
     if (!safeTableId) return "";
     return `${window.location.origin}${routeBase}/${safeTableId}`;
   }, [safeTableId, routeBase]);
+  const discordJoinCode = useMemo(() => {
+    if (!discordMode) return null;
+    if (!safeTableId || !state?.createdAt) return null;
+    return blackjackJoinCodeFromTable(safeTableId, Number(state.createdAt ?? 0) || 0);
+  }, [discordMode, safeTableId, state?.createdAt]);
 
   useEffect(() => {
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
@@ -1729,6 +1736,7 @@ export function BlackjackTablePageClient({
         visible={showV2Shell ? v2HeaderVisible : classicHeaderVisible}
         tableName={state?.name ?? "Blackjack Table"}
         tableId={safeTableId ?? "-"}
+        joinCode={discordJoinCode}
         round={Number(state?.round ?? 0)}
         phase={String(state?.phase ?? "-")}
         lobbyHref={lobbyHref}
@@ -3237,6 +3245,23 @@ export function BlackjackTablePageClient({
                     {!discordMode ? (
                       <button type="button" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => { setHMenuOpen(false); setInviteOpen(true); }}>
                         Share table
+                      </button>
+                    ) : null}
+                    {discordJoinCode ? (
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/15"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(discordJoinCode);
+                            setJoinCodeCopied(true);
+                            window.setTimeout(() => setJoinCodeCopied(false), 1500);
+                          } catch {
+                            // ignore
+                          }
+                        }}
+                      >
+                        {joinCodeCopied ? `Copied ${discordJoinCode}` : `Join code ${discordJoinCode}`}
                       </button>
                     ) : null}
                     <button

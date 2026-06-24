@@ -20,8 +20,10 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
   const [tables, setTables] = useState<TableRow[]>([]);
   const [name, setName] = useState("Blackjack Table");
   const [isPublic, setIsPublic] = useState(true);
+  const [joinCode, setJoinCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [joinLoading, setJoinLoading] = useState(false);
   const [tick, setTick] = useState(0);
   const [autoJoining, setAutoJoining] = useState(false);
   const tableBasePath = variant === "v2" ? "/casino/blackjack-v2" : "/casino/blackjack";
@@ -227,19 +229,73 @@ export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "cla
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <PublicTablesPanel sorted={sorted} now={now} tableBasePath={tableBasePath} variant={variant} />
-        <CreateTablePanel
-          name={name}
-          setName={setName}
-          isPublic={isPublic}
-          setIsPublic={setIsPublic}
-          err={err}
-          setErr={setErr}
-          loading={loading}
-          setLoading={setLoading}
-          tableBasePath={tableBasePath}
-          variant={variant}
-          compact
-        />
+        <div className="flex flex-col gap-4">
+          {variant === "v2" ? (
+            <div className="glass-soft glass-shine rounded-3xl p-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-white">Join with code</p>
+                <span className="text-[11px] text-white/50">Discord handoff</span>
+              </div>
+              <div className="mt-3 text-xs leading-5 text-white/60">
+                Enter the code shown in a Discord blackjack table and jump straight into that same live room from the browser.
+              </div>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(String(e.target.value ?? "").toUpperCase())}
+                  placeholder="Enter join code"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm uppercase tracking-[0.2em] text-white outline-none focus:border-white/20"
+                />
+                <button
+                  type="button"
+                  disabled={joinLoading}
+                  className="glass-soft rounded-2xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-2.5 text-sm font-medium text-cyan-100 hover:bg-cyan-500/15 disabled:opacity-40"
+                  onClick={async () => {
+                    setErr(null);
+                    const code = String(joinCode ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+                    if (!code) {
+                      setErr("Enter a join code.");
+                      return;
+                    }
+                    setJoinLoading(true);
+                    try {
+                      const resolveRes = await fetch(`/api/blackjack/tables/resolve?code=${encodeURIComponent(code)}`, { cache: "no-store" });
+                      const resolveData = (await resolveRes.json().catch(() => ({}))) as any;
+                      if (!resolveRes.ok || !resolveData?.tableId) throw new Error(resolveData?.error ?? "Join code not found");
+                      await fetch(`/api/blackjack/tables/${encodeURIComponent(resolveData.tableId)}/ensure`, { method: "POST" });
+                      await fetch(`/api/blackjack/tables/${encodeURIComponent(resolveData.tableId)}/join`, {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ spectate: false }),
+                      });
+                      window.location.href = `${tableBasePath}/${encodeURIComponent(resolveData.tableId)}`;
+                    } catch (e: any) {
+                      setErr(String(e?.message ?? "Failed to join by code"));
+                    } finally {
+                      setJoinLoading(false);
+                    }
+                  }}
+                >
+                  Join code
+                </button>
+              </div>
+              {err ? <div className="mt-3 text-xs text-rose-200">{err}</div> : null}
+            </div>
+          ) : null}
+          <CreateTablePanel
+            name={name}
+            setName={setName}
+            isPublic={isPublic}
+            setIsPublic={setIsPublic}
+            err={err}
+            setErr={setErr}
+            loading={loading}
+            setLoading={setLoading}
+            tableBasePath={tableBasePath}
+            variant={variant}
+            compact
+          />
+        </div>
       </div>
     </div>
   );
