@@ -39,8 +39,12 @@ export function MysteryBoxTab() {
   const tableIdFromPath = useMemo(() => {
     const p = String(pathname ?? "");
     const parts = p.split("/").filter(Boolean);
-    // /casino/blackjack/[id]
-    if (parts.length >= 3 && parts[0] === "casino" && parts[1] === "blackjack") {
+    // /casino/blackjack/[id] or /casino/blackjack-v2/[id]
+    if (
+      parts.length >= 3 &&
+      parts[0] === "casino" &&
+      (parts[1] === "blackjack" || parts[1] === "blackjack-v2")
+    ) {
       const id = parts[2]!;
       if (id && id !== "discord" && id !== "games") return id;
     }
@@ -116,6 +120,13 @@ export function MysteryBoxTab() {
   const hasMythic = useMemo(() => (lastOpened?.rarity ?? []).includes("mythic"), [lastOpened]);
   const hasLegendary = useMemo(() => (lastOpened?.rarity ?? []).includes("legendary"), [lastOpened]);
 
+  const refreshBoxes = async () => {
+    const url = tableIdFromPath ? `/api/blackjack/boxes?tableId=${encodeURIComponent(tableIdFromPath)}` : "/api/blackjack/boxes";
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error("Failed to refresh boxes");
+    setData((await res.json()) as BoxesResp);
+  };
+
   const openNextBox = async () => {
     if (opening) return;
     setErr(null);
@@ -131,8 +142,7 @@ export function MysteryBoxTab() {
       });
       const j = (await res.json()) as OpenResp;
       if (!res.ok || "error" in j) throw new Error("error" in j ? j.error : "Failed");
-
-      setData((d) => (d ? { ...d, unopened: j.unopened } : d));
+      await refreshBoxes();
 
       // "Opening" animation delay
       window.setTimeout(() => {
@@ -166,7 +176,7 @@ export function MysteryBoxTab() {
       });
       const j = (await res.json()) as OpenAllResp;
       if (!res.ok || "error" in j) throw new Error("error" in j ? j.error : "Failed");
-      setData((d) => (d ? { ...d, unopened: j.unopened } : d));
+      await refreshBoxes();
 
       window.setTimeout(() => {
         setLastOpenedAll({ openedCount: j.openedCount ?? 0, rewards: j.rewards ?? [] });
