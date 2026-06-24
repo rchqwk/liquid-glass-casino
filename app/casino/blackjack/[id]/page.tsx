@@ -247,7 +247,9 @@ export function BlackjackTablePageClient({
     active1h: number;
   }>({ messages: [], online: 0, active1h: 0 });
   const [powerupToasts, setPowerupToasts] = useState<Array<{ id: string; text: string }>>([]);
-  const [settlementToast, setSettlementToast] = useState<null | { id: string; title: string; detail: string; tone: "good" | "bad" | "neutral" }>(null);
+  const [settlementToast, setSettlementToast] = useState<
+    null | { id: string; title: string; detail: string; tone: "good" | "bad" | "neutral" | "prestige" }
+  >(null);
   const [lastEventAt, setLastEventAt] = useState(0);
   const [discordAutoJoinTried, setDiscordAutoJoinTried] = useState(false);
   const [joinCodeCopied, setJoinCodeCopied] = useState(false);
@@ -496,13 +498,18 @@ export function BlackjackTablePageClient({
     const wager = Number(state.lastResult.wager ?? mySeat.bet ?? 0) || 0;
     const multiplier = Number(state.lastResult.multiplier ?? 0) || 0;
     const profit = Math.round(wager * (multiplier - 1) * 100) / 100;
+    const prestigeBonus = 2 * prestigeLevel;
+    const hasPrestigeTag = String(state.lastResult.outcome ?? "").includes("(prestige)");
+    const showPrestigeTone = profit > 0 && prestigeBonus > 0 && hasPrestigeTag;
     const toast =
       profit > 0
         ? {
             id: key,
             title: `Won ${formatRatio(Math.max(0, multiplier - 1))}:1`,
-            detail: `+${formatChipValue(profit)} ⓒ`,
-            tone: "good" as const,
+            detail: showPrestigeTone
+              ? `+${formatChipValue(profit)} ⓒ • Prestige ★${prestigeLevel} (+${prestigeBonus}x)`
+              : `+${formatChipValue(profit)} ⓒ`,
+            tone: showPrestigeTone ? ("prestige" as const) : ("good" as const),
           }
         : profit < 0
           ? {
@@ -1039,7 +1046,9 @@ export function BlackjackTablePageClient({
         <div className="pointer-events-none fixed top-24 left-1/2 z-[91] w-[min(440px,calc(100vw-2rem))] -translate-x-1/2">
           <div
             className={`glass glass-shine rounded-3xl border px-5 py-4 text-center shadow-[0_24px_60px_rgba(0,0,0,.45)] ${
-              settlementToast.tone === "good"
+              settlementToast.tone === "prestige"
+                ? "border-yellow-300/25 bg-yellow-500/12 text-yellow-50 shadow-[0_0_32px_rgba(250,204,21,.14)]"
+                : settlementToast.tone === "good"
                 ? "border-emerald-300/25 bg-emerald-500/12 text-emerald-50"
                 : settlementToast.tone === "bad"
                   ? "border-rose-300/25 bg-rose-500/12 text-rose-50"

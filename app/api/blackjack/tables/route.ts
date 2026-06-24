@@ -80,6 +80,9 @@ export async function POST(req: Request) {
   state.seats[0] = {
     userId: user.id,
     username: user.username,
+    prestigeLevel: Number((user as any).prestige_level ?? 0),
+    nameColor: ((user as any).name_color ?? null) as any,
+    avatarUrl: ((user as any).discord_avatar_url ?? null) as any,
     joinedAt: now,
     lastSeenAt: now,
     missedRounds: 0,
