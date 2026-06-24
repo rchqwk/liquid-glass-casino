@@ -252,6 +252,7 @@ export function BlackjackTablePageClient({
   const [settlementToast, setSettlementToast] = useState<
     null | { id: string; title: string; detail: string; tone: "good" | "bad" | "neutral" | "prestige" }
   >(null);
+  const [settlementToastFading, setSettlementToastFading] = useState(false);
   const [lastEventAt, setLastEventAt] = useState(0);
   const [discordAutoJoinTried, setDiscordAutoJoinTried] = useState(false);
   const [joinCodeCopied, setJoinCodeCopied] = useState(false);
@@ -527,11 +528,19 @@ export function BlackjackTablePageClient({
               tone: "neutral" as const,
             };
     setSettlementToastKey(key);
+    setSettlementToastFading(false);
     setSettlementToast(toast);
+    const fadeTimer = window.setTimeout(() => {
+      setSettlementToastFading(true);
+    }, 4500);
     const timer = window.setTimeout(() => {
       setSettlementToast((current) => (current?.id === key ? null : current));
-    }, 3200);
-    return () => window.clearTimeout(timer);
+      setSettlementToastFading(false);
+    }, 5000);
+    return () => {
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(timer);
+    };
   }, [state, mySeat, safeTableId, settlementToastKey]);
 
   const scrollToSection = (el: HTMLElement | null) => {
@@ -1047,7 +1056,9 @@ export function BlackjackTablePageClient({
       {settlementToast ? (
         <div className="pointer-events-none fixed top-24 left-1/2 z-[91] w-[min(440px,calc(100vw-2rem))] -translate-x-1/2">
           <div
-            className={`glass glass-shine rounded-3xl border px-5 py-4 text-center shadow-[0_24px_60px_rgba(0,0,0,.45)] ${
+            className={`glass glass-shine rounded-3xl border px-5 py-4 text-center shadow-[0_24px_60px_rgba(0,0,0,.45)] transition-all duration-500 ${
+              settlementToastFading ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100"
+            } ${
               settlementToast.tone === "prestige"
                 ? "border-yellow-300/25 bg-yellow-500/12 text-yellow-50 shadow-[0_0_32px_rgba(250,204,21,.14)]"
                 : settlementToast.tone === "good"
