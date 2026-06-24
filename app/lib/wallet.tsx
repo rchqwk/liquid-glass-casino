@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { randomHex, rngFloat, rngInt, sha256Hex } from "./provablyFair";
 import { useAuth } from "./authClient";
+import { getQuickRefillInfo, LARGE_REFILL_COOLDOWN_MS, QUICK_REFILL_COOLDOWN_MS } from "./walletRefills";
 
 type HistoryItem = {
   ts: number;
@@ -54,6 +55,8 @@ type WalletContextValue = {
   getRngForNonce: (nonce: number) => BetRng | null;
   refill5000AvailableAt: number; // epoch ms
   refill100AvailableAt: number; // epoch ms
+  quickRefillAmount: number;
+  quickRefillEventActive: boolean;
   deposit: (
     amount: number,
     opts?: { bypassCooldown?: boolean; refill5000?: boolean; refill100?: boolean },
@@ -90,9 +93,6 @@ type WalletContextValue = {
 };
 
 const STORAGE_KEY = "lgc.wallet.v1";
-const REFILL_5000_COOLDOWN_MS = 15 * 60 * 1000;
-const REFILL_100_COOLDOWN_MS = 60 * 1000;
-
 function clampMoney(n: number) {
   return Math.round(n * 100) / 100;
 }
@@ -251,6 +251,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         getRngForNonce: () => null,
         refill5000AvailableAt: 0,
         refill100AvailableAt: 0,
+        quickRefillAmount: getQuickRefillInfo().amount,
+        quickRefillEventActive: getQuickRefillInfo().isEventActive,
         deposit: async () => ({ ok: false, error: "Wallet not ready" }),
         setClientSeed: () => {},
         rotateServerSeed: () => ({ revealedServerSeed: "" }),
@@ -281,9 +283,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         });
       },
       refill5000AvailableAt:
-        (state.lastRefill5000At ?? 0) + REFILL_5000_COOLDOWN_MS,
+        (state.lastRefill5000At ?? 0) + LARGE_REFILL_COOLDOWN_MS,
       refill100AvailableAt:
-        (state.lastRefill100At ?? 0) + REFILL_100_COOLDOWN_MS,
+        (state.lastRefill100At ?? 0) + QUICK_REFILL_COOLDOWN_MS,
+      quickRefillAmount: getQuickRefillInfo().amount,
+      quickRefillEventActive: getQuickRefillInfo().isEventActive,
       getRngForNonce: (betNonce) => {
         const open = state.openBets?.[betNonce];
         if (!open) return null;
@@ -345,7 +349,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (isRefill5000 && !bypass) {
-          const nextAt = (state.lastRefill5000At ?? 0) + REFILL_5000_COOLDOWN_MS;
+          const nextAt = (state.lastRefill5000At ?? 0) + LARGE_REFILL_COOLDOWN_MS;
           if (now < nextAt) {
             return {
               ok: false,
@@ -356,7 +360,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (isRefill100 && !bypass) {
-          const nextAt = (state.lastRefill100At ?? 0) + REFILL_100_COOLDOWN_MS;
+          const nextAt = (state.lastRefill100At ?? 0) + QUICK_REFILL_COOLDOWN_MS;
           if (now < nextAt) {
             return {
               ok: false,

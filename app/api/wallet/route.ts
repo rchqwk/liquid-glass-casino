@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../lib/authServer";
 import { getUserWalletState, upsertUserWalletState } from "../../lib/db";
 import { randomHex, sha256Hex } from "../../lib/provablyFair";
+import { getQuickRefillInfo } from "../../lib/walletRefills";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -178,10 +179,12 @@ export async function POST(req: Request) {
     const refillKind = String((body as any)?.kind ?? "").trim();
     const actualKind = refillKind || kind;
     const bypassCooldown = !!(body as any)?.bypassCooldown;
-    const amount = clampMoney(Number(body?.delta ?? body?.wager ?? body?.baseWager ?? 0) || 0);
     const now = Date.now();
     const isRefill5000 = actualKind === "refill5000";
     const isRefill100 = actualKind === "refill100";
+    const amount = isRefill100
+      ? clampMoney(getQuickRefillInfo(now).amount)
+      : clampMoney(Number(body?.delta ?? body?.wager ?? body?.baseWager ?? 0) || 0);
     if (!isRefill5000 && !isRefill100) {
       return NextResponse.json({ error: "Invalid refill kind" }, { status: 400 });
     }
@@ -216,6 +219,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       state: saved,
+      amountClaimed: amount,
       balanceAfter: saved?.balance ?? next.balance,
       nextAvailableAt: isRefill5000 ? Number(saved?.lastRefill5000At ?? next.lastRefill5000At) + 15 * 60 * 1000 : Number(saved?.lastRefill100At ?? next.lastRefill100At) + 60 * 1000,
     });

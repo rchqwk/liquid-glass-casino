@@ -32,6 +32,8 @@ export function BlackjackTablePageClient({
     balance,
     refill5000AvailableAt,
     refill100AvailableAt,
+    quickRefillAmount,
+    quickRefillEventActive,
     deposit,
     reserveServerBet,
     settleServerBet,
@@ -1078,15 +1080,16 @@ export function BlackjackTablePageClient({
                 className="glass-soft rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 text-left text-emerald-100 hover:bg-emerald-500/15 disabled:opacity-40"
                 disabled={refill100Left > 0}
                 onClick={async () => {
-                  const res = await deposit(100, { refill100: true });
+                  const res = await deposit(quickRefillAmount, { refill100: true });
                   if (!res.ok) setErr(res.error);
                 }}
               >
-                <div className="text-sm font-semibold">Quick top-up</div>
-                <div className="mt-1 font-mono text-lg">+100 ⓒ</div>
+                <div className="text-sm font-semibold">{quickRefillEventActive ? "Event top-up" : "Quick top-up"}</div>
+                <div className="mt-1 font-mono text-lg">+{quickRefillAmount} ⓒ</div>
                 <div className="mt-2 text-xs text-emerald-100/75">
                   {refill100Left > 0 ? `Available in ${formatCooldown(refill100Left)}` : "Available now"}
                 </div>
+                {quickRefillEventActive ? <div className="mt-2 text-[11px] text-emerald-100/70">Night event live: minute refill boosted until midnight GMT.</div> : null}
               </button>
 
               <button

@@ -7,7 +7,7 @@ import { useAuth } from "../lib/authClient";
 import { formatChips, formatNumberWords } from "../lib/format";
 
 export function Topbar() {
-  const { balance, deposit, reset, syncFromServer, refill5000AvailableAt, refill100AvailableAt } = useWallet();
+  const { balance, deposit, reset, syncFromServer, refill5000AvailableAt, refill100AvailableAt, quickRefillAmount, quickRefillEventActive } = useWallet();
   const { user, loading, refresh } = useAuth();
   const role = user?.role_level ?? 0;
   const [barOpen, setBarOpen] = useState(false);
@@ -186,13 +186,14 @@ export function Topbar() {
   }, [refillCooldownMs, role, refillAmount]);
 
   const refill100Label = useMemo(() => {
-    if (role >= 1) return "+100";
-    if (refill100CooldownMs <= 0) return "+100";
+    const amt = `+${formatChips(quickRefillAmount)}`;
+    if (role >= 1) return amt;
+    if (refill100CooldownMs <= 0) return amt;
     const s = Math.ceil(refill100CooldownMs / 1000);
     const mm = String(Math.floor(s / 60)).padStart(2, "0");
     const ss = String(s % 60).padStart(2, "0");
-    return `+100 (${mm}:${ss})`;
-  }, [refill100CooldownMs, role]);
+    return `${amt} (${mm}:${ss})`;
+  }, [refill100CooldownMs, role, quickRefillAmount]);
 
   return (
     <>
@@ -403,17 +404,20 @@ export function Topbar() {
                     setMsg("Sign in to refill.");
                     return;
                   }
-                  const res = await deposit(100, { bypassCooldown: role >= 1, refill100: true });
+                  const res = await deposit(quickRefillAmount, { bypassCooldown: role >= 1, refill100: true });
                   if (!res.ok) {
                     setMsg(
                       res.nextAvailableAt
                         ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 1000)}s.`
                         : res.error,
                     );
+                  } else {
+                    setMsg(`Added ${formatChips(quickRefillAmount)} chips.`);
                   }
                 }}
                 disabled={!canRefill || (role < 1 && refill100CooldownMs > 0)}
                 type="button"
+                title={quickRefillEventActive ? "Night event live: +50,000 quick refill every minute from 9pm to midnight GMT." : "Standard quick refill: +100 every minute."}
               >
                 {refill100Label}
               </button>
