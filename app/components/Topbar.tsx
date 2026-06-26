@@ -297,7 +297,7 @@ export function Topbar() {
         <div className="fixed top-3 right-3 z-[75]">
           <button
             type="button"
-            className="glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 opacity-50 hover:bg-white/10"
+            className="glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 opacity-75 hover:bg-white/10"
             onClick={() => setBarOpen(true)}
             title="Toggle top bar"
           >
