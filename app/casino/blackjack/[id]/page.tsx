@@ -534,11 +534,11 @@ export function BlackjackTablePageClient({
     setSettlementToast(toast);
     const fadeTimer = window.setTimeout(() => {
       setSettlementToastFading(true);
-    }, 4500);
+    }, 2000);
     const timer = window.setTimeout(() => {
       setSettlementToast((current) => (current?.id === key ? null : current));
       setSettlementToastFading(false);
-    }, 5000);
+    }, 4000);
     return () => {
       window.clearTimeout(fadeTimer);
       window.clearTimeout(timer);

@@ -241,7 +241,7 @@ export function MysteryBoxTab() {
       >
         <button
           type="button"
-          className="pointer-events-auto glass glass-shine relative rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
+          className="pointer-events-auto glass glass-shine relative rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 opacity-50 hover:bg-white/10"
           onClick={() => setOpen(true)}
           data-tour="mystery-box-bubble"
         >
