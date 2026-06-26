@@ -507,7 +507,7 @@ export function BlackjackV2FloatingTimer({
           : "border-white/10 bg-white/10 text-white/85";
 
   return (
-    <div className="pointer-events-none fixed bottom-5 right-4 z-[82] sm:bottom-6 sm:right-6">
+    <div className="pointer-events-none fixed right-4 top-24 z-[82] sm:right-6 sm:top-28">
       <div
         className={`glass glass-shine min-w-[132px] rounded-3xl border px-4 py-3 shadow-[0_22px_60px_rgba(0,0,0,.35)] backdrop-blur-xl transform-gpu ${toneClass}`}
         style={{ transform: "perspective(900px) rotateX(16deg) rotateY(-14deg) translateZ(0)" }}
