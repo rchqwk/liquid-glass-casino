@@ -19,6 +19,7 @@ export function Topbar() {
   const [broadcast, setBroadcast] = useState<string | null>(null);
   const [displayBalance, setDisplayBalance] = useState(balance);
   const displayBalanceRef = useRef(displayBalance);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [afterId, setAfterId] = useState<number>(() => {
     try {
       const raw = localStorage.getItem("lgc.ann.afterId");
@@ -32,6 +33,19 @@ export function Topbar() {
   useEffect(() => {
     const id = window.setInterval(() => forceTick((x) => (x + 1) % 1000000), 1000);
     return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const updateViewport = () => {
+      try {
+        setIsMobileViewport(window.innerWidth < 640);
+      } catch {
+        setIsMobileViewport(false);
+      }
+    };
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
   }, []);
 
   useEffect(() => {
@@ -175,6 +189,7 @@ export function Topbar() {
   const canPrestigeNow = !!user && Number(balance ?? 0) >= nextPrestigeAt;
   const nextPrestigeLevel = prestigeLevel + 1;
   const prestigePoints = Number((user as any)?.prestige_points ?? 0);
+  const mobileTableMenuMode = !!bjCtx?.active && isMobileViewport;
   const refillLabel = useMemo(() => {
     const amt = `+${formatChips(refillAmount)}`;
     if (role >= 1) return amt;
@@ -378,87 +393,91 @@ export function Topbar() {
               >
                 Leaderboard
               </Link>
-              <Link
-                className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
-                href="/casino/customizations"
-              >
-                Customizations
-              </Link>
-              <Link
-                className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
-                href="/casino/prestige-shop"
-              >
-                Prestige Shop
-              </Link>
-              <Link
-                className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
-                href="/casino/profile"
-              >
-                {loading ? "…" : user ? `@${user.username}` : "Sign in"}
-              </Link>
-              <button
-                className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
-                onClick={async () => {
-                  setMsg(null);
-                  if (!canRefill) {
-                    setMsg("Sign in to refill.");
-                    return;
-                  }
-                  const res = await deposit(quickRefillAmount, { bypassCooldown: role >= 1, refill100: true });
-                  if (!res.ok) {
-                    setMsg(
-                      res.nextAvailableAt
-                        ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 1000)}s.`
-                        : res.error,
-                    );
-                  } else {
-                    setMsg(`Added ${formatChips(quickRefillAmount)} chips.`);
-                  }
-                }}
-                disabled={!canRefill || (role < 1 && refill100CooldownMs > 0)}
-                type="button"
-                title={quickRefillEventActive ? "Night event live: +50,000 quick refill every minute from 9pm to midnight GMT." : "Standard quick refill: +100 every minute."}
-              >
-                {refill100Label}
-              </button>
-              <button
-                className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
-                onClick={async () => {
-                  setMsg(null);
-                  if (!canRefill) {
-                    setMsg("Sign in to refill.");
-                    return;
-                  }
-                  const res = await deposit(refillAmount, { bypassCooldown: role >= 1, refill5000: true });
-                  if (!res.ok) {
-                    setMsg(
-                      res.nextAvailableAt
-                        ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 60000)} min.`
-                        : res.error,
-                    );
-                  } else {
-                    setMsg(`Added ${formatChips(refillAmount)} chips.`);
-                  }
-                }}
-                disabled={!canRefill || (role < 1 && refillCooldownMs > 0)}
-                type="button"
-                title={
-                  role < 1
-                    ? `Standard users: one +${formatChips(refillAmount)} refill every 15 minutes (includes +10000 per prestige level)`
-                    : "Admin: unlimited refills"
-                }
-              >
-                {refillLabel}
-              </button>
-              {role >= 1 ? (
-                <button
-                  className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
-                  onClick={() => void reset()}
-                  type="button"
-                  title="Reset wallet + RNG seeds"
-                >
-                  Reset
-                </button>
+              {!mobileTableMenuMode ? (
+                <>
+                  <Link
+                    className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
+                    href="/casino/customizations"
+                  >
+                    Customizations
+                  </Link>
+                  <Link
+                    className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
+                    href="/casino/prestige-shop"
+                  >
+                    Prestige Shop
+                  </Link>
+                  <Link
+                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
+                    href="/casino/profile"
+                  >
+                    {loading ? "…" : user ? `@${user.username}` : "Sign in"}
+                  </Link>
+                  <button
+                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
+                    onClick={async () => {
+                      setMsg(null);
+                      if (!canRefill) {
+                        setMsg("Sign in to refill.");
+                        return;
+                      }
+                      const res = await deposit(quickRefillAmount, { bypassCooldown: role >= 1, refill100: true });
+                      if (!res.ok) {
+                        setMsg(
+                          res.nextAvailableAt
+                            ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 1000)}s.`
+                            : res.error,
+                        );
+                      } else {
+                        setMsg(`Added ${formatChips(quickRefillAmount)} chips.`);
+                      }
+                    }}
+                    disabled={!canRefill || (role < 1 && refill100CooldownMs > 0)}
+                    type="button"
+                    title={quickRefillEventActive ? "Night event live: +50,000 quick refill every minute from 9pm to midnight GMT." : "Standard quick refill: +100 every minute."}
+                  >
+                    {refill100Label}
+                  </button>
+                  <button
+                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
+                    onClick={async () => {
+                      setMsg(null);
+                      if (!canRefill) {
+                        setMsg("Sign in to refill.");
+                        return;
+                      }
+                      const res = await deposit(refillAmount, { bypassCooldown: role >= 1, refill5000: true });
+                      if (!res.ok) {
+                        setMsg(
+                          res.nextAvailableAt
+                            ? `Refill available in ${Math.ceil((res.nextAvailableAt - Date.now()) / 60000)} min.`
+                            : res.error,
+                        );
+                      } else {
+                        setMsg(`Added ${formatChips(refillAmount)} chips.`);
+                      }
+                    }}
+                    disabled={!canRefill || (role < 1 && refillCooldownMs > 0)}
+                    type="button"
+                    title={
+                      role < 1
+                        ? `Standard users: one +${formatChips(refillAmount)} refill every 15 minutes (includes +10000 per prestige level)`
+                        : "Admin: unlimited refills"
+                    }
+                  >
+                    {refillLabel}
+                  </button>
+                  {role >= 1 ? (
+                    <button
+                      className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
+                      onClick={() => void reset()}
+                      type="button"
+                      title="Reset wallet + RNG seeds"
+                    >
+                      Reset
+                    </button>
+                  ) : null}
+                </>
               ) : null}
             </div>
           </div>

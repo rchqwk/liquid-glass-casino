@@ -35,6 +35,7 @@ export function BlackjackTablePageClient({
     quickRefillAmount,
     quickRefillEventActive,
     deposit,
+    reset,
     reserveServerBet,
     settleServerBet,
     cancelServerBet,
@@ -390,6 +391,7 @@ export function BlackjackTablePageClient({
   const bonusPointsBalance = Math.max(0, Math.floor(Number((state?.meInventory as any)?.bonusPoints ?? 0) || 0));
   const allInWinStreak = Math.max(0, Math.floor(Number((state?.meInventory as any)?.allInWinStreak ?? 0) || 0));
   const bondAmountPercents = [10, 25, 50, 75, 90, 100] as const;
+  const role = Number((user as any)?.role_level ?? 0);
   const prestigeLevel = Math.max(0, Number((user as any)?.prestige_level ?? 0) || 0);
   const largeRefillAmount = Math.max(0, 5000 + 10000 * prestigeLevel);
 
@@ -3308,6 +3310,57 @@ export function BlackjackTablePageClient({
                       >
                         {joinCodeCopied ? `Copied ${discordJoinCode}` : `Join code ${discordJoinCode}`}
                       </button>
+                    ) : null}
+                    {isMobileViewport ? (
+                      <>
+                        <Link href="/casino/customizations" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => setHMenuOpen(false)}>
+                          Customizations
+                        </Link>
+                        <Link href="/casino/prestige-shop" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => setHMenuOpen(false)}>
+                          Prestige Shop
+                        </Link>
+                        <Link href="/casino/profile" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => setHMenuOpen(false)}>
+                          {user ? `@${user.username}` : "Profile"}
+                        </Link>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
+                          disabled={!user || (role < 1 && refill100Left > 0)}
+                          onClick={async () => {
+                            const res = await deposit(quickRefillAmount, { bypassCooldown: role >= 1, refill100: true });
+                            if (!res.ok) setErr(res.error);
+                            setHMenuOpen(false);
+                          }}
+                          title={quickRefillEventActive ? "Night event live: +50,000 quick refill every minute from 9pm to midnight GMT." : "Standard quick refill: +100 every minute."}
+                        >
+                          Quick top-up +{quickRefillAmount}
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
+                          disabled={!user || (role < 1 && refill5000Left > 0)}
+                          onClick={async () => {
+                            const res = await deposit(largeRefillAmount, { bypassCooldown: role >= 1, refill5000: true });
+                            if (!res.ok) setErr(res.error);
+                            setHMenuOpen(false);
+                          }}
+                          title={role < 1 ? `Standard users: one +${largeRefillAmount} refill every 15 minutes.` : "Admin: unlimited refills"}
+                        >
+                          Large top-up +{largeRefillAmount}
+                        </button>
+                        {role >= 1 ? (
+                          <button
+                            type="button"
+                            className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10"
+                            onClick={async () => {
+                              await reset();
+                              setHMenuOpen(false);
+                            }}
+                          >
+                            Reset
+                          </button>
+                        ) : null}
+                      </>
                     ) : null}
                     <button
                       type="button"
