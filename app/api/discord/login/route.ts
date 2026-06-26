@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { setSessionToken } from "../../../lib/authServer";
-import { createOrGetDiscordLinkedUser, discordSetActiveSession } from "../../../lib/db";
+import { completeDiscordMobileAuthByCode, createOrGetDiscordLinkedUser, discordSetActiveSession } from "../../../lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +39,7 @@ function randomToken() {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as { code?: string; redirectUri?: string } | null;
+  const body = (await req.json().catch(() => null)) as { code?: string; redirectUri?: string; mobileAuthCode?: string } | null;
   const code = String(body?.code ?? "");
   if (!code) return NextResponse.json({ error: "Missing code" }, { status: 400 });
 
@@ -83,6 +83,10 @@ export async function POST(req: Request) {
   const sessionToken = randomToken();
   await discordSetActiveSession(linked.id, sessionToken);
   await setSessionToken(sessionToken);
+  const mobileAuthCode = String(body?.mobileAuthCode ?? "").trim();
+  if (mobileAuthCode) {
+    await completeDiscordMobileAuthByCode({ code: mobileAuthCode, userId: linked.id, sessionToken });
+  }
 
   return NextResponse.json({
     ok: true,

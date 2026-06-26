@@ -10,6 +10,7 @@ export default function DiscordBlackjackEntryPage() {
   const [stage, setStage] = useState<Stage>("init");
   const [err, setErr] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [mobileAuth, setMobileAuth] = useState<null | { token: string; code: string; channelId?: string | null; expiresAt: number }>(null);
 
   const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ?? "";
   const redirectUri =
@@ -50,6 +51,71 @@ export default function DiscordBlackjackEntryPage() {
     const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    if (oauthCodeFromQuery) return;
+    if (mobileAuth) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/discord/mobile-auth", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ channelId }),
+        });
+        const data = (await res.json().catch(() => ({}))) as any;
+        if (!res.ok || !data?.token || !data?.code) throw new Error(data?.error ?? "Failed to create mobile auth code");
+        if (cancelled) return;
+        setMobileAuth({
+          token: String(data.token),
+          code: String(data.code),
+          channelId: (data.channelId ?? channelId ?? null) as string | null,
+          expiresAt: Number(data.expiresAt ?? 0) || Date.now() + 15 * 60 * 1000,
+        });
+      } catch (e: any) {
+        if (cancelled) return;
+        setStage("error");
+        setErr(String(e?.message ?? "Failed to initialize mobile Discord sign-in."));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isMobile, oauthCodeFromQuery, mobileAuth, channelId]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    if (!mobileAuth?.token) return;
+    if (oauthCodeFromQuery) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/discord/mobile-auth?token=${encodeURIComponent(mobileAuth.token)}`, { cache: "no-store" });
+        const data = (await res.json().catch(() => ({}))) as any;
+        if (!res.ok) return;
+        if (cancelled) return;
+        if (data?.status === "completed" && data?.sessionToken) {
+          try {
+            localStorage.setItem("lgc.session", String(data.sessionToken));
+          } catch {
+            // ignore
+          }
+          setStage("redirecting");
+          const nextChannelId = String(data?.channelId ?? mobileAuth.channelId ?? "").trim();
+          router.replace(nextChannelId ? `/casino/blackjack-v2/${encodeURIComponent(nextChannelId)}` : "/casino/blackjack-v2");
+        }
+      } catch {
+        // ignore transient poll failures
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [isMobile, mobileAuth, oauthCodeFromQuery, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,8 +282,8 @@ export default function DiscordBlackjackEntryPage() {
   }, [clientId, redirectUri, channelId]);
 
   // If we already know we need OAuth, jump there automatically once per page load.
-  // On mobile this avoids users getting stuck forever on "awaiting oauth".
   useEffect(() => {
+    if (isMobile) return;
     if (oauthCodeFromQuery) return;
     if (!oauthAuthorizeUrl) return;
     if (stage !== "awaiting_oauth") return;
@@ -236,7 +302,7 @@ export default function DiscordBlackjackEntryPage() {
 
   // If Discord opened the page without the embedded params, also fall back automatically.
   useEffect(() => {
-    if (isIOS) return; // on iOS, the awaiting_oauth effect above handles the redirect path
+    if (isIOS || isMobile) return;
     if (hasFrameId) return;
     if (oauthCodeFromQuery) return;
     if (!oauthAuthorizeUrl) return;
@@ -252,6 +318,11 @@ export default function DiscordBlackjackEntryPage() {
       // ignore
     }
   }, [hasFrameId, oauthCodeFromQuery, oauthAuthorizeUrl, channelId]);
+
+  const mobileLinkUrl = useMemo(() => {
+    if (typeof window === "undefined") return "/discord/mobile";
+    return `${window.location.origin}/discord/mobile`;
+  }, []);
 
   return (
     <div
@@ -365,7 +436,31 @@ export default function DiscordBlackjackEntryPage() {
             </div>
           ) : null}
 
-          {(stage === "init" || stage === "awaiting_oauth") && (elapsed >= 2 || stage === "awaiting_oauth") && oauthAuthorizeUrl ? (
+          {isMobile && stage === "awaiting_oauth" && mobileAuth ? (
+            <div
+              style={{
+                marginTop: 16,
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,.12)",
+                background: "rgba(255,255,255,.06)",
+                padding: "14px 16px",
+                color: "rgba(255,255,255,.82)",
+                fontSize: 14,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: "rgba(255,255,255,.96)" }}>Mobile pairing code</div>
+              <div className="lgc-mono" style={{ marginTop: 10, fontSize: 28, letterSpacing: "0.32em" }}>{mobileAuth.code}</div>
+              <div style={{ marginTop: 10, lineHeight: 1.6 }}>
+                Open <span className="lgc-mono">{mobileLinkUrl}</span> in your phone browser, enter this code, and finish Discord sign-in there.
+                This Activity will continue automatically as soon as the browser step completes.
+              </div>
+              <div className="lgc-tiny" style={{ marginTop: 10 }}>
+                Code expires in {Math.max(0, Math.ceil((mobileAuth.expiresAt - Date.now()) / 60000))} min.
+              </div>
+            </div>
+          ) : null}
+
+          {!isMobile && (stage === "init" || stage === "awaiting_oauth") && (elapsed >= 2 || stage === "awaiting_oauth") && oauthAuthorizeUrl ? (
             <div
               style={{
                 marginTop: 16,
@@ -377,25 +472,7 @@ export default function DiscordBlackjackEntryPage() {
                 fontSize: 14,
               }}
             >
-              {isMobile ? (
-                <>
-                  Mobile Discord: tap{" "}
-                  <button
-                    type="button"
-                    className="lgc-link"
-                    onClick={() => {
-                      try {
-                        window.location.href = oauthAuthorizeUrl;
-                      } catch {
-                        // ignore
-                      }
-                    }}
-                  >
-                    Authorize with Discord
-                  </button>{" "}
-                  to continue. Mobile Activities now use a dedicated OAuth flow instead of the embedded handshake.
-                </>
-              ) : (
+              {
                 <>
                   If this stays stuck, click{" "}
                   <a className="lgc-link" href={oauthAuthorizeUrl}>
@@ -403,7 +480,7 @@ export default function DiscordBlackjackEntryPage() {
                   </a>{" "}
                   to continue.
                 </>
-              )}
+              }
             </div>
           ) : null}
 

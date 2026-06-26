@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import "server-only";
 import { neon } from "@neondatabase/serverless";
 
@@ -106,6 +107,16 @@ type Store = {
     name_color?: string | null;
   }>;
   discord_links?: Array<{ discord_id: string; user_id: number; created_at: number }>;
+  discord_mobile_auths?: Array<{
+    token: string;
+    code: string;
+    channel_id?: string | null;
+    user_id?: number | null;
+    session_token?: string | null;
+    created_at: number;
+    expires_at: number;
+    completed_at?: number | null;
+  }>;
   user_wallets?: Array<{ user_id: number; state: PersistedWalletState; updated_at: number }>;
 };
 
@@ -139,6 +150,7 @@ function defaultStore(): Store {
     nextGlobalChatId: 1,
     global_chat: [],
     discord_links: [],
+    discord_mobile_auths: [],
     user_wallets: [],
   };
 }
@@ -269,6 +281,18 @@ async function ensureSchema() {
       discord_id TEXT PRIMARY KEY,
       user_id INT NOT NULL REFERENCES users(id),
       created_at BIGINT NOT NULL
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS discord_mobile_auths (
+      token TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      channel_id TEXT,
+      user_id INT,
+      session_token TEXT,
+      created_at BIGINT NOT NULL,
+      expires_at BIGINT NOT NULL,
+      completed_at BIGINT
     )
   `;
 
@@ -509,6 +533,150 @@ export async function discordSetActiveSession(userId: number, token: string) {
       u.last_seen = now;
     }
     s.sessions.push({ token, user_id: userId, created_at: now });
+  });
+}
+
+function randomDiscordMobileAuthCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  const bytes = crypto.randomBytes(6);
+  for (let i = 0; i < 6; i += 1) out += chars[bytes[i]! % chars.length];
+  return out;
+}
+
+export async function createDiscordMobileAuth(input?: { channelId?: string | null }) {
+  const sql = getSql();
+  const now = Date.now();
+  const expiresAt = now + 15 * 60 * 1000;
+  const channelId = String(input?.channelId ?? "").slice(0, 96) || null;
+
+  if (sql) {
+    await ensureSchema();
+    await sql`DELETE FROM discord_mobile_auths WHERE expires_at < ${now}`;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const token = crypto.randomBytes(24).toString("hex");
+      const code = randomDiscordMobileAuthCode();
+      const rows = (await sql`
+        INSERT INTO discord_mobile_auths (token, code, channel_id, created_at, expires_at)
+        VALUES (${token}, ${code}, ${channelId}, ${now}, ${expiresAt})
+        ON CONFLICT (code) DO NOTHING
+        RETURNING token, code, channel_id, created_at, expires_at
+      `) as any[];
+      const row = rows[0];
+      if (row) {
+        return {
+          token: String(row.token),
+          code: String(row.code),
+          channelId: (row.channel_id ?? null) as string | null,
+          createdAt: Number(row.created_at ?? now),
+          expiresAt: Number(row.expires_at ?? expiresAt),
+        };
+      }
+    }
+    throw new Error("Failed to create mobile auth code");
+  }
+
+  return withStore((s) => {
+    s.discord_mobile_auths = (s.discord_mobile_auths ?? []).filter((x) => Number(x.expires_at ?? 0) >= now);
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const token = crypto.randomBytes(24).toString("hex");
+      const code = randomDiscordMobileAuthCode();
+      if ((s.discord_mobile_auths ?? []).some((x) => x.code === code)) continue;
+      const rec = { token, code, channel_id: channelId, created_at: now, expires_at: expiresAt, completed_at: null, user_id: null, session_token: null };
+      s.discord_mobile_auths!.push(rec);
+      return { token, code, channelId, createdAt: now, expiresAt };
+    }
+    throw new Error("Failed to create mobile auth code");
+  });
+}
+
+export async function completeDiscordMobileAuthByCode(input: { code: string; userId: number; sessionToken: string }) {
+  const sql = getSql();
+  const now = Date.now();
+  const code = String(input.code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+  if (!code) return null;
+
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      UPDATE discord_mobile_auths
+      SET user_id = ${input.userId}, session_token = ${input.sessionToken}, completed_at = ${now}
+      WHERE code = ${code} AND expires_at >= ${now}
+      RETURNING token, code, channel_id, created_at, expires_at, completed_at
+    `) as any[];
+    const row = rows[0] ?? null;
+    if (!row) return null;
+    return {
+      token: String(row.token),
+      code: String(row.code),
+      channelId: (row.channel_id ?? null) as string | null,
+      createdAt: Number(row.created_at ?? now),
+      expiresAt: Number(row.expires_at ?? now),
+      completedAt: Number(row.completed_at ?? now),
+    };
+  }
+
+  return withStore((s) => {
+    s.discord_mobile_auths = (s.discord_mobile_auths ?? []).filter((x) => Number(x.expires_at ?? 0) >= now);
+    const rec = (s.discord_mobile_auths ?? []).find((x) => x.code === code);
+    if (!rec) return null;
+    rec.user_id = input.userId;
+    rec.session_token = input.sessionToken;
+    rec.completed_at = now;
+    return {
+      token: rec.token,
+      code: rec.code,
+      channelId: rec.channel_id ?? null,
+      createdAt: Number(rec.created_at ?? now),
+      expiresAt: Number(rec.expires_at ?? now),
+      completedAt: Number(rec.completed_at ?? now),
+    };
+  });
+}
+
+export async function getDiscordMobileAuthByToken(token: string) {
+  const sql = getSql();
+  const now = Date.now();
+  const normalized = String(token ?? "").trim().slice(0, 96);
+  if (!normalized) return null;
+
+  if (sql) {
+    await ensureSchema();
+    await sql`DELETE FROM discord_mobile_auths WHERE expires_at < ${now}`;
+    const rows = (await sql`
+      SELECT token, code, channel_id, user_id, session_token, created_at, expires_at, completed_at
+      FROM discord_mobile_auths
+      WHERE token = ${normalized}
+      LIMIT 1
+    `) as any[];
+    const row = rows[0] ?? null;
+    if (!row) return null;
+    return {
+      token: String(row.token),
+      code: String(row.code),
+      channelId: (row.channel_id ?? null) as string | null,
+      userId: row.user_id == null ? null : Number(row.user_id),
+      sessionToken: (row.session_token ?? null) as string | null,
+      createdAt: Number(row.created_at ?? 0),
+      expiresAt: Number(row.expires_at ?? 0),
+      completedAt: row.completed_at == null ? null : Number(row.completed_at),
+    };
+  }
+
+  return withStore((s) => {
+    s.discord_mobile_auths = (s.discord_mobile_auths ?? []).filter((x) => Number(x.expires_at ?? 0) >= now);
+    const rec = (s.discord_mobile_auths ?? []).find((x) => x.token === normalized) ?? null;
+    if (!rec) return null;
+    return {
+      token: rec.token,
+      code: rec.code,
+      channelId: rec.channel_id ?? null,
+      userId: rec.user_id == null ? null : Number(rec.user_id),
+      sessionToken: (rec.session_token ?? null) as string | null,
+      createdAt: Number(rec.created_at ?? 0),
+      expiresAt: Number(rec.expires_at ?? 0),
+      completedAt: rec.completed_at == null ? null : Number(rec.completed_at),
+    };
   });
 }
 

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 export default function DiscordCallbackPage() {
   const [err, setErr] = useState<string | null>(null);
-  const [stage, setStage] = useState<"init" | "logging_in" | "redirecting" | "error">("init");
+  const [stage, setStage] = useState<"init" | "logging_in" | "redirecting" | "linked" | "error">("init");
 
   const qs = useMemo(() => {
     if (typeof window === "undefined") return null;
@@ -13,6 +13,10 @@ export default function DiscordCallbackPage() {
 
   const code = useMemo(() => qs?.get("code") ?? null, [qs]);
   const state = useMemo(() => qs?.get("state") ?? "/", [qs]);
+  const mobileAuthCode = useMemo(() => {
+    const raw = String(state ?? "");
+    return raw.startsWith("mobile:") ? raw.slice("mobile:".length).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12) : null;
+  }, [state]);
   const redirectUri =
     process.env.NEXT_PUBLIC_DISCORD_WEB_REDIRECT_URI ??
     "https://rchqwk-liquid-glass-casino.vercel.app/discord/callback";
@@ -26,7 +30,7 @@ export default function DiscordCallbackPage() {
         const res = await fetch("/api/discord/login", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ code, redirectUri }),
+          body: JSON.stringify({ code, redirectUri, mobileAuthCode }),
         });
         const data = (await res.json().catch(() => ({}))) as any;
         if (!res.ok) throw new Error(data?.error ?? "Discord login failed");
@@ -37,6 +41,10 @@ export default function DiscordCallbackPage() {
           } catch {
             // ignore
           }
+        }
+        if (mobileAuthCode) {
+          setStage("linked");
+          return;
         }
         setStage("redirecting");
         const next = String(state || "/");
@@ -50,7 +58,7 @@ export default function DiscordCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [code, redirectUri, state]);
+  }, [code, redirectUri, state, mobileAuthCode]);
 
   return (
     <div className="mx-auto w-full max-w-xl p-6 sm:p-10">
@@ -59,6 +67,11 @@ export default function DiscordCallbackPage() {
         <div className="mt-2 text-sm text-white/70">
           Stage: <span className="font-mono text-white/80">{stage}</span>
         </div>
+        {stage === "linked" ? (
+          <div className="mt-4 text-sm text-emerald-200">
+            Discord sign-in completed. Return to the Discord Activity and it should continue automatically.
+          </div>
+        ) : null}
         {err ? <div className="mt-4 text-sm text-rose-200">{err}</div> : null}
       </div>
     </div>
