@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Stage = "init" | "awaiting_oauth" | "authorizing" | "logging_in" | "ensuring_table" | "redirecting" | "error";
+type Stage = "init" | "awaiting_oauth" | "authorizing" | "logging_in" | "ensuring_table" | "redirecting" | "linked" | "error";
 
 export default function DiscordBlackjackEntryPage() {
   const router = useRouter();
@@ -25,9 +25,13 @@ export default function DiscordBlackjackEntryPage() {
   const channelIdFromQuery = useMemo(() => qs?.get("channel_id") ?? null, [qs]);
   const oauthCodeFromQuery = useMemo(() => qs?.get("code") ?? null, [qs]);
   const oauthStateFromQuery = useMemo(() => qs?.get("state") ?? null, [qs]);
+  const mobileAuthCode = useMemo(() => {
+    const raw = String(oauthStateFromQuery ?? "");
+    return raw.startsWith("mobile:") ? raw.slice("mobile:".length).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12) : null;
+  }, [oauthStateFromQuery]);
 
   // If we initiated OAuth ourselves, we store channel id in `state`.
-  const channelId = channelIdFromQuery ?? oauthStateFromQuery;
+  const channelId = channelIdFromQuery ?? (mobileAuthCode ? null : oauthStateFromQuery);
   const isMobile = useMemo(() => {
     try {
       if (typeof navigator === "undefined") return false;
@@ -138,7 +142,7 @@ export default function DiscordBlackjackEntryPage() {
           const loginRes = await fetch("/api/discord/login", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ code: oauthCodeFromQuery, redirectUri }),
+            body: JSON.stringify({ code: oauthCodeFromQuery, redirectUri, mobileAuthCode }),
           });
           const loginJson = (await loginRes.json().catch(() => ({}))) as any;
           if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
@@ -148,6 +152,11 @@ export default function DiscordBlackjackEntryPage() {
             } catch {
               // ignore
             }
+          }
+
+          if (mobileAuthCode) {
+            setStage("linked");
+            return;
           }
 
           if (channelId) {
@@ -254,6 +263,7 @@ export default function DiscordBlackjackEntryPage() {
     if (stage === "logging_in") return 55;
     if (stage === "ensuring_table") return 78;
     if (stage === "redirecting") return 95;
+    if (stage === "linked") return 100;
     if (stage === "error") return 100;
     return 10;
   }, [stage]);
@@ -265,6 +275,7 @@ export default function DiscordBlackjackEntryPage() {
     if (stage === "logging_in") return "Signing you in…";
     if (stage === "ensuring_table") return "Creating / joining table…";
     if (stage === "redirecting") return "Loading table…";
+    if (stage === "linked") return "Discord sign-in completed.";
     return "Error";
   }, [stage]);
 
@@ -393,6 +404,22 @@ export default function DiscordBlackjackEntryPage() {
               }}
             >
               {err}
+            </div>
+          ) : null}
+
+          {stage === "linked" ? (
+            <div
+              style={{
+                marginTop: 16,
+                borderRadius: 16,
+                border: "1px solid rgba(52,211,153,.25)",
+                background: "rgba(16,185,129,.12)",
+                padding: "10px 12px",
+                color: "rgba(220,252,231,.96)",
+                fontSize: 14,
+              }}
+            >
+              Discord sign-in completed. Return to the Discord Activity and it should continue automatically.
             </div>
           ) : null}
 

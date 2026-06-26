@@ -7,7 +7,7 @@ export default function DiscordMobileLinkPage() {
   const normalizedCode = useMemo(() => String(code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12), [code]);
   const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ?? "";
   const redirectUri =
-    process.env.NEXT_PUBLIC_DISCORD_WEB_REDIRECT_URI ?? "https://rchqwk-liquid-glass-casino.vercel.app/discord/callback";
+    process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI ?? "https://rchqwk-liquid-glass-casino.vercel.app/casino/blackjack/discord";
 
   const oauthUrl = useMemo(() => {
     if (!clientId || !normalizedCode) return null;
@@ -52,4 +52,3 @@ export default function DiscordMobileLinkPage() {
     </div>
   );
 }
-
