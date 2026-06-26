@@ -484,6 +484,21 @@ export default function DiscordBlackjackEntryPage() {
               <div className="lgc-tiny" style={{ marginTop: 10 }}>
                 Code expires in {Math.max(0, Math.ceil((mobileAuth.expiresAt - Date.now()) / 60000))} min.
               </div>
+              <button
+                type="button"
+                className="lgc-link"
+                style={{ marginTop: 12, background: "transparent", border: 0, padding: 0, cursor: "pointer" }}
+                onClick={() => {
+                  try {
+                    sessionStorage.setItem("lgc.discord.disableOauthSession", "1");
+                  } catch {
+                    // ignore
+                  }
+                  window.location.href = "/casino/blackjack-v2";
+                }}
+              >
+                Play with temporary username instead
+              </button>
             </div>
           ) : null}
 

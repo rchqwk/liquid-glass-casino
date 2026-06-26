@@ -33,6 +33,14 @@ function getSessionTokenClient() {
   }
 }
 
+function getDiscordUsernameModeDisabled() {
+  try {
+    return sessionStorage.getItem("lgc.discord.disableOauthSession") === "1";
+  } catch {
+    return false;
+  }
+}
+
 async function fetchWithDevice(input: RequestInfo, init?: RequestInit) {
   const headers = new Headers(init?.headers ?? {});
   const id = getDeviceId();
@@ -80,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const retryDiscord = () => {
     try {
+      sessionStorage.removeItem("lgc.discord.disableOauthSession");
       const qs = sessionStorage.getItem("lgc.discord.qs") ?? "";
       window.location.href = `/casino/blackjack/discord${qs || ""}`;
     } catch {
@@ -118,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Detect Discord embedded environment (frame_id etc). If present, persist for later navigation.
         let isDiscord = false;
         let search = "";
+        const disableDiscordOauthSession = getDiscordUsernameModeDisabled();
         try {
           search = window.location.search ?? "";
           const sp = new URLSearchParams(search);
@@ -133,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             isDiscord = sessionStorage.getItem("lgc.discord.embedded") === "1";
           }
+          if (disableDiscordOauthSession) isDiscord = false;
         } catch {
           // ignore
         }

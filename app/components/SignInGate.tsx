@@ -123,13 +123,9 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                       type="button"
                       className="mt-3 glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/10"
                       onClick={() => {
-                        // Let iOS users bypass the embedded handshake and play with a username.
-                        // We must clear the persisted "embedded" flag so the app doesn't force Discord mode.
+                        // Let Discord users bypass OAuth for this browser session and fall back to the normal username gate.
                         try {
-                          sessionStorage.removeItem("lgc.discord.embedded");
-                          sessionStorage.removeItem("lgc.discord.qs");
-                          sessionStorage.removeItem("lgc.discord.fallback.tried");
-                          sessionStorage.removeItem("lgc.discord.oauthAutoRedirected");
+                          sessionStorage.setItem("lgc.discord.disableOauthSession", "1");
                         } catch {
                           // ignore
                         }

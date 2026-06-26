@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
 import { useWallet } from "../../../lib/wallet";
 import { useAuth } from "../../../lib/authClient";
@@ -241,6 +241,10 @@ export function BlackjackTablePageClient({
   const [hostAfkKick, setHostAfkKick] = useState(true);
   const [hostSaving, setHostSaving] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [moderatorOpen, setModeratorOpen] = useState(false);
+  const [moderatorLoading, setModeratorLoading] = useState(false);
+  const [moderatorMsg, setModeratorMsg] = useState<string | null>(null);
+  const [moderationRequests, setModerationRequests] = useState<Array<{ id: number; user_id: number; username: string; created_at: number }>>([]);
   const [chatText, setChatText] = useState("");
   const [chatLastReadAt, setChatLastReadAt] = useState(0);
   const [chatScope, setChatScope] = useState<"room" | "global">("room");
@@ -276,11 +280,32 @@ export function BlackjackTablePageClient({
     if (!safeTableId || !state?.createdAt) return null;
     return blackjackJoinCodeFromTable(safeTableId, Number(state.createdAt ?? 0) || 0);
   }, [discordMode, safeTableId, state?.createdAt]);
+  const role = Number((user as any)?.role_level ?? 0);
 
   useEffect(() => {
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  const refreshModerationRequests = useCallback(async () => {
+    if (role < 1) return;
+    setModeratorLoading(true);
+    try {
+      const res = await fetch("/api/moderation/progress-reset", { cache: "no-store" });
+      const data = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok) throw new Error(data?.error ?? "Failed to load moderator queue");
+      setModerationRequests(Array.isArray(data?.requests) ? data.requests : []);
+    } catch (e: any) {
+      setModeratorMsg(String(e?.message ?? "Failed to load moderator queue"));
+    } finally {
+      setModeratorLoading(false);
+    }
+  }, [role]);
+
+  useEffect(() => {
+    if (!moderatorOpen || role < 1) return;
+    void refreshModerationRequests();
+  }, [moderatorOpen, role, refreshModerationRequests]);
 
   // Discord mode: force table id to be the call's channel_id.
   useEffect(() => {
@@ -391,7 +416,6 @@ export function BlackjackTablePageClient({
   const bonusPointsBalance = Math.max(0, Math.floor(Number((state?.meInventory as any)?.bonusPoints ?? 0) || 0));
   const allInWinStreak = Math.max(0, Math.floor(Number((state?.meInventory as any)?.allInWinStreak ?? 0) || 0));
   const bondAmountPercents = [10, 25, 50, 75, 90, 100] as const;
-  const role = Number((user as any)?.role_level ?? 0);
   const prestigeLevel = Math.max(0, Number((user as any)?.prestige_level ?? 0) || 0);
   const largeRefillAmount = Math.max(0, 5000 + 10000 * prestigeLevel);
 
@@ -1087,6 +1111,64 @@ export function BlackjackTablePageClient({
           >
             <div className="text-lg font-semibold tracking-tight">{settlementToast.title}</div>
             <div className="mt-1 text-sm text-inherit/80">{settlementToast.detail}</div>
+          </div>
+        </div>
+      ) : null}
+
+      {moderatorOpen ? (
+        <div className="fixed inset-0 z-[91] flex items-center justify-center bg-black/70 p-4">
+          <div className="glass glass-shine w-full max-w-2xl rounded-3xl border border-white/10 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-lg font-semibold text-white">Moderator menu</div>
+                <div className="mt-1 text-xs text-white/60">Approve pending progress reset requests.</div>
+              </div>
+              <button type="button" className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/10" onClick={() => setModeratorOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {moderatorLoading ? <div className="text-sm text-white/65">Loading moderator queue…</div> : null}
+              {!moderatorLoading && moderationRequests.length === 0 ? <div className="text-sm text-white/65">No pending reset requests.</div> : null}
+              {moderationRequests.map((req) => (
+                <div key={req.id} className="glass-soft rounded-3xl border border-white/10 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-white">@{req.username}</div>
+                      <div className="mt-1 text-xs text-white/55">
+                        Requested {new Date(Number(req.created_at ?? 0) || Date.now()).toLocaleString()}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="glass-soft rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/15"
+                      onClick={async () => {
+                        setModeratorMsg(null);
+                        setModeratorLoading(true);
+                        try {
+                          const res = await fetch("/api/moderation/progress-reset", {
+                            method: "PATCH",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({ requestId: req.id }),
+                          });
+                          const data = (await res.json().catch(() => ({}))) as any;
+                          if (!res.ok) throw new Error(data?.error ?? "Failed to approve reset request");
+                          setModeratorMsg(`Approved reset for @${req.username}.`);
+                          await refreshModerationRequests();
+                        } catch (e: any) {
+                          setModeratorMsg(String(e?.message ?? "Failed to approve reset request"));
+                        } finally {
+                          setModeratorLoading(false);
+                        }
+                      }}
+                    >
+                      Approve reset
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {moderatorMsg ? <div className="text-sm text-white/70">{moderatorMsg}</div> : null}
+            </div>
           </div>
         </div>
       ) : null}
@@ -2976,6 +3058,18 @@ export function BlackjackTablePageClient({
                 >
                   Chat
                 </button>
+                {role >= 1 ? (
+                  <button
+                    type="button"
+                    className="glass-soft rounded-2xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-500/15"
+                    onClick={() => {
+                      setModeratorMsg(null);
+                      setModeratorOpen(true);
+                    }}
+                  >
+                    Moderator
+                  </button>
+                ) : null}
               </div>
             </div>
             <div className="pointer-events-none fixed inset-y-0 right-3 z-[82] flex items-center">

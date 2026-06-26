@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { setSessionToken } from "../../../lib/authServer";
-import { completeDiscordMobileAuthByCode, createOrGetDiscordLinkedUser, discordSetActiveSession } from "../../../lib/db";
+import { completeDiscordMobileAuthByCode, createOrGetDiscordLinkedUser, discordSetActiveSession, setUserRoleAtLeast } from "../../../lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,11 +79,12 @@ export async function POST(req: Request) {
   const display = String(me.global_name ?? me.username ?? "discord_user");
   const avatarUrl = discordAvatarUrl(me.id, (me as any).avatar ?? null);
   const linked = await createOrGetDiscordLinkedUser({ discordId: me.id, displayName: display, avatarUrl });
+  const mobileAuthCode = String(body?.mobileAuthCode ?? "").trim();
+  const resolvedRole = mobileAuthCode ? await setUserRoleAtLeast(linked.id, 1) : Number(linked.role_level ?? 0);
 
   const sessionToken = randomToken();
   await discordSetActiveSession(linked.id, sessionToken);
   await setSessionToken(sessionToken);
-  const mobileAuthCode = String(body?.mobileAuthCode ?? "").trim();
   if (mobileAuthCode) {
     await completeDiscordMobileAuthByCode({ code: mobileAuthCode, userId: linked.id, sessionToken });
   }
@@ -92,7 +93,7 @@ export async function POST(req: Request) {
     ok: true,
     access_token: accessToken,
     session_token: sessionToken,
-    user: linked,
+    user: { ...linked, role_level: resolvedRole },
     discord: { id: me.id, username: me.username, global_name: me.global_name ?? null },
   });
 }

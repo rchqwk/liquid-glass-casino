@@ -17,6 +17,7 @@ export default function CustomizationsPage() {
   const { layout, setLayout } = useUiLayout();
   const { uiScale, setUiScale } = useUiScale();
   const [saving, setSaving] = useState(false);
+  const [requestingReset, setRequestingReset] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [nameColor, setNameColor] = useState<string | null>(null);
 
@@ -233,6 +234,35 @@ export default function CustomizationsPage() {
             </div>
 
             {msg ? <div className="mt-3 text-xs text-white/60">{msg}</div> : null}
+          </div>
+
+          <div className="rounded-3xl border border-rose-300/15 bg-rose-500/5 p-5">
+            <div className="text-sm font-semibold text-white">Reset all progress</div>
+            <div className="mt-1 text-xs leading-6 text-white/60">
+              This sends a reset request for your account progress. A moderator must approve it before your wallet, blackjack inventory, collectibles,
+              prestige progress, and leaderboard stats are cleared.
+            </div>
+            <button
+              type="button"
+              disabled={requestingReset}
+              className="mt-4 glass-soft rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-500/15 disabled:opacity-40"
+              onClick={async () => {
+                setRequestingReset(true);
+                setMsg(null);
+                try {
+                  const res = await fetch("/api/moderation/progress-reset", { method: "POST" });
+                  const j = (await res.json().catch(() => ({}))) as any;
+                  if (!res.ok) throw new Error(j?.error ?? "Failed to submit reset request");
+                  setMsg("Reset request submitted for moderator approval.");
+                } catch (e: any) {
+                  setMsg(String(e?.message ?? "Failed to submit reset request"));
+                } finally {
+                  setRequestingReset(false);
+                }
+              }}
+            >
+              {requestingReset ? "Submitting request…" : "Request progress reset"}
+            </button>
           </div>
         </div>
       ) : null}

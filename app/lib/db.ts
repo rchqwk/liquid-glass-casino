@@ -3,6 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import "server-only";
 import { neon } from "@neondatabase/serverless";
+import { defaultInventory } from "./blackjackInventory";
 
 export type AuthedUser = { id: number; username: string };
 export type AuthedUserWithRole = {
@@ -37,6 +38,8 @@ type PersistedWalletState = {
   >;
   updatedAt?: number;
 };
+
+const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
 export function normalizeUsername(raw: string) {
   return raw.trim().toLowerCase().replace(/\s+/g, "_");
@@ -117,6 +120,16 @@ type Store = {
     expires_at: number;
     completed_at?: number | null;
   }>;
+  progress_reset_requests?: Array<{
+    id: number;
+    user_id: number;
+    username: string;
+    status: "pending" | "approved";
+    created_at: number;
+    reviewed_at?: number | null;
+    reviewed_by_user_id?: number | null;
+    reviewed_by_username?: string | null;
+  }>;
   user_wallets?: Array<{ user_id: number; state: PersistedWalletState; updated_at: number }>;
 };
 
@@ -151,6 +164,7 @@ function defaultStore(): Store {
     global_chat: [],
     discord_links: [],
     discord_mobile_auths: [],
+    progress_reset_requests: [],
     user_wallets: [],
   };
 }
@@ -293,6 +307,18 @@ async function ensureSchema() {
       created_at BIGINT NOT NULL,
       expires_at BIGINT NOT NULL,
       completed_at BIGINT
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS progress_reset_requests (
+      id SERIAL PRIMARY KEY,
+      user_id INT NOT NULL REFERENCES users(id),
+      username TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at BIGINT NOT NULL,
+      reviewed_at BIGINT,
+      reviewed_by_user_id INT,
+      reviewed_by_username TEXT
     )
   `;
 
@@ -967,6 +993,7 @@ export async function getUserBySessionToken(token: string): Promise<AuthedUserWi
         SELECT u.id as id, u.username as username, u.role_level as role_level
              , u.prestige_level as prestige_level, u.prestige_points as prestige_points, u.name_color as name_color
              , u.discord_avatar_url as discord_avatar_url
+             , u.last_seen as last_seen
         FROM sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.token = ${token}
@@ -974,6 +1001,17 @@ export async function getUserBySessionToken(token: string): Promise<AuthedUserWi
     const user = rows[0] ?? null;
     if (user) {
       const now = Date.now();
+      const lastSeen = Number(user.last_seen ?? 0) || 0;
+      if (lastSeen > 0 && now - lastSeen > SESSION_IDLE_TIMEOUT_MS) {
+        await sql`DELETE FROM sessions WHERE token = ${token}`;
+        await sql`
+          UPDATE users
+          SET active_session_token = NULL,
+              last_signout = ${now}
+          WHERE id = ${user.id} AND active_session_token = ${token}
+        `;
+        return null;
+      }
       await sql`UPDATE users SET last_seen = ${now} WHERE id = ${user.id}`;
     }
     return user;
@@ -984,6 +1022,17 @@ export async function getUserBySessionToken(token: string): Promise<AuthedUserWi
     if (!sess) return null;
     const user = s.users.find((u) => u.id === sess.user_id);
     if (!user) return null;
+    const now = Date.now();
+    const lastSeen = Number((user as any).last_seen ?? 0) || 0;
+    if (lastSeen > 0 && now - lastSeen > SESSION_IDLE_TIMEOUT_MS) {
+      s.sessions = s.sessions.filter((x) => x.token !== token);
+      if ((user as any).active_session_token === token) {
+        (user as any).active_session_token = null;
+        (user as any).last_signout = now;
+      }
+      return null;
+    }
+    (user as any).last_seen = now;
     return {
       id: user.id,
       username: user.username,
@@ -1025,7 +1074,7 @@ export async function loginUsernameWithToken(input: {
 
     const urows =
       (await sql`
-        SELECT id, username, role_level, fingerprint, active_session_token, last_signout
+        SELECT id, username, role_level, fingerprint, active_session_token, last_signout, last_seen
              , prestige_level, prestige_points, name_color
         FROM users WHERE username = ${username}
       `) as any[];
@@ -1034,7 +1083,11 @@ export async function loginUsernameWithToken(input: {
 
     // If username is currently active elsewhere, only allow replacing session if fingerprint matches.
     if (user.active_session_token) {
-      if (user.fingerprint && user.fingerprint === fingerprint) {
+      const lastSeen = Number(user.last_seen ?? 0) || 0;
+      if (lastSeen > 0 && now - lastSeen > SESSION_IDLE_TIMEOUT_MS) {
+        await sql`DELETE FROM sessions WHERE token = ${user.active_session_token}`;
+        await sql`UPDATE users SET active_session_token = NULL, last_signout = ${now} WHERE id = ${user.id}`;
+      } else if (user.fingerprint && user.fingerprint === fingerprint) {
         await sql`DELETE FROM sessions WHERE token = ${user.active_session_token}`;
         await sql`UPDATE users SET active_session_token = NULL WHERE id = ${user.id}`;
       } else {
@@ -1092,7 +1145,12 @@ export async function loginUsernameWithToken(input: {
 
     const activeToken = (user as any).active_session_token as string | null | undefined;
     if (activeToken) {
-      if ((user as any).fingerprint === fingerprint) {
+      const lastSeen = Number((user as any).last_seen ?? 0) || 0;
+      if (lastSeen > 0 && now - lastSeen > SESSION_IDLE_TIMEOUT_MS) {
+        s.sessions = s.sessions.filter((x) => x.token !== activeToken);
+        (user as any).active_session_token = null;
+        (user as any).last_signout = now;
+      } else if ((user as any).fingerprint === fingerprint) {
         s.sessions = s.sessions.filter((x) => x.token !== activeToken);
         (user as any).active_session_token = null;
       } else {
@@ -1736,6 +1794,29 @@ export async function setUserRoleByUsername(targetUsername: string, roleLevel: n
   });
 }
 
+export async function setUserRoleAtLeast(userId: number, minRoleLevel: number) {
+  const uid = Number(userId);
+  const lvl = Math.max(0, Math.min(3, Math.floor(minRoleLevel)));
+  if (!Number.isFinite(uid) || uid <= 0) return 0;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      UPDATE users
+      SET role_level = GREATEST(role_level, ${lvl})
+      WHERE id = ${uid}
+      RETURNING role_level
+    `) as any[];
+    return Number(rows[0]?.role_level ?? 0);
+  }
+  return withStore((s) => {
+    const u = s.users.find((x) => x.id === uid);
+    if (!u) return 0;
+    u.role_level = Math.max(Number(u.role_level ?? 0), lvl);
+    return Number(u.role_level ?? 0);
+  });
+}
+
 export async function resetLeaderboard() {
   const sql = getSql();
   const now = Date.now();
@@ -1793,6 +1874,225 @@ export async function wipeUserStats(username: string) {
     l.wager_total = 0;
     l.bets = 0;
     l.updated_at = now;
+  });
+}
+
+export async function wipeAllUserProgress(userId: number) {
+  const uid = Number(userId);
+  const now = Date.now();
+  if (!Number.isFinite(uid) || uid <= 0) return;
+  const sql = getSql();
+  const emptyWallet = normalizeWalletState({ updatedAt: now });
+  const emptyInventory = defaultInventory();
+  if (sql) {
+    await ensureSchema();
+    await sql`
+      UPDATE users
+      SET prestige_level = 0,
+          prestige_points = 0,
+          name_color = NULL,
+          last_seen = ${now}
+      WHERE id = ${uid}
+    `;
+    await sql`
+      INSERT INTO leaderboard (user_id, profit_total, wager_total, bets, updated_at, active)
+      VALUES (${uid}, 0, 0, 0, ${now}, TRUE)
+      ON CONFLICT (user_id) DO UPDATE SET
+        profit_total = 0,
+        wager_total = 0,
+        bets = 0,
+        updated_at = ${now},
+        active = TRUE
+    `;
+    await sql`
+      INSERT INTO user_wallets (user_id, state_json, updated_at)
+      VALUES (${uid}, ${JSON.stringify(emptyWallet)}, ${now})
+      ON CONFLICT (user_id) DO UPDATE SET
+        state_json = EXCLUDED.state_json,
+        updated_at = EXCLUDED.updated_at
+    `;
+    await sql`
+      INSERT INTO blackjack_inventories (user_id, inventory_json, updated_at)
+      VALUES (${uid}, ${JSON.stringify(emptyInventory)}, ${now})
+      ON CONFLICT (user_id) DO UPDATE SET
+        inventory_json = EXCLUDED.inventory_json,
+        updated_at = EXCLUDED.updated_at
+    `;
+    return;
+  }
+  return withStore((s) => {
+    const user = s.users.find((x) => x.id === uid) as any;
+    if (user) {
+      user.prestige_level = 0;
+      user.prestige_points = 0;
+      user.name_color = null;
+      user.last_seen = now;
+    }
+    let l = s.leaderboard.find((x) => x.user_id === uid) as any;
+    if (!l) {
+      l = { user_id: uid, profit_total: 0, wager_total: 0, bets: 0, updated_at: now, active: true };
+      s.leaderboard.push(l);
+    }
+    l.profit_total = 0;
+    l.wager_total = 0;
+    l.bets = 0;
+    l.updated_at = now;
+    l.active = true;
+    s.user_wallets = s.user_wallets ?? [];
+    const walletRow = s.user_wallets.find((x) => x.user_id === uid);
+    if (walletRow) {
+      walletRow.state = emptyWallet;
+      walletRow.updated_at = now;
+    } else {
+      s.user_wallets.push({ user_id: uid, state: emptyWallet, updated_at: now });
+    }
+    s.blackjack_inventories = s.blackjack_inventories ?? [];
+    const invRow = s.blackjack_inventories.find((x) => x.user_id === uid);
+    if (invRow) {
+      invRow.inventory = emptyInventory;
+      invRow.updated_at = now;
+    } else {
+      s.blackjack_inventories.push({ user_id: uid, inventory: emptyInventory, updated_at: now });
+    }
+  });
+}
+
+export async function createProgressResetRequest(user: { id: number; username: string }) {
+  const uid = Number(user.id);
+  const username = String(user.username ?? "").slice(0, 32);
+  const now = Date.now();
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const existing = (await sql`
+      SELECT id, user_id, username, status, created_at, reviewed_at, reviewed_by_user_id, reviewed_by_username
+      FROM progress_reset_requests
+      WHERE user_id = ${uid} AND status = 'pending'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `) as any[];
+    if (existing[0]) return existing[0];
+    const rows = (await sql`
+      INSERT INTO progress_reset_requests (user_id, username, status, created_at)
+      VALUES (${uid}, ${username}, 'pending', ${now})
+      RETURNING id, user_id, username, status, created_at, reviewed_at, reviewed_by_user_id, reviewed_by_username
+    `) as any[];
+    return rows[0] ?? null;
+  }
+  return withStore((s) => {
+    s.progress_reset_requests = s.progress_reset_requests ?? [];
+    const existing = s.progress_reset_requests.find((x) => x.user_id === uid && x.status === "pending");
+    if (existing) return existing;
+    const id = (s.progress_reset_requests.reduce((m, r) => Math.max(m, Number(r.id ?? 0)), 0) || 0) + 1;
+    const rec = { id, user_id: uid, username, status: "pending" as const, created_at: now, reviewed_at: null, reviewed_by_user_id: null, reviewed_by_username: null };
+    s.progress_reset_requests.push(rec);
+    return rec;
+  });
+}
+
+export async function listPendingProgressResetRequests() {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      SELECT id, user_id, username, status, created_at, reviewed_at, reviewed_by_user_id, reviewed_by_username
+      FROM progress_reset_requests
+      WHERE status = 'pending'
+      ORDER BY created_at ASC
+    `) as any[];
+    return rows.map((r) => ({
+      id: Number(r.id),
+      user_id: Number(r.user_id),
+      username: String(r.username ?? ""),
+      status: String(r.status ?? "pending"),
+      created_at: Number(r.created_at ?? 0),
+      reviewed_at: r.reviewed_at == null ? null : Number(r.reviewed_at),
+      reviewed_by_user_id: r.reviewed_by_user_id == null ? null : Number(r.reviewed_by_user_id),
+      reviewed_by_username: (r.reviewed_by_username ?? null) as string | null,
+    }));
+  }
+  return withStore((s) =>
+    (s.progress_reset_requests ?? [])
+      .filter((x) => x.status === "pending")
+      .slice()
+      .sort((a, b) => Number(a.created_at ?? 0) - Number(b.created_at ?? 0)),
+  );
+}
+
+export async function approveProgressResetRequest(input: { requestId: number; moderatorId: number; moderatorUsername: string }) {
+  const requestId = Number(input.requestId);
+  const modId = Number(input.moderatorId);
+  const modName = String(input.moderatorUsername ?? "").slice(0, 32);
+  const now = Date.now();
+  const sql = getSql();
+  let request: any = null;
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      SELECT id, user_id, username, status, created_at
+      FROM progress_reset_requests
+      WHERE id = ${requestId} AND status = 'pending'
+      LIMIT 1
+    `) as any[];
+    request = rows[0] ?? null;
+    if (!request) return null;
+    await wipeAllUserProgress(Number(request.user_id));
+    const updated = (await sql`
+      UPDATE progress_reset_requests
+      SET status = 'approved',
+          reviewed_at = ${now},
+          reviewed_by_user_id = ${modId},
+          reviewed_by_username = ${modName}
+      WHERE id = ${requestId}
+      RETURNING id, user_id, username, status, created_at, reviewed_at, reviewed_by_user_id, reviewed_by_username
+    `) as any[];
+    return updated[0] ?? null;
+  }
+  return withStore((s) => {
+    s.progress_reset_requests = s.progress_reset_requests ?? [];
+    const rec = s.progress_reset_requests.find((x) => Number(x.id) === requestId && x.status === "pending");
+    if (!rec) return null;
+    const uid = Number(rec.user_id);
+    const emptyWallet = normalizeWalletState({ updatedAt: now });
+    const emptyInventory = defaultInventory();
+    const user = s.users.find((x) => x.id === uid) as any;
+    if (user) {
+      user.prestige_level = 0;
+      user.prestige_points = 0;
+      user.name_color = null;
+      user.last_seen = now;
+    }
+    let l = s.leaderboard.find((x) => x.user_id === uid) as any;
+    if (!l) {
+      l = { user_id: uid, profit_total: 0, wager_total: 0, bets: 0, updated_at: now, active: true };
+      s.leaderboard.push(l);
+    }
+    l.profit_total = 0;
+    l.wager_total = 0;
+    l.bets = 0;
+    l.updated_at = now;
+    l.active = true;
+    s.user_wallets = s.user_wallets ?? [];
+    const walletRow = s.user_wallets.find((x) => x.user_id === uid);
+    if (walletRow) {
+      walletRow.state = emptyWallet;
+      walletRow.updated_at = now;
+    } else {
+      s.user_wallets.push({ user_id: uid, state: emptyWallet, updated_at: now });
+    }
+    s.blackjack_inventories = s.blackjack_inventories ?? [];
+    const invRow = s.blackjack_inventories.find((x) => x.user_id === uid);
+    if (invRow) {
+      invRow.inventory = emptyInventory;
+      invRow.updated_at = now;
+    } else {
+      s.blackjack_inventories.push({ user_id: uid, inventory: emptyInventory, updated_at: now });
+    }
+    rec.status = "approved";
+    rec.reviewed_at = now;
+    rec.reviewed_by_user_id = modId;
+    rec.reviewed_by_username = modName;
+    return rec;
   });
 }
 

@@ -136,6 +136,10 @@ export function Topbar() {
   }, [balance]);
 
   useEffect(() => {
+    if (isMobileViewport) {
+      setBroadcast(null);
+      return;
+    }
     let cancelled = false;
     const tick = async () => {
       try {
@@ -165,7 +169,7 @@ export function Topbar() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [afterId]);
+  }, [afterId, isMobileViewport]);
 
   const now = Date.now();
   const refillCooldownMs = Math.max(0, refill5000AvailableAt - now);
@@ -482,7 +486,7 @@ export function Topbar() {
             </div>
           </div>
           {msg ? <div className="px-1 pt-2 text-xs text-white/60">{msg}</div> : null}
-          {broadcast ? (
+          {broadcast && !isMobileViewport ? (
             <div className="px-1 pt-2">
               <div className="glass-soft glass-shine rounded-2xl border border-white/10 px-3 py-2 text-xs text-white/80">
                 {broadcast}
