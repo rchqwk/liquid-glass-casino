@@ -400,9 +400,11 @@ export function BlackjackTablePageClient({
   const showV2Shell = experience === "v2";
   const horizontalMode = showV2Shell && uiLayout === "horizontal";
   const horizontalUiScale = uiScale / 100;
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const horizontalLiveControlsScale = uiScale === 150 ? 1 : horizontalUiScale;
   const horizontalPowerupsWindow = horizontalMode && showV2Shell;
   const horizontalPowerupsScale = 1;
+  const horizontalStakeDockScale = isMobileViewport ? 1 : horizontalUiScale;
   const v2HeaderVisible = !!(state && topbarOpen);
   const classicHeaderVisible = !!(state && (mySeat || isSpectator) && topbarOpen);
   const [hControlsOpen, setHControlsOpen] = useState(false);
@@ -554,6 +556,19 @@ export function BlackjackTablePageClient({
       setHMenuOpen(false);
     }
   }, [horizontalMode]);
+
+  useEffect(() => {
+    const applyViewportMode = () => {
+      try {
+        setIsMobileViewport(window.innerWidth < 640);
+      } catch {
+        setIsMobileViewport(false);
+      }
+    };
+    applyViewportMode();
+    window.addEventListener("resize", applyViewportMode);
+    return () => window.removeEventListener("resize", applyViewportMode);
+  }, []);
 
   const usePowerupQuick = (specialId: string) => {
     if (specialId === "REMOVE_CARD_SELF") {
@@ -2987,10 +3002,17 @@ export function BlackjackTablePageClient({
 
             {/* Horizontal UI: stake dock (always during betting while seated) */}
             {showHorizontalStakeDock ? (
-              <div className="pointer-events-none fixed bottom-4 left-1/2 z-[84] w-[min(520px,calc(100vw-2rem))] -translate-x-1/2">
+              <div
+                className={`pointer-events-none fixed bottom-3 z-[84] ${
+                  isMobileViewport ? "left-2 right-2" : "left-1/2 w-[min(520px,calc(100vw-2rem))] -translate-x-1/2"
+                }`}
+              >
                 <div
                   className="pointer-events-auto glass glass-shine rounded-3xl border border-white/10 p-4"
-                  style={{ transform: `scale(${horizontalUiScale})`, transformOrigin: "center bottom" }}
+                  style={{
+                    transform: `scale(${horizontalStakeDockScale})`,
+                    transformOrigin: isMobileViewport ? "center bottom" : "center bottom",
+                  }}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>

@@ -151,12 +151,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const sp = new URLSearchParams(search);
           const hasFrameId = sp.has("frame_id");
 
-          // Discord iOS frequently hangs during the Embedded App SDK handshake.
-          // Prefer the OAuth entry flow on iOS to avoid users getting stuck at "8%".
+          // Mobile Discord Activities are much less reliable with the Embedded App SDK handshake.
+          // Route all mobile users through the dedicated OAuth-first entry flow instead.
           try {
             const ua = navigator.userAgent ?? "";
-            const isIOS = /iPhone|iPad|iPod/i.test(ua);
-            if (isIOS) {
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(ua);
+            if (isMobile) {
               const path = window.location.pathname || "";
               if (!path.startsWith("/casino/blackjack/discord")) {
                 window.location.replace(`/casino/blackjack/discord${search || ""}`);

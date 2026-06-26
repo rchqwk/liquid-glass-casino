@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Stage = "init" | "authorizing" | "logging_in" | "ensuring_table" | "redirecting" | "error";
+type Stage = "init" | "awaiting_oauth" | "authorizing" | "logging_in" | "ensuring_table" | "redirecting" | "error";
 
 export default function DiscordBlackjackEntryPage() {
   const router = useRouter();
@@ -27,6 +27,24 @@ export default function DiscordBlackjackEntryPage() {
 
   // If we initiated OAuth ourselves, we store channel id in `state`.
   const channelId = channelIdFromQuery ?? oauthStateFromQuery;
+  const isMobile = useMemo(() => {
+    try {
+      if (typeof navigator === "undefined") return false;
+      const ua = navigator.userAgent ?? "";
+      return /iPhone|iPad|iPod|Android/i.test(ua);
+    } catch {
+      return false;
+    }
+  }, []);
+  const isIOS = useMemo(() => {
+    try {
+      if (typeof navigator === "undefined") return false;
+      const ua = navigator.userAgent ?? "";
+      return /iPhone|iPad|iPod/i.test(ua);
+    } catch {
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
@@ -43,7 +61,7 @@ export default function DiscordBlackjackEntryPage() {
         // If Discord didn't provide the Embedded App params, don't attempt to load the SDK
         // (it will throw: "frame_id query param is not defined"). Show the OAuth fallback.
         if (!hasFrameId && !oauthCodeFromQuery) {
-          // Stay in init so the page shows the fallback authorize link after a few seconds.
+          setStage(isMobile ? "awaiting_oauth" : "init");
           return;
         }
 
@@ -80,14 +98,14 @@ export default function DiscordBlackjackEntryPage() {
 
           if (cancelled) return;
           setStage("redirecting");
-          router.replace(`/casino/blackjack/${encodeURIComponent(channelId)}`);
+          router.replace(`/casino/blackjack-v2/${encodeURIComponent(channelId)}`);
           return;
         }
 
-        // If we're on iOS, prefer the OAuth flow (Discord iOS can hang on the embedded handshake).
-        if (isIOS && !oauthCodeFromQuery) {
+        // On mobile Discord, use a simpler OAuth-first flow instead of trying the embedded handshake.
+        if (isMobile && !oauthCodeFromQuery) {
           if (!channelId) throw new Error("Missing channel id (channel_id or state). Re-open from the voice call.");
-          // Keep stage at init; user can tap the OAuth button below.
+          setStage("awaiting_oauth");
           return;
         }
 
@@ -150,7 +168,7 @@ export default function DiscordBlackjackEntryPage() {
 
         if (cancelled) return;
         setStage("redirecting");
-        router.replace(`/casino/blackjack/${encodeURIComponent(effectiveChannelId)}`);
+        router.replace(`/casino/blackjack-v2/${encodeURIComponent(effectiveChannelId)}`);
       } catch (e: any) {
         if (cancelled) return;
         setStage("error");
@@ -165,6 +183,7 @@ export default function DiscordBlackjackEntryPage() {
 
   const progress = useMemo(() => {
     if (stage === "init") return 8;
+    if (stage === "awaiting_oauth") return 18;
     if (stage === "authorizing") return 30;
     if (stage === "logging_in") return 55;
     if (stage === "ensuring_table") return 78;
@@ -175,6 +194,7 @@ export default function DiscordBlackjackEntryPage() {
 
   const stageLabel = useMemo(() => {
     if (stage === "init") return "Connecting to Discord…";
+    if (stage === "awaiting_oauth") return "Authorize with Discord to continue…";
     if (stage === "authorizing") return "Authorizing…";
     if (stage === "logging_in") return "Signing you in…";
     if (stage === "ensuring_table") return "Creating / joining table…";
@@ -194,16 +214,6 @@ export default function DiscordBlackjackEntryPage() {
     if (state) url.searchParams.set("state", state);
     return url.toString();
   }, [clientId, redirectUri, channelId]);
-
-  const isIOS = useMemo(() => {
-    try {
-      if (typeof navigator === "undefined") return false;
-      const ua = navigator.userAgent ?? "";
-      return /iPhone|iPad|iPod/i.test(ua);
-    } catch {
-      return false;
-    }
-  }, []);
 
   // iOS Discord sometimes fails to launch Activities with `frame_id`. When that happens,
   // automatically fall back to OAuth so users aren't stuck on the "missing frame_id" screen.
@@ -339,7 +349,7 @@ export default function DiscordBlackjackEntryPage() {
             </div>
           ) : null}
 
-          {stage === "init" && elapsed >= 2 && oauthAuthorizeUrl ? (
+          {(stage === "init" || stage === "awaiting_oauth") && (elapsed >= 2 || stage === "awaiting_oauth") && oauthAuthorizeUrl ? (
             <div
               style={{
                 marginTop: 16,
@@ -351,9 +361,9 @@ export default function DiscordBlackjackEntryPage() {
                 fontSize: 14,
               }}
             >
-              {isIOS ? (
+              {isMobile ? (
                 <>
-                  iOS: tap{" "}
+                  Mobile Discord: tap{" "}
                   <button
                     type="button"
                     className="lgc-link"
@@ -367,7 +377,7 @@ export default function DiscordBlackjackEntryPage() {
                   >
                     Authorize with Discord
                   </button>{" "}
-                  to continue (auto-redirect can loop on iOS).
+                  to continue. Mobile Activities now use a dedicated OAuth flow instead of the embedded handshake.
                 </>
               ) : (
                 <>

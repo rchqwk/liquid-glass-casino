@@ -31,6 +31,13 @@ export default function DiscordCallbackPage() {
         const data = (await res.json().catch(() => ({}))) as any;
         if (!res.ok) throw new Error(data?.error ?? "Discord login failed");
         if (cancelled) return;
+        if (data?.session_token) {
+          try {
+            localStorage.setItem("lgc.session", String(data.session_token));
+          } catch {
+            // ignore
+          }
+        }
         setStage("redirecting");
         const next = String(state || "/");
         window.location.href = next.startsWith("/") ? next : "/";
@@ -57,4 +64,3 @@ export default function DiscordCallbackPage() {
     </div>
   );
 }
-
