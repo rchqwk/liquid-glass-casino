@@ -68,7 +68,6 @@ export default function DiscordBlackjackEntryPage() {
         // Fallback path: if we already have an OAuth code in the URL, we can complete login
         // without waiting for the Embedded SDK handshake.
         if (oauthCodeFromQuery) {
-          if (!channelId) throw new Error("Missing channel id (channel_id or state). Re-open from the voice call.");
           setStage("logging_in");
           const loginRes = await fetch("/api/discord/login", {
             method: "POST",
@@ -85,26 +84,27 @@ export default function DiscordBlackjackEntryPage() {
             }
           }
 
-          setStage("ensuring_table");
-          const ensureRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(channelId)}/ensure`, { method: "POST" });
-          const ensureJson = (await ensureRes.json().catch(() => ({}))) as any;
-          if (!ensureRes.ok) throw new Error(ensureJson?.error ?? "Failed to create/join table.");
+          if (channelId) {
+            setStage("ensuring_table");
+            const ensureRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(channelId)}/ensure`, { method: "POST" });
+            const ensureJson = (await ensureRes.json().catch(() => ({}))) as any;
+            if (!ensureRes.ok) throw new Error(ensureJson?.error ?? "Failed to create/join table.");
 
-          await fetch(`/api/blackjack/tables/${encodeURIComponent(channelId)}/join`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ spectate: false }),
-          });
+            await fetch(`/api/blackjack/tables/${encodeURIComponent(channelId)}/join`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ spectate: false }),
+            });
+          }
 
           if (cancelled) return;
           setStage("redirecting");
-          router.replace(`/casino/blackjack-v2/${encodeURIComponent(channelId)}`);
+          router.replace(channelId ? `/casino/blackjack-v2/${encodeURIComponent(channelId)}` : "/casino/blackjack-v2");
           return;
         }
 
         // On mobile Discord, use a simpler OAuth-first flow instead of trying the embedded handshake.
         if (isMobile && !oauthCodeFromQuery) {
-          if (!channelId) throw new Error("Missing channel id (channel_id or state). Re-open from the voice call.");
           setStage("awaiting_oauth");
           return;
         }
@@ -215,15 +215,31 @@ export default function DiscordBlackjackEntryPage() {
     return url.toString();
   }, [clientId, redirectUri, channelId]);
 
-  // iOS Discord sometimes fails to launch Activities with `frame_id`. When that happens,
-  // automatically fall back to OAuth so users aren't stuck on the "missing frame_id" screen.
+  // If we already know we need OAuth, jump there automatically once per page load.
+  // On mobile this avoids users getting stuck forever on "awaiting oauth".
   useEffect(() => {
-    if (isIOS) return; // on iOS, require user interaction (auto-redirect can loop)
+    if (oauthCodeFromQuery) return;
+    if (!oauthAuthorizeUrl) return;
+    if (stage !== "awaiting_oauth") return;
+    try {
+      const key = "lgc.discord.oauthAutoRedirected";
+      if (sessionStorage.getItem(key) === "1") return;
+      sessionStorage.setItem(key, "1");
+      const t = window.setTimeout(() => {
+        window.location.href = oauthAuthorizeUrl;
+      }, isMobile ? 250 : 700);
+      return () => window.clearTimeout(t);
+    } catch {
+      // ignore
+    }
+  }, [stage, oauthCodeFromQuery, oauthAuthorizeUrl, isMobile]);
+
+  // If Discord opened the page without the embedded params, also fall back automatically.
+  useEffect(() => {
+    if (isIOS) return; // on iOS, the awaiting_oauth effect above handles the redirect path
     if (hasFrameId) return;
     if (oauthCodeFromQuery) return;
     if (!oauthAuthorizeUrl) return;
-    // We need a channel id to know which table to join after OAuth.
-    if (!channelId) return;
     try {
       const key = "lgc.discord.oauthAutoRedirected";
       if (sessionStorage.getItem(key) === "1") return;
