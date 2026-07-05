@@ -15,9 +15,10 @@ export default function Home({
     return <DiscordRootCallback code={code} state={state} />;
   }
 
-  // If Discord launches the Activity at the site root (recommended), it will append
-  // Embedded App query params like `frame_id`. Detect that and forward into the
-  // casino experience while preserving query params.
+  // If Discord launches the Activity at the site root, preserve the original embedded
+  // params and forward straight into the dedicated Discord auth controller page first.
+  // The Embedded App SDK handshake is more reliable when it runs on the first routed page
+  // instead of bouncing through the normal game route before auth starts.
   const hasDiscordParams =
     !!searchParams?.frame_id ||
     !!searchParams?.instance_id ||
@@ -30,7 +31,7 @@ export default function Home({
       if (Array.isArray(v)) v.forEach((vv) => vv != null && sp.append(k, String(vv)));
       else if (v != null) sp.set(k, String(v));
     }
-    redirect(`/casino/blackjack-v2${sp.toString() ? `?${sp.toString()}` : ""}`);
+    redirect(`/casino/blackjack/discord${sp.toString() ? `?${sp.toString()}` : ""}`);
   }
   redirect("/casino/blackjack-v2");
 }
