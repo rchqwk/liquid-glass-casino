@@ -17,6 +17,8 @@ const MODULE_CLIENT_ID =
   (typeof process !== "undefined" && (process.env as any)?.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK) ||
   "";
 
+const RELOAD_COUNT_KEY = "lgc.discord.handshakeReloads";
+
 let _moduleSdk: DiscordSDK | null = null;
 let _moduleReady: Promise<void> | null = null;
 
@@ -328,26 +330,52 @@ export default function DiscordBlackjackEntryPage() {
         setStage("booting");
 
         // ──────────────────────────────────────────────
-        // The SDK handshake already started before React mounted (module-level
-        // IIFE). Just grab the existing SDK and wait for the already-in-flight
-        // handshake. Do NOT create a new SDK instance — Discord only accepts
-        // one handshake per Activity instance.
+        // BOOT-RELOAD HANDSHAKE STRATEGY
+        //
+        // Discord sends READY exactly once. If we miss it, we reload the
+        // page (up to 3 times) which causes Discord to re-mount the iframe
+        // and resend READY. This is the most reliable way to avoid the
+        // handshake timeout on mobile, where JS bundle load + React hydration
+        // can easily take longer than the READY delivery window.
         // ──────────────────────────────────────────────
         const discordSdk = _moduleSdk;
-        if (!discordSdk || !_moduleReady) {
+        const ready = _moduleReady;
+        if (!discordSdk || !ready) {
           throw new Error("Discord SDK failed to initialize at module level.");
         }
-        const handshakeTimeoutMs = isMobile ? 45000 : 20000;
-        const readyWithTimeout = Promise.race([
-          _moduleReady,
-          new Promise<never>((_, reject) =>
-            window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), handshakeTimeoutMs),
-          ),
-        ]);
 
-        // Create the auth transaction in parallel with the handshake so
-        // neither one blocks the other.
-        const startPromise = fetch("/api/discord/auth/start", {
+        // Short timeout — if handshake doesn't complete within 8s on mobile
+        // or 5s on desktop, we reload rather than wait forever.
+        const bootTimeoutMs = isMobile ? 8000 : 5000;
+
+        try {
+          await Promise.race([
+            ready,
+            new Promise<never>((_, reject) =>
+              window.setTimeout(() => reject(new Error("handshake timeout")), bootTimeoutMs),
+            ),
+          ]);
+        } catch {
+          // Handshake timed out. Reload to restart the Activity connection.
+          const reloadCountStr = sessionStorage.getItem(RELOAD_COUNT_KEY) ?? "0";
+          const reloadCount = parseInt(reloadCountStr, 10) || 0;
+          if (reloadCount < 3) {
+            sessionStorage.setItem(RELOAD_COUNT_KEY, String(reloadCount + 1));
+            window.location.reload();
+            return; // block indefinitely — page is reloading
+          }
+          // After 3 reloads, give up and show fallback.
+          sessionStorage.removeItem(RELOAD_COUNT_KEY);
+          throw new Error("Discord client handshake timed out after multiple attempts.");
+        }
+
+        // Handshake succeeded — clear reload counter.
+        sessionStorage.removeItem(RELOAD_COUNT_KEY);
+        if (cancelled) return;
+        setStage("embedded_ready");
+
+        // Create the auth transaction.
+        const startRes = await fetch("/api/discord/auth/start", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -359,16 +387,11 @@ export default function DiscordBlackjackEntryPage() {
             returnPath: channelId ? `/casino/blackjack-v2/${encodeURIComponent(channelId)}` : "/casino/blackjack-v2",
           }),
         });
-
-        // Wait for both the handshake and the auth transaction to complete.
-        const [startRes] = await Promise.all([startPromise, readyWithTimeout]);
         if (cancelled) return;
 
         const startJson = (await startRes.json().catch(() => ({}))) as any;
         const tx = startJson?.transaction as AuthTransaction | undefined;
         if (!startRes.ok || !tx?.id) throw new Error(startJson?.error ?? "Failed to start Discord auth.");
-
-        setStage("embedded_ready");
 
         setStage("embedded_authorizing");
         const authz = await (discordSdk as any).commands.authorize({
