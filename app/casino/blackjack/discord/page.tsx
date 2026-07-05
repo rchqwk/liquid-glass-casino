@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+// Pre-load the Discord SDK module as early as possible so the dynamic import
+// inside the effect is already cached when we need it.
+let _DiscordSDKModule: typeof import("@discord/embedded-app-sdk") | null = null;
+void import("@discord/embedded-app-sdk").then((m) => {
+  _DiscordSDKModule = m;
+});
+
 type Stage =
   | "booting"
   | "embedded_ready"
@@ -294,7 +301,27 @@ export default function DiscordBlackjackEntryPage() {
         }
 
         setStage("booting");
-        const startRes = await fetch("/api/discord/auth/start", {
+
+        // ──────────────────────────────────────────────
+        // Start the SDK handshake IMMEDIATELY, before any API calls.
+        // Discord sends the READY postMessage payload exactly once per
+        // Activity instance. If the SDK isn't listening when it arrives,
+        // the handshake hangs forever.
+        // Give extra time on mobile where the handshake can be slower.
+        // ──────────────────────────────────────────────
+        const { DiscordSDK } = await import("@discord/embedded-app-sdk");
+        const discordSdk = new DiscordSDK(clientId);
+        const handshakeTimeoutMs = isMobile ? 45000 : 20000;
+        const readyPromise = Promise.race([
+          discordSdk.ready(),
+          new Promise<never>((_, reject) =>
+            window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), handshakeTimeoutMs),
+          ),
+        ]);
+
+        // Create the auth transaction in parallel with the handshake so
+        // neither one blocks the other.
+        const startPromise = fetch("/api/discord/auth/start", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -306,17 +333,15 @@ export default function DiscordBlackjackEntryPage() {
             returnPath: channelId ? `/casino/blackjack-v2/${encodeURIComponent(channelId)}` : "/casino/blackjack-v2",
           }),
         });
+
+        // Wait for both the handshake and the auth transaction to complete.
+        const [startRes] = await Promise.all([startPromise, readyPromise]);
+        if (cancelled) return;
+
         const startJson = (await startRes.json().catch(() => ({}))) as any;
         const tx = startJson?.transaction as AuthTransaction | undefined;
         if (!startRes.ok || !tx?.id) throw new Error(startJson?.error ?? "Failed to start Discord auth.");
 
-        const { DiscordSDK } = await import("@discord/embedded-app-sdk");
-        const discordSdk = new DiscordSDK(clientId);
-        await Promise.race([
-          discordSdk.ready(),
-          new Promise((_, reject) => window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), 20000)),
-        ]);
-        if (cancelled) return;
         setStage("embedded_ready");
 
         setStage("embedded_authorizing");
