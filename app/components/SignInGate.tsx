@@ -66,9 +66,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
     const clientId =
       process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ?? "";
     if (!clientId) return;
-    const redirectUri =
-      process.env.NEXT_PUBLIC_DISCORD_WEB_REDIRECT_URI ??
-      "https://rchqwk.com/discord/callback";
+    const redirectUri = origin ? `${origin}/discord/callback` : "https://rchqwk.com/discord/callback";
     const url = new URL("https://discord.com/oauth2/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("response_type", "code");

@@ -17,9 +17,8 @@ export default function DiscordCallbackPage() {
     const raw = String(state ?? "");
     return raw.startsWith("mobile:") ? raw.slice("mobile:".length).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12) : null;
   }, [state]);
-  const redirectUri =
-    process.env.NEXT_PUBLIC_DISCORD_WEB_REDIRECT_URI ??
-    "https://rchqwk.com/discord/callback";
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const redirectUri = origin ? `${origin}/discord/callback` : "https://rchqwk.com/discord/callback";
 
   useEffect(() => {
     let cancelled = false;

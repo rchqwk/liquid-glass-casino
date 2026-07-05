@@ -69,9 +69,13 @@ export default function DiscordMobileAuth() {
   const [elapsed, setElapsed] = useState(0);
 
   const clientId = MODULE_CLIENT_ID;
-  const redirectUri =
-    (typeof process !== "undefined" && (process.env as any)?.NEXT_PUBLIC_DISCORD_REDIRECT_URI) ||
-    "https://rchqwk.com/casino/blackjack/discord";
+
+  const origin = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    try { return window.location.origin; } catch { return ""; }
+  }, []);
+
+  const redirectUri = origin ? `${origin}/casino/blackjack/discord` : "https://rchqwk.com/casino/blackjack/discord";
 
   const qs = useMemo(() => {
     if (typeof window === "undefined") return null;
