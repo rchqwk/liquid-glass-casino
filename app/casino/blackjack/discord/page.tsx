@@ -2,13 +2,38 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { DiscordSDK } from "@discord/embedded-app-sdk";
 
-// Pre-load the Discord SDK module as early as possible so the dynamic import
-// inside the effect is already cached when we need it.
-let _DiscordSDKModule: typeof import("@discord/embedded-app-sdk") | null = null;
-void import("@discord/embedded-app-sdk").then((m) => {
-  _DiscordSDKModule = m;
-});
+// ──────────────────────────────────────────────────────
+// MODULE-LEVEL HANDSHAKE
+//
+// Discord sends the READY postMessage payload exactly once per Activity
+// instance, during the initial iframe load. React's hydration and useEffect
+// run too late to catch it. The handshake MUST start the instant this JS
+// bundle evaluates — before any component mounts.
+// ──────────────────────────────────────────────────────
+const MODULE_CLIENT_ID =
+  (typeof process !== "undefined" && (process.env as any)?.NEXT_PUBLIC_DISCORD_CLIENT_ID) ||
+  (typeof process !== "undefined" && (process.env as any)?.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK) ||
+  "";
+
+let _moduleSdk: DiscordSDK | null = null;
+let _moduleReady: Promise<void> | null = null;
+
+function isBrowser() {
+  return typeof window !== "undefined";
+}
+
+function startModuleHandshake(clientId: string) {
+  if (_moduleReady) return;
+  if (!clientId) return;
+  _moduleSdk = new DiscordSDK(clientId);
+  _moduleReady = _moduleSdk.ready();
+}
+
+if (isBrowser() && MODULE_CLIENT_ID) {
+  startModuleHandshake(MODULE_CLIENT_ID);
+}
 
 type Stage =
   | "booting"
@@ -303,17 +328,18 @@ export default function DiscordBlackjackEntryPage() {
         setStage("booting");
 
         // ──────────────────────────────────────────────
-        // Start the SDK handshake IMMEDIATELY, before any API calls.
-        // Discord sends the READY postMessage payload exactly once per
-        // Activity instance. If the SDK isn't listening when it arrives,
-        // the handshake hangs forever.
-        // Give extra time on mobile where the handshake can be slower.
+        // The SDK handshake already started before React mounted (module-level
+        // IIFE). Just grab the existing SDK and wait for the already-in-flight
+        // handshake. Do NOT create a new SDK instance — Discord only accepts
+        // one handshake per Activity instance.
         // ──────────────────────────────────────────────
-        const { DiscordSDK } = await import("@discord/embedded-app-sdk");
-        const discordSdk = new DiscordSDK(clientId);
+        const discordSdk = _moduleSdk;
+        if (!discordSdk || !_moduleReady) {
+          throw new Error("Discord SDK failed to initialize at module level.");
+        }
         const handshakeTimeoutMs = isMobile ? 45000 : 20000;
-        const readyPromise = Promise.race([
-          discordSdk.ready(),
+        const readyWithTimeout = Promise.race([
+          _moduleReady,
           new Promise<never>((_, reject) =>
             window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), handshakeTimeoutMs),
           ),
@@ -335,7 +361,7 @@ export default function DiscordBlackjackEntryPage() {
         });
 
         // Wait for both the handshake and the auth transaction to complete.
-        const [startRes] = await Promise.all([startPromise, readyPromise]);
+        const [startRes] = await Promise.all([startPromise, readyWithTimeout]);
         if (cancelled) return;
 
         const startJson = (await startRes.json().catch(() => ({}))) as any;
