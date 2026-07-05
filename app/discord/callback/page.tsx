@@ -19,7 +19,7 @@ export default function DiscordCallbackPage() {
   }, [state]);
   const redirectUri =
     process.env.NEXT_PUBLIC_DISCORD_WEB_REDIRECT_URI ??
-    "https://rchqwk-liquid-glass-casino.vercel.app/discord/callback";
+    "https://rchqwk.com/discord/callback";
 
   useEffect(() => {
     let cancelled = false;

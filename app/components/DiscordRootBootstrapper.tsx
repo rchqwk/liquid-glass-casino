@@ -71,7 +71,7 @@ export default function DiscordMobileAuth() {
   const clientId = MODULE_CLIENT_ID;
   const redirectUri =
     (typeof process !== "undefined" && (process.env as any)?.NEXT_PUBLIC_DISCORD_REDIRECT_URI) ||
-    "https://rchqwk-liquid-glass-casino.vercel.app/casino/blackjack/discord";
+    "https://rchqwk.com/casino/blackjack/discord";
 
   const qs = useMemo(() => {
     if (typeof window === "undefined") return null;
