@@ -75,8 +75,6 @@ export default function DiscordMobileAuth() {
     try { return window.location.origin; } catch { return ""; }
   }, []);
 
-  const redirectUri = origin ? `${origin}/casino/blackjack/discord` : "https://rchqwk.com/casino/blackjack/discord";
-
   const qs = useMemo(() => {
     if (typeof window === "undefined") return null;
     return new URL(window.location.href).searchParams;
@@ -90,6 +88,13 @@ export default function DiscordMobileAuth() {
     const raw = String(oauthState ?? "").trim();
     return /^[a-f0-9]{48}$/i.test(raw) ? raw : null;
   }, [oauthState]);
+
+  const redirectUri = useMemo(() => {
+    if (!origin) return "https://rchqwk.com";
+    if (txIdFromOauth) return `${origin}/casino/blackjack/discord`;
+    return origin;
+  }, [origin, txIdFromOauth]);
+
   const isMobile = useMemo(() => {
     try {
       return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent ?? "");
