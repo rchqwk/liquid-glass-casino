@@ -21,17 +21,19 @@ let _ready: Promise<void> | null = null;
 
 if (typeof window !== "undefined" && MODULE_CLIENT_ID && !(window as any).__DISCORD_SDK) {
   try {
-    (window as any).__discordReadyFlush?.();
-  } catch {
-    // inline script not present
-  }
-  try {
     _sdk = new DiscordSDK(MODULE_CLIENT_ID);
     _ready = _sdk.ready();
     (window as any).__DISCORD_SDK = _sdk;
     (window as any).__DISCORD_READY = _ready;
   } catch {
     // SDK init failed
+  }
+  // Flush AFTER ready() registers the listener, so the re-dispatched
+  // READY is caught rather than lost.
+  try {
+    (window as any).__discordReadyFlush?.();
+  } catch {
+    // inline script not present
   }
 }
 
