@@ -16,6 +16,9 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   const isAllowed = useMemo(() => {
     // Always allow the dedicated profile page so users can manage sign-in/out.
     if (pathname === "/casino/profile") return true;
+    if (pathname === "/casino/blackjack/discord") return true;
+    if (pathname === "/discord/mobile") return true;
+    if (pathname === "/discord/callback") return true;
     // Allow tutorial / docs pages without forcing sign-in (useful for first-time visitors).
     if (pathname === "/casino/tutorial") return true;
     if (pathname === "/casino/blackjack/rules") return true;
@@ -34,22 +37,6 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
     const id = window.setInterval(() => setDiscordElapsed((s) => s + 1), 1000);
     return () => window.clearInterval(id);
   }, [blocked, discordMode]);
-
-  // iOS Discord sometimes opens the app without `frame_id`, which prevents the Embedded App SDK.
-  // If that happens, automatically fall back to our OAuth-based Discord entry page.
-  useEffect(() => {
-    if (!discordMode) return;
-    if (!discordError) return;
-    if (!discordError.includes("frame_id")) return;
-    try {
-      const key = "lgc.discord.fallback.tried";
-      if (sessionStorage.getItem(key) === "1") return;
-      sessionStorage.setItem(key, "1");
-      window.setTimeout(() => retryDiscord(), 50);
-    } catch {
-      // ignore
-    }
-  }, [discordMode, discordError, retryDiscord]);
 
   useEffect(() => {
     if (discordMode) return;
@@ -118,25 +105,35 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                   >
                     Retry Discord sign-in
                   </button>
-                  {discordElapsed >= 12 || (discordError && discordError.toLowerCase().includes("handshake timed out")) ? (
-                    <button
-                      type="button"
-                      className="mt-3 glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/10"
-                      onClick={() => {
-                        // Let Discord users bypass OAuth for this browser session and fall back to the normal username gate.
-                        try {
-                          sessionStorage.setItem("lgc.discord.disableOauthSession", "1");
-                        } catch {
-                          // ignore
-                        }
-                        window.location.href = "/casino/blackjack-v2";
-                      }}
-                    >
-                      Play with username (temporary)
-                    </button>
+                  {discordElapsed >= 12 || !!discordError ? (
+                    <>
+                      <button
+                        type="button"
+                        className="mt-3 glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/10"
+                        onClick={() => {
+                          try {
+                            sessionStorage.setItem("lgc.discord.disableOauthSession", "1");
+                          } catch {
+                            // ignore
+                          }
+                          window.location.href = "/casino/blackjack-v2";
+                        }}
+                      >
+                        Play with username (temporary)
+                      </button>
+                      <button
+                        type="button"
+                        className="mt-3 glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/10"
+                        onClick={() => {
+                          window.location.href = "/casino/blackjack/discord";
+                        }}
+                      >
+                        Use Discord fallback options
+                      </button>
+                    </>
                   ) : null}
                   <p className="mt-3 text-[11px] leading-5 text-white/55">
-                    If this keeps failing, re-launch the Activity from the voice channel.
+                    If this keeps failing, open the Discord auth screen and choose guest play or browser pairing.
                   </p>
                 </>
               ) : (

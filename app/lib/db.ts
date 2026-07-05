@@ -120,6 +120,23 @@ type Store = {
     expires_at: number;
     completed_at?: number | null;
   }>;
+  auth_transactions?: Array<{
+    id: string;
+    kind: "embedded" | "browser_pairing";
+    source: "activity" | "web";
+    platform: "desktop" | "mobile" | "unknown";
+    channel_id?: string | null;
+    guild_id?: string | null;
+    return_path?: string | null;
+    pairing_code?: string | null;
+    status: "pending" | "completed" | "failed" | "expired";
+    user_id?: number | null;
+    session_token?: string | null;
+    error?: string | null;
+    created_at: number;
+    expires_at: number;
+    completed_at?: number | null;
+  }>;
   progress_reset_requests?: Array<{
     id: number;
     user_id: number;
@@ -164,6 +181,7 @@ function defaultStore(): Store {
     global_chat: [],
     discord_links: [],
     discord_mobile_auths: [],
+    auth_transactions: [],
     progress_reset_requests: [],
     user_wallets: [],
   };
@@ -304,6 +322,25 @@ async function ensureSchema() {
       channel_id TEXT,
       user_id INT,
       session_token TEXT,
+      created_at BIGINT NOT NULL,
+      expires_at BIGINT NOT NULL,
+      completed_at BIGINT
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS auth_transactions (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      source TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      channel_id TEXT,
+      guild_id TEXT,
+      return_path TEXT,
+      pairing_code TEXT UNIQUE,
+      status TEXT NOT NULL,
+      user_id INT,
+      session_token TEXT,
+      error TEXT,
       created_at BIGINT NOT NULL,
       expires_at BIGINT NOT NULL,
       completed_at BIGINT
@@ -562,12 +599,259 @@ export async function discordSetActiveSession(userId: number, token: string) {
   });
 }
 
+function randomDiscordAuthTransactionId() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
 function randomDiscordMobileAuthCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let out = "";
   const bytes = crypto.randomBytes(6);
   for (let i = 0; i < 6; i += 1) out += chars[bytes[i]! % chars.length];
   return out;
+}
+
+type DiscordAuthTransactionRecord = {
+  id: string;
+  kind: "embedded" | "browser_pairing";
+  source: "activity" | "web";
+  platform: "desktop" | "mobile" | "unknown";
+  channelId: string | null;
+  guildId: string | null;
+  returnPath: string | null;
+  pairingCode: string | null;
+  status: "pending" | "completed" | "failed" | "expired";
+  userId: number | null;
+  sessionToken: string | null;
+  error: string | null;
+  createdAt: number;
+  expiresAt: number;
+  completedAt: number | null;
+};
+
+function normalizeDiscordAuthTransactionRow(row: any): DiscordAuthTransactionRecord {
+  return {
+    id: String(row.id),
+    kind: String(row.kind) as DiscordAuthTransactionRecord["kind"],
+    source: String(row.source) as DiscordAuthTransactionRecord["source"],
+    platform: String(row.platform ?? "unknown") as DiscordAuthTransactionRecord["platform"],
+    channelId: (row.channel_id ?? null) as string | null,
+    guildId: (row.guild_id ?? null) as string | null,
+    returnPath: (row.return_path ?? null) as string | null,
+    pairingCode: (row.pairing_code ?? null) as string | null,
+    status: String(row.status ?? "pending") as DiscordAuthTransactionRecord["status"],
+    userId: row.user_id == null ? null : Number(row.user_id),
+    sessionToken: (row.session_token ?? null) as string | null,
+    error: (row.error ?? null) as string | null,
+    createdAt: Number(row.created_at ?? 0),
+    expiresAt: Number(row.expires_at ?? 0),
+    completedAt: row.completed_at == null ? null : Number(row.completed_at),
+  };
+}
+
+export async function createDiscordAuthTransaction(input: {
+  kind: "embedded" | "browser_pairing";
+  source?: "activity" | "web";
+  platform?: "desktop" | "mobile" | "unknown";
+  channelId?: string | null;
+  guildId?: string | null;
+  returnPath?: string | null;
+  expiresInMs?: number;
+}) {
+  const sql = getSql();
+  const now = Date.now();
+  const expiresAt = now + Math.max(60 * 1000, Number(input.expiresInMs ?? 15 * 60 * 1000));
+  const kind = input.kind;
+  const source = input.source ?? "activity";
+  const platform = input.platform ?? "unknown";
+  const channelId = String(input.channelId ?? "").slice(0, 96) || null;
+  const guildId = String(input.guildId ?? "").slice(0, 96) || null;
+  const returnPath = String(input.returnPath ?? "").slice(0, 256) || null;
+
+  if (sql) {
+    await ensureSchema();
+    await sql`
+      UPDATE auth_transactions
+      SET status = 'expired'
+      WHERE status = 'pending' AND expires_at < ${now}
+    `;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const id = randomDiscordAuthTransactionId();
+      const pairingCode = kind === "browser_pairing" ? randomDiscordMobileAuthCode() : null;
+      const rows = (await sql`
+        INSERT INTO auth_transactions (
+          id, kind, source, platform, channel_id, guild_id, return_path, pairing_code,
+          status, created_at, expires_at
+        )
+        VALUES (
+          ${id}, ${kind}, ${source}, ${platform}, ${channelId}, ${guildId}, ${returnPath}, ${pairingCode},
+          'pending', ${now}, ${expiresAt}
+        )
+        ON CONFLICT (pairing_code) DO NOTHING
+        RETURNING *
+      `) as any[];
+      const row = rows[0] ?? null;
+      if (row) return normalizeDiscordAuthTransactionRow(row);
+    }
+    throw new Error("Failed to create Discord auth transaction");
+  }
+
+  return withStore((s) => {
+    s.auth_transactions = (s.auth_transactions ?? []).map((tx) =>
+      tx.status === "pending" && Number(tx.expires_at ?? 0) < now ? { ...tx, status: "expired" as const } : tx,
+    );
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const id = randomDiscordAuthTransactionId();
+      const pairingCode = kind === "browser_pairing" ? randomDiscordMobileAuthCode() : null;
+      if (pairingCode && (s.auth_transactions ?? []).some((tx) => tx.pairing_code === pairingCode)) continue;
+      const rec = {
+        id,
+        kind,
+        source,
+        platform,
+        channel_id: channelId,
+        guild_id: guildId,
+        return_path: returnPath,
+        pairing_code: pairingCode,
+        status: "pending" as const,
+        user_id: null,
+        session_token: null,
+        error: null,
+        created_at: now,
+        expires_at: expiresAt,
+        completed_at: null,
+      };
+      s.auth_transactions!.push(rec);
+      return normalizeDiscordAuthTransactionRow(rec);
+    }
+    throw new Error("Failed to create Discord auth transaction");
+  });
+}
+
+export async function getDiscordAuthTransactionById(id: string) {
+  const sql = getSql();
+  const now = Date.now();
+  const normalized = String(id ?? "").trim().slice(0, 128);
+  if (!normalized) return null;
+  if (sql) {
+    await ensureSchema();
+    await sql`
+      UPDATE auth_transactions
+      SET status = 'expired'
+      WHERE status = 'pending' AND expires_at < ${now}
+    `;
+    const rows = (await sql`
+      SELECT *
+      FROM auth_transactions
+      WHERE id = ${normalized}
+      LIMIT 1
+    `) as any[];
+    const row = rows[0] ?? null;
+    return row ? normalizeDiscordAuthTransactionRow(row) : null;
+  }
+  return withStore((s) => {
+    s.auth_transactions = (s.auth_transactions ?? []).map((tx) =>
+      tx.status === "pending" && Number(tx.expires_at ?? 0) < now ? { ...tx, status: "expired" as const } : tx,
+    );
+    const rec = (s.auth_transactions ?? []).find((tx) => tx.id === normalized) ?? null;
+    return rec ? normalizeDiscordAuthTransactionRow(rec) : null;
+  });
+}
+
+export async function getDiscordAuthTransactionByPairingCode(code: string) {
+  const sql = getSql();
+  const now = Date.now();
+  const normalized = String(code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+  if (!normalized) return null;
+  if (sql) {
+    await ensureSchema();
+    await sql`
+      UPDATE auth_transactions
+      SET status = 'expired'
+      WHERE status = 'pending' AND expires_at < ${now}
+    `;
+    const rows = (await sql`
+      SELECT *
+      FROM auth_transactions
+      WHERE pairing_code = ${normalized}
+      LIMIT 1
+    `) as any[];
+    const row = rows[0] ?? null;
+    return row ? normalizeDiscordAuthTransactionRow(row) : null;
+  }
+  return withStore((s) => {
+    s.auth_transactions = (s.auth_transactions ?? []).map((tx) =>
+      tx.status === "pending" && Number(tx.expires_at ?? 0) < now ? { ...tx, status: "expired" as const } : tx,
+    );
+    const rec = (s.auth_transactions ?? []).find((tx) => tx.pairing_code === normalized) ?? null;
+    return rec ? normalizeDiscordAuthTransactionRow(rec) : null;
+  });
+}
+
+export async function completeDiscordAuthTransaction(input: { id: string; userId: number; sessionToken: string }) {
+  const sql = getSql();
+  const now = Date.now();
+  const id = String(input.id ?? "").trim().slice(0, 128);
+  if (!id) return null;
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      UPDATE auth_transactions
+      SET status = 'completed',
+          user_id = ${input.userId},
+          session_token = ${input.sessionToken},
+          error = NULL,
+          completed_at = ${now}
+      WHERE id = ${id} AND status = 'pending' AND expires_at >= ${now}
+      RETURNING *
+    `) as any[];
+    const row = rows[0] ?? null;
+    return row ? normalizeDiscordAuthTransactionRow(row) : null;
+  }
+  return withStore((s) => {
+    s.auth_transactions = (s.auth_transactions ?? []).map((tx) =>
+      tx.status === "pending" && Number(tx.expires_at ?? 0) < now ? { ...tx, status: "expired" as const } : tx,
+    );
+    const rec = (s.auth_transactions ?? []).find((tx) => tx.id === id && tx.status === "pending" && Number(tx.expires_at ?? 0) >= now);
+    if (!rec) return null;
+    rec.status = "completed";
+    rec.user_id = input.userId;
+    rec.session_token = input.sessionToken;
+    rec.error = null;
+    rec.completed_at = now;
+    return normalizeDiscordAuthTransactionRow(rec);
+  });
+}
+
+export async function failDiscordAuthTransaction(input: { id: string; error: string }) {
+  const sql = getSql();
+  const now = Date.now();
+  const id = String(input.id ?? "").trim().slice(0, 128);
+  const error = String(input.error ?? "").slice(0, 500) || "Unknown auth error";
+  if (!id) return null;
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      UPDATE auth_transactions
+      SET status = CASE WHEN status = 'completed' THEN status ELSE 'failed' END,
+          error = ${error},
+          completed_at = CASE WHEN status = 'completed' THEN completed_at ELSE ${now} END
+      WHERE id = ${id}
+      RETURNING *
+    `) as any[];
+    const row = rows[0] ?? null;
+    return row ? normalizeDiscordAuthTransactionRow(row) : null;
+  }
+  return withStore((s) => {
+    const rec = (s.auth_transactions ?? []).find((tx) => tx.id === id) ?? null;
+    if (!rec) return null;
+    if (rec.status !== "completed") {
+      rec.status = "failed";
+      rec.completed_at = now;
+    }
+    rec.error = error;
+    return normalizeDiscordAuthTransactionRow(rec);
+  });
 }
 
 export async function createDiscordMobileAuth(input?: { channelId?: string | null }) {

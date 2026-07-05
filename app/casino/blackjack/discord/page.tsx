@@ -1,16 +1,44 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Stage = "init" | "awaiting_oauth" | "authorizing" | "logging_in" | "ensuring_table" | "redirecting" | "linked" | "error";
+type Stage =
+  | "booting"
+  | "embedded_ready"
+  | "embedded_authorizing"
+  | "session_creating"
+  | "authenticated"
+  | "fallback_available"
+  | "browser_pairing"
+  | "redirecting"
+  | "linked"
+  | "failed";
+
+type AuthTransaction = {
+  id: string;
+  kind: "embedded" | "browser_pairing";
+  source: "activity" | "web";
+  platform: "desktop" | "mobile" | "unknown";
+  channelId: string | null;
+  guildId: string | null;
+  returnPath: string | null;
+  pairingCode: string | null;
+  status: "pending" | "completed" | "failed" | "expired";
+  userId: number | null;
+  sessionToken: string | null;
+  error: string | null;
+  createdAt: number;
+  expiresAt: number;
+  completedAt: number | null;
+};
 
 export default function DiscordBlackjackEntryPage() {
   const router = useRouter();
-  const [stage, setStage] = useState<Stage>("init");
+  const [stage, setStage] = useState<Stage>("booting");
   const [err, setErr] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [mobileAuth, setMobileAuth] = useState<null | { token: string; code: string; channelId?: string | null; expiresAt: number }>(null);
+  const [browserPairingTx, setBrowserPairingTx] = useState<AuthTransaction | null>(null);
 
   const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ?? "";
   const redirectUri =
@@ -22,33 +50,112 @@ export default function DiscordBlackjackEntryPage() {
   }, []);
 
   const hasFrameId = useMemo(() => !!qs?.get("frame_id"), [qs]);
-  const channelIdFromQuery = useMemo(() => qs?.get("channel_id") ?? null, [qs]);
+  const channelId = useMemo(() => qs?.get("channel_id") ?? null, [qs]);
+  const guildId = useMemo(() => qs?.get("guild_id") ?? null, [qs]);
   const oauthCodeFromQuery = useMemo(() => qs?.get("code") ?? null, [qs]);
   const oauthStateFromQuery = useMemo(() => qs?.get("state") ?? null, [qs]);
-  const mobileAuthCode = useMemo(() => {
-    const raw = String(oauthStateFromQuery ?? "");
-    return raw.startsWith("mobile:") ? raw.slice("mobile:".length).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12) : null;
+  const transactionIdFromQuery = useMemo(() => {
+    const raw = String(oauthStateFromQuery ?? "").trim();
+    return /^[a-f0-9]{48}$/i.test(raw) ? raw : null;
   }, [oauthStateFromQuery]);
-
-  // If we initiated OAuth ourselves, we store channel id in `state`.
-  const channelId = channelIdFromQuery ?? (mobileAuthCode ? null : oauthStateFromQuery);
   const isMobile = useMemo(() => {
     try {
       if (typeof navigator === "undefined") return false;
-      const ua = navigator.userAgent ?? "";
-      return /iPhone|iPad|iPod|Android/i.test(ua);
+      return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent ?? "");
     } catch {
       return false;
     }
   }, []);
-  const isIOS = useMemo(() => {
-    try {
-      if (typeof navigator === "undefined") return false;
-      const ua = navigator.userAgent ?? "";
-      return /iPhone|iPad|iPod/i.test(ua);
-    } catch {
-      return false;
+
+  const mobileLinkUrl = useMemo(() => {
+    if (typeof window === "undefined") return "/discord/mobile";
+    return `${window.location.origin}/discord/mobile`;
+  }, []);
+
+  const redirectIntoGame = useCallback(
+    async (nextChannelId?: string | null) => {
+      const resolved = String(nextChannelId ?? channelId ?? "").trim();
+      if (resolved) {
+        const ensureRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(resolved)}/ensure`, { method: "POST" });
+        const ensureJson = (await ensureRes.json().catch(() => ({}))) as any;
+        if (!ensureRes.ok) throw new Error(ensureJson?.error ?? "Failed to create/join table.");
+        const joinRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(resolved)}/join`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ spectate: false }),
+        });
+        if (!joinRes.ok) {
+          const joinJson = (await joinRes.json().catch(() => ({}))) as any;
+          throw new Error(joinJson?.error ?? "Failed to join table.");
+        }
+      }
+      setStage("redirecting");
+      router.replace(resolved ? `/casino/blackjack-v2/${encodeURIComponent(resolved)}` : "/casino/blackjack-v2");
+    },
+    [channelId, router],
+  );
+
+  const completeTransaction = useCallback(
+    async (transactionId: string, code: string) => {
+      setStage("session_creating");
+      setErr(null);
+      const res = await fetch("/api/discord/auth/complete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transactionId, code, redirectUri }),
+      });
+      const data = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok) throw new Error(data?.error ?? "Discord login failed.");
+      if (data?.session_token) {
+        try {
+          localStorage.setItem("lgc.session", String(data.session_token));
+        } catch {
+          // ignore
+        }
+      }
+      return data as { access_token?: string; session_token?: string; transaction?: AuthTransaction };
+    },
+    [redirectUri],
+  );
+
+  const beginBrowserPairing = useCallback(async () => {
+    setErr(null);
+    setStage("browser_pairing");
+    const res = await fetch("/api/discord/auth/fallback/start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        source: "activity",
+        platform: isMobile ? "mobile" : "desktop",
+        channelId,
+        guildId,
+        returnPath: channelId ? `/casino/blackjack-v2/${encodeURIComponent(channelId)}` : "/casino/blackjack-v2",
+      }),
+    });
+    const data = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok || !data?.transaction?.id) {
+      setStage("fallback_available");
+      throw new Error(data?.error ?? "Failed to create browser pairing request");
     }
+    setBrowserPairingTx(data.transaction as AuthTransaction);
+  }, [channelId, guildId, isMobile]);
+
+  const startGuestMode = useCallback(() => {
+    try {
+      sessionStorage.setItem("lgc.discord.disableOauthSession", "1");
+    } catch {
+      // ignore
+    }
+    router.replace(channelId ? `/casino/blackjack-v2/${encodeURIComponent(channelId)}` : "/casino/blackjack-v2");
+  }, [channelId, router]);
+
+  const retryEmbeddedFlow = useCallback(() => {
+    try {
+      sessionStorage.removeItem("lgc.discord.disableOauthSession");
+    } catch {
+      // ignore
+    }
+    window.location.href = `/casino/blackjack/discord${window.location.search || ""}`;
   }, []);
 
   useEffect(() => {
@@ -57,60 +164,30 @@ export default function DiscordBlackjackEntryPage() {
   }, []);
 
   useEffect(() => {
-    if (!isMobile) return;
-    if (oauthCodeFromQuery) return;
-    if (mobileAuth) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/discord/mobile-auth", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ channelId }),
-        });
-        const data = (await res.json().catch(() => ({}))) as any;
-        if (!res.ok || !data?.token || !data?.code) throw new Error(data?.error ?? "Failed to create mobile auth code");
-        if (cancelled) return;
-        setMobileAuth({
-          token: String(data.token),
-          code: String(data.code),
-          channelId: (data.channelId ?? channelId ?? null) as string | null,
-          expiresAt: Number(data.expiresAt ?? 0) || Date.now() + 15 * 60 * 1000,
-        });
-      } catch (e: any) {
-        if (cancelled) return;
-        setStage("error");
-        setErr(String(e?.message ?? "Failed to initialize mobile Discord sign-in."));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isMobile, oauthCodeFromQuery, mobileAuth, channelId]);
-
-  useEffect(() => {
-    if (!isMobile) return;
-    if (!mobileAuth?.token) return;
-    if (oauthCodeFromQuery) return;
+    if (!browserPairingTx?.id) return;
     let cancelled = false;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/discord/mobile-auth?token=${encodeURIComponent(mobileAuth.token)}`, { cache: "no-store" });
+        const res = await fetch(`/api/discord/auth/status?tx=${encodeURIComponent(browserPairingTx.id)}`, { cache: "no-store" });
         const data = (await res.json().catch(() => ({}))) as any;
-        if (!res.ok) return;
-        if (cancelled) return;
-        if (data?.status === "completed" && data?.sessionToken) {
+        if (!res.ok || cancelled) return;
+        const tx = data?.transaction as AuthTransaction | undefined;
+        if (!tx) return;
+        setBrowserPairingTx(tx);
+        if (tx.status === "completed" && tx.sessionToken) {
           try {
-            localStorage.setItem("lgc.session", String(data.sessionToken));
+            localStorage.setItem("lgc.session", String(tx.sessionToken));
           } catch {
             // ignore
           }
-          setStage("redirecting");
-          const nextChannelId = String(data?.channelId ?? mobileAuth.channelId ?? "").trim();
-          router.replace(nextChannelId ? `/casino/blackjack-v2/${encodeURIComponent(nextChannelId)}` : "/casino/blackjack-v2");
+          setStage("authenticated");
+          await redirectIntoGame(tx.channelId);
+        } else if (tx.status === "failed" || tx.status === "expired") {
+          setStage("fallback_available");
+          setErr(tx.error ?? "Discord browser pairing expired. Please retry.");
         }
       } catch {
-        // ignore transient poll failures
+        // ignore transient failures
       }
     };
     void poll();
@@ -119,7 +196,7 @@ export default function DiscordBlackjackEntryPage() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [isMobile, mobileAuth, oauthCodeFromQuery, router]);
+  }, [browserPairingTx?.id, redirectIntoGame]);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,212 +205,111 @@ export default function DiscordBlackjackEntryPage() {
         setErr(null);
         if (!clientId) throw new Error("Missing NEXT_PUBLIC_DISCORD_CLIENT_ID");
 
-        // If Discord didn't provide the Embedded App params, don't attempt to load the SDK
-        // (it will throw: "frame_id query param is not defined"). Show the OAuth fallback.
-        if (!hasFrameId && !oauthCodeFromQuery) {
-          setStage(isMobile ? "awaiting_oauth" : "init");
-          return;
-        }
-
-        // Fallback path: if we already have an OAuth code in the URL, we can complete login
-        // without waiting for the Embedded SDK handshake.
-        if (oauthCodeFromQuery) {
-          setStage("logging_in");
-          const loginRes = await fetch("/api/discord/login", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ code: oauthCodeFromQuery, redirectUri, mobileAuthCode }),
-          });
-          const loginJson = (await loginRes.json().catch(() => ({}))) as any;
-          if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
-          if (loginJson?.session_token) {
-            try {
-              localStorage.setItem("lgc.session", String(loginJson.session_token));
-            } catch {
-              // ignore
-            }
-          }
-
-          if (mobileAuthCode) {
+        if (oauthCodeFromQuery && transactionIdFromQuery) {
+          const completed = await completeTransaction(transactionIdFromQuery, oauthCodeFromQuery);
+          if (cancelled) return;
+          const tx = completed.transaction;
+          if (tx?.kind === "browser_pairing" && !hasFrameId) {
             setStage("linked");
+            setBrowserPairingTx(tx);
             return;
           }
-
-          if (channelId) {
-            setStage("ensuring_table");
-            const ensureRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(channelId)}/ensure`, { method: "POST" });
-            const ensureJson = (await ensureRes.json().catch(() => ({}))) as any;
-            if (!ensureRes.ok) throw new Error(ensureJson?.error ?? "Failed to create/join table.");
-
-            await fetch(`/api/blackjack/tables/${encodeURIComponent(channelId)}/join`, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ spectate: false }),
-            });
-          }
-
-          if (cancelled) return;
-          setStage("redirecting");
-          router.replace(channelId ? `/casino/blackjack-v2/${encodeURIComponent(channelId)}` : "/casino/blackjack-v2");
+          setStage("authenticated");
+          await redirectIntoGame(tx?.channelId ?? channelId);
           return;
         }
 
-        // On mobile Discord, use a simpler OAuth-first flow instead of trying the embedded handshake.
-        if (isMobile && !oauthCodeFromQuery) {
-          setStage("awaiting_oauth");
+        if (!hasFrameId) {
+          setStage("fallback_available");
+          setErr("Discord Activity params are missing, so embedded sign-in could not start.");
           return;
         }
 
-        // Dynamic import so local dev / non-discord environments don't crash bundling.
+        setStage("booting");
+        const startRes = await fetch("/api/discord/auth/start", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            kind: "embedded",
+            source: "activity",
+            platform: isMobile ? "mobile" : "desktop",
+            channelId,
+            guildId,
+            returnPath: channelId ? `/casino/blackjack-v2/${encodeURIComponent(channelId)}` : "/casino/blackjack-v2",
+          }),
+        });
+        const startJson = (await startRes.json().catch(() => ({}))) as any;
+        const tx = startJson?.transaction as AuthTransaction | undefined;
+        if (!startRes.ok || !tx?.id) throw new Error(startJson?.error ?? "Failed to start Discord auth.");
+
         const { DiscordSDK } = await import("@discord/embedded-app-sdk");
-        // eslint-disable-next-line new-cap
         const discordSdk = new DiscordSDK(clientId);
-        // In some Discord contexts the handshake can hang; show feedback + allow OAuth fallback.
         await Promise.race([
           discordSdk.ready(),
           new Promise((_, reject) => window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), 20000)),
         ]);
+        if (cancelled) return;
+        setStage("embedded_ready");
 
-        const sdkChannelId = (discordSdk as any).channelId as string | undefined;
-        const effectiveChannelId = sdkChannelId ?? channelId;
-        if (!effectiveChannelId) throw new Error("Missing channel id (must be launched from a voice call Activity).");
-
-        setStage("authorizing");
+        setStage("embedded_authorizing");
         const authz = await (discordSdk as any).commands.authorize({
           client_id: clientId,
           response_type: "code",
           prompt: "none",
           scope: ["identify", "rpc.activities.write"],
+          state: tx.id,
         });
         const code = String(authz?.code ?? "");
         if (!code) throw new Error("Discord authorize did not return a code.");
 
-        setStage("logging_in");
-        const loginRes = await fetch("/api/discord/login", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ code, redirectUri }),
-        });
-        const loginJson = (await loginRes.json().catch(() => ({}))) as any;
-        if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
-        if (loginJson?.session_token) {
+        const completed = await completeTransaction(tx.id, code);
+        if (cancelled) return;
+
+        const accessToken = String(completed?.access_token ?? "");
+        if (accessToken) {
           try {
-            localStorage.setItem("lgc.session", String(loginJson.session_token));
+            await (discordSdk as any).commands.authenticate({ access_token: accessToken });
           } catch {
-            // ignore
+            // ignore authenticate failures; the app session is already established server-side
           }
         }
 
-        const accessToken = String(loginJson?.access_token ?? "");
-        if (accessToken) {
-          await (discordSdk as any).commands.authenticate({ access_token: accessToken });
-        }
-
-        setStage("ensuring_table");
-        const ensureRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(effectiveChannelId)}/ensure`, { method: "POST" });
-        const ensureJson = (await ensureRes.json().catch(() => ({}))) as any;
-        if (!ensureRes.ok) throw new Error(ensureJson?.error ?? "Failed to create/join table.");
-
-        // Now join the table and land on the standard table UI.
-        await fetch(`/api/blackjack/tables/${encodeURIComponent(effectiveChannelId)}/join`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ spectate: false }),
-        });
-
-        if (cancelled) return;
-        setStage("redirecting");
-        router.replace(`/casino/blackjack-v2/${encodeURIComponent(effectiveChannelId)}`);
+        setStage("authenticated");
+        await redirectIntoGame(completed?.transaction?.channelId ?? channelId);
       } catch (e: any) {
         if (cancelled) return;
-        setStage("error");
+        setStage("fallback_available");
         setErr(String(e?.message ?? "Failed to start Discord blackjack."));
       }
     })();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [clientId, oauthCodeFromQuery, transactionIdFromQuery, hasFrameId, isMobile, channelId, guildId, completeTransaction, redirectIntoGame]);
 
   const progress = useMemo(() => {
-    if (stage === "init") return 8;
-    if (stage === "awaiting_oauth") return 18;
-    if (stage === "authorizing") return 30;
-    if (stage === "logging_in") return 55;
-    if (stage === "ensuring_table") return 78;
+    if (stage === "booting") return 10;
+    if (stage === "embedded_ready") return 26;
+    if (stage === "embedded_authorizing") return 46;
+    if (stage === "session_creating") return 68;
+    if (stage === "authenticated") return 86;
     if (stage === "redirecting") return 95;
-    if (stage === "linked") return 100;
-    if (stage === "error") return 100;
-    return 10;
+    if (stage === "browser_pairing") return 44;
+    return 100;
   }, [stage]);
 
   const stageLabel = useMemo(() => {
-    if (stage === "init") return "Connecting to Discord…";
-    if (stage === "awaiting_oauth") return "Authorize with Discord to continue…";
-    if (stage === "authorizing") return "Authorizing…";
-    if (stage === "logging_in") return "Signing you in…";
-    if (stage === "ensuring_table") return "Creating / joining table…";
+    if (stage === "booting") return "Connecting to Discord…";
+    if (stage === "embedded_ready") return "Discord connected.";
+    if (stage === "embedded_authorizing") return "Authorizing with Discord…";
+    if (stage === "session_creating") return "Creating your game session…";
+    if (stage === "authenticated") return "Authenticated.";
     if (stage === "redirecting") return "Loading table…";
+    if (stage === "browser_pairing") return "Browser pairing ready.";
     if (stage === "linked") return "Discord sign-in completed.";
-    return "Error";
+    if (stage === "fallback_available") return "Choose a fallback option.";
+    return "Discord sign-in failed.";
   }, [stage]);
-
-  const oauthAuthorizeUrl = useMemo(() => {
-    if (!clientId) return null;
-    // Use state=channelId so we can recover the table id after redirect.
-    const state = channelId ?? "";
-    const url = new URL("https://discord.com/oauth2/authorize");
-    url.searchParams.set("client_id", clientId);
-    url.searchParams.set("response_type", "code");
-    url.searchParams.set("redirect_uri", redirectUri);
-    url.searchParams.set("scope", "identify rpc.activities.write");
-    if (state) url.searchParams.set("state", state);
-    return url.toString();
-  }, [clientId, redirectUri, channelId]);
-
-  // If we already know we need OAuth, jump there automatically once per page load.
-  useEffect(() => {
-    if (isMobile) return;
-    if (oauthCodeFromQuery) return;
-    if (!oauthAuthorizeUrl) return;
-    if (stage !== "awaiting_oauth") return;
-    try {
-      const key = "lgc.discord.oauthAutoRedirected";
-      if (sessionStorage.getItem(key) === "1") return;
-      sessionStorage.setItem(key, "1");
-      const t = window.setTimeout(() => {
-        window.location.href = oauthAuthorizeUrl;
-      }, isMobile ? 250 : 700);
-      return () => window.clearTimeout(t);
-    } catch {
-      // ignore
-    }
-  }, [stage, oauthCodeFromQuery, oauthAuthorizeUrl, isMobile]);
-
-  // If Discord opened the page without the embedded params, also fall back automatically.
-  useEffect(() => {
-    if (isIOS || isMobile) return;
-    if (hasFrameId) return;
-    if (oauthCodeFromQuery) return;
-    if (!oauthAuthorizeUrl) return;
-    try {
-      const key = "lgc.discord.oauthAutoRedirected";
-      if (sessionStorage.getItem(key) === "1") return;
-      sessionStorage.setItem(key, "1");
-      const t = window.setTimeout(() => {
-        window.location.href = oauthAuthorizeUrl;
-      }, 700);
-      return () => window.clearTimeout(t);
-    } catch {
-      // ignore
-    }
-  }, [hasFrameId, oauthCodeFromQuery, oauthAuthorizeUrl, channelId]);
-
-  const mobileLinkUrl = useMemo(() => {
-    if (typeof window === "undefined") return "/discord/mobile";
-    return `${window.location.origin}/discord/mobile`;
-  }, []);
 
   return (
     <div
@@ -358,112 +334,74 @@ export default function DiscordBlackjackEntryPage() {
           box-shadow: 0 22px 60px rgba(0,0,0,.45);
           backdrop-filter: blur(14px);
           -webkit-backdrop-filter: blur(14px);
-          padding: 20px;
+          padding: 24px;
         }
-        .lgc-subtle { color: rgba(255,255,255,.70); }
-        .lgc-tiny { color: rgba(255,255,255,.55); font-size: 12px; }
-        .lgc-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-        .lgc-progress-track { height: 8px; width: 100%; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); overflow: hidden; }
-        .lgc-progress-bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #34d399, #d946ef); transition: width 500ms ease; }
-        .lgc-spinner { width: 32px; height: 32px; border-radius: 999px; border: 2px solid rgba(255,255,255,.22); border-top-color: #6ee7b7; animation: lgc-spin 900ms linear infinite; }
-        .lgc-link { color: rgba(255,255,255,.92); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: rgba(255,255,255,.28); }
+        .lgc-title { font-size: 24px; font-weight: 700; }
+        .lgc-subtitle { margin-top: 8px; color: rgba(255,255,255,.72); font-size: 14px; line-height: 1.7; }
+        .lgc-progress {
+          margin-top: 20px;
+          width: 100%;
+          height: 12px;
+          border-radius: 999px;
+          background: rgba(255,255,255,.08);
+          overflow: hidden;
+          border: 1px solid rgba(255,255,255,.1);
+        }
+        .lgc-progress > div {
+          height: 100%;
+          width: 0%;
+          border-radius: 999px;
+          background: linear-gradient(90deg, rgba(56,189,248,.95), rgba(168,85,247,.95));
+          transition: width .35s ease;
+        }
+        .lgc-stage {
+          margin-top: 14px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          color: rgba(255,255,255,.78);
+          font-size: 14px;
+        }
+        .lgc-spinner {
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          border: 2px solid rgba(255,255,255,.18);
+          border-top-color: rgba(52,211,153,.95);
+          animation: lgc-spin 1s linear infinite;
+        }
+        .lgc-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+        .lgc-action {
+          border: 1px solid rgba(255,255,255,.12);
+          background: rgba(255,255,255,.06);
+          color: rgba(255,255,255,.9);
+          border-radius: 14px;
+          padding: 10px 14px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .lgc-action:hover { background: rgba(255,255,255,.1); }
+        .lgc-link { color: rgba(165,180,252,.96); text-decoration: underline; text-underline-offset: 3px; }
+        .lgc-tiny { color: rgba(255,255,255,.5); font-size: 11px; line-height: 1.7; }
+        .lgc-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
       `}</style>
 
-      <div style={{ margin: "0 auto", maxWidth: 900, minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ display: "flex", justifyContent: "center" }}>
         <div className="lgc-card">
-          <div style={{ fontSize: 16, fontWeight: 700 }}>Launching Discord Blackjack…</div>
-          <div className="lgc-subtle" style={{ marginTop: 8, fontSize: 14 }}>
-            {stageLabel}
+          <div className="lgc-title">Discord blackjack</div>
+          <div className="lgc-subtitle">{stageLabel}</div>
+
+          <div className="lgc-progress" aria-hidden="true">
+            <div style={{ width: `${progress}%` }} />
           </div>
 
-          <div style={{ marginTop: 16 }}>
-            <div className="lgc-progress-track">
-              <div className="lgc-progress-bar" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
-            </div>
-            <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12 }}>
-              <div className="lgc-spinner" />
-              <div className="lgc-subtle" style={{ fontSize: 14 }}>
-                Loading… <span className="lgc-mono" style={{ color: "rgba(255,255,255,.60)" }}>{elapsed}s</span>
-              </div>
-            </div>
-            <div className="lgc-tiny" style={{ marginTop: 8 }}>
-              {progress}% • <span className="lgc-mono">{stage}</span>
-            </div>
+          <div className="lgc-stage">
+            {stage !== "fallback_available" && stage !== "linked" && stage !== "failed" ? <div className="lgc-spinner" /> : null}
+            <span>{stage}</span>
           </div>
 
-          {err ? (
-            <div
-              style={{
-                marginTop: 16,
-                borderRadius: 16,
-                border: "1px solid rgba(251,113,133,.25)",
-                background: "rgba(244,63,94,.12)",
-                padding: "10px 12px",
-                color: "rgba(255,228,230,.95)",
-                fontSize: 14,
-              }}
-            >
-              {err}
-            </div>
-          ) : null}
-
-          {stage === "linked" ? (
-            <div
-              style={{
-                marginTop: 16,
-                borderRadius: 16,
-                border: "1px solid rgba(52,211,153,.25)",
-                background: "rgba(16,185,129,.12)",
-                padding: "10px 12px",
-                color: "rgba(220,252,231,.96)",
-                fontSize: 14,
-              }}
-            >
-              Discord sign-in completed. Return to the Discord Activity and it should continue automatically.
-            </div>
-          ) : null}
-
-          {err && String(err).toLowerCase().includes("handshake timed out") ? (
-            <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 10 }}>
-              <button
-                type="button"
-                style={{
-                  borderRadius: 16,
-                  border: "1px solid rgba(255,255,255,.14)",
-                  background: "rgba(255,255,255,.08)",
-                  padding: "10px 12px",
-                  color: "rgba(255,255,255,.90)",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  // Some iOS contexts get stuck during the Embedded SDK handshake.
-                  // Allow a temporary fallback to the normal web sign-in flow (username).
-                  try {
-                    sessionStorage.removeItem("lgc.discord.embedded");
-                    sessionStorage.removeItem("lgc.discord.qs");
-                    sessionStorage.removeItem("lgc.discord.fallback.tried");
-                    sessionStorage.removeItem("lgc.discord.oauthAutoRedirected");
-                  } catch {
-                    // ignore
-                  }
-                  try {
-                    window.location.href = "/casino/blackjack";
-                  } catch {
-                    // ignore
-                  }
-                }}
-              >
-                Play with username (temporary)
-              </button>
-              <div className="lgc-tiny" style={{ alignSelf: "center" }}>
-                This skips Discord auth so you can still play on iOS.
-              </div>
-            </div>
-          ) : null}
-
-          {isMobile && stage === "awaiting_oauth" && mobileAuth ? (
+          {stage === "browser_pairing" && browserPairingTx ? (
             <div
               style={{
                 marginTop: 16,
@@ -475,82 +413,84 @@ export default function DiscordBlackjackEntryPage() {
                 fontSize: 14,
               }}
             >
-              <div style={{ fontWeight: 700, color: "rgba(255,255,255,.96)" }}>Mobile pairing code</div>
-              <div className="lgc-mono" style={{ marginTop: 10, fontSize: 28, letterSpacing: "0.32em" }}>{mobileAuth.code}</div>
+              <div style={{ fontWeight: 700, color: "rgba(255,255,255,.96)" }}>Browser pairing code</div>
+              <div className="lgc-mono" style={{ marginTop: 10, fontSize: 28, letterSpacing: "0.32em" }}>
+                {browserPairingTx.pairingCode}
+              </div>
               <div style={{ marginTop: 10, lineHeight: 1.6 }}>
-                Open <span className="lgc-mono">{mobileLinkUrl}</span> in your phone browser, enter this code, and finish Discord sign-in there.
+                Open <span className="lgc-mono">{mobileLinkUrl}</span> in your browser, enter this code, and finish Discord sign-in there.
                 This Activity will continue automatically as soon as the browser step completes.
               </div>
               <div className="lgc-tiny" style={{ marginTop: 10 }}>
-                Code expires in {Math.max(0, Math.ceil((mobileAuth.expiresAt - Date.now()) / 60000))} min.
+                Code expires in {Math.max(0, Math.ceil((browserPairingTx.expiresAt - Date.now()) / 60000))} min.
               </div>
-              <button
-                type="button"
-                className="lgc-link"
-                style={{ marginTop: 12, background: "transparent", border: 0, padding: 0, cursor: "pointer" }}
-                onClick={() => {
-                  try {
-                    sessionStorage.setItem("lgc.discord.disableOauthSession", "1");
-                  } catch {
-                    // ignore
-                  }
-                  window.location.href = "/casino/blackjack-v2";
-                }}
-              >
-                Play with temporary username instead
-              </button>
             </div>
           ) : null}
 
-          {!isMobile && (stage === "init" || stage === "awaiting_oauth") && (elapsed >= 2 || stage === "awaiting_oauth") && oauthAuthorizeUrl ? (
+          {stage === "fallback_available" || stage === "failed" ? (
             <div
               style={{
                 marginTop: 16,
                 borderRadius: 16,
                 border: "1px solid rgba(255,255,255,.12)",
                 background: "rgba(255,255,255,.06)",
-                padding: "10px 12px",
-                color: "rgba(255,255,255,.78)",
+                padding: "14px 16px",
+                color: "rgba(255,255,255,.82)",
                 fontSize: 14,
               }}
             >
-              {
-                <>
-                  If this stays stuck, click{" "}
-                  <a className="lgc-link" href={oauthAuthorizeUrl}>
-                    Authorize with Discord
-                  </a>{" "}
-                  to continue.
-                </>
-              }
-            </div>
-          ) : null}
-
-          {!hasFrameId && !oauthCodeFromQuery ? (
-            <div
-              style={{
-                marginTop: 16,
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,.12)",
-                background: "rgba(255,255,255,.06)",
-                padding: "10px 12px",
-                color: "rgba(255,255,255,.78)",
-                fontSize: 13,
-                lineHeight: 1.45,
-              }}
-            >
-              <div style={{ fontWeight: 700, color: "rgba(255,255,255,.92)" }}>Not embedded yet (missing frame_id)</div>
-              <div style={{ marginTop: 6 }}>
-                This usually means Discord is opening this as a normal web page instead of an Activity iframe. Start it from a
-                voice channel: <span className="lgc-mono">Rocket (Activities) → your app → Start</span>.
+              <div style={{ fontWeight: 700, color: "rgba(255,255,255,.96)" }}>Fallback options</div>
+              <div style={{ marginTop: 10, lineHeight: 1.6 }}>
+                Embedded Discord sign-in did not complete cleanly. You can retry it, continue with a temporary username,
+                or use browser pairing as a rescue path.
+              </div>
+              <div className="lgc-row">
+                <button type="button" className="lgc-action" onClick={retryEmbeddedFlow}>
+                  Retry Discord sign-in
+                </button>
+                <button type="button" className="lgc-action" onClick={startGuestMode}>
+                  Play with temporary username
+                </button>
+                <button
+                  type="button"
+                  className="lgc-action"
+                  onClick={async () => {
+                    try {
+                      await beginBrowserPairing();
+                    } catch (e: any) {
+                      setErr(String(e?.message ?? "Failed to start browser pairing."));
+                    }
+                  }}
+                >
+                  Use browser pairing
+                </button>
               </div>
             </div>
           ) : null}
 
-          <div className="lgc-tiny" style={{ marginTop: 16 }}>
-            Tip: launch this as a Discord Activity from within a voice call. (For local testing you can pass{" "}
-            <span className="lgc-mono">?channel_id=...</span>.)
-          </div>
+          {stage === "linked" ? (
+            <div className="lgc-tiny" style={{ marginTop: 12 }}>
+              Discord sign-in completed in the browser. Return to the Discord Activity and it should continue automatically.
+            </div>
+          ) : null}
+
+          {err ? (
+            <div
+              style={{
+                marginTop: 16,
+                borderRadius: 16,
+                border: "1px solid rgba(244,63,94,.22)",
+                background: "rgba(244,63,94,.12)",
+                padding: "10px 12px",
+                color: "rgba(255,228,230,.95)",
+                fontSize: 14,
+              }}
+            >
+              {err}
+            </div>
+          ) : null}
+
+          {stage !== "redirecting" ? <div className="lgc-tiny" style={{ marginTop: 10 }}>Elapsed: {elapsed}s</div> : null}
         </div>
       </div>
     </div>
