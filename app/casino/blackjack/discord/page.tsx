@@ -34,6 +34,7 @@ type AuthTransaction = {
 };
 
 export default function DiscordBlackjackEntryPage() {
+  const BROWSER_PAIRING_TX_KEY = "lgc.discord.browserPairingTxId";
   const router = useRouter();
   const [stage, setStage] = useState<Stage>("booting");
   const [err, setErr] = useState<string | null>(null);
@@ -137,11 +138,18 @@ export default function DiscordBlackjackEntryPage() {
       setStage("fallback_available");
       throw new Error(data?.error ?? "Failed to create browser pairing request");
     }
-    setBrowserPairingTx(data.transaction as AuthTransaction);
+    const tx = data.transaction as AuthTransaction;
+    try {
+      sessionStorage.setItem(BROWSER_PAIRING_TX_KEY, tx.id);
+    } catch {
+      // ignore
+    }
+    setBrowserPairingTx(tx);
   }, [channelId, guildId, isMobile]);
 
   const startGuestMode = useCallback(() => {
     try {
+      sessionStorage.removeItem(BROWSER_PAIRING_TX_KEY);
       sessionStorage.setItem("lgc.discord.disableOauthSession", "1");
     } catch {
       // ignore
@@ -151,6 +159,7 @@ export default function DiscordBlackjackEntryPage() {
 
   const retryEmbeddedFlow = useCallback(() => {
     try {
+      sessionStorage.removeItem(BROWSER_PAIRING_TX_KEY);
       sessionStorage.removeItem("lgc.discord.disableOauthSession");
     } catch {
       // ignore
@@ -162,6 +171,49 @@ export default function DiscordBlackjackEntryPage() {
     const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (browserPairingTx?.id) return;
+    if (oauthCodeFromQuery) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const storedTxId = sessionStorage.getItem(BROWSER_PAIRING_TX_KEY) ?? "";
+        if (!storedTxId) return;
+        const res = await fetch(`/api/discord/auth/status?tx=${encodeURIComponent(storedTxId)}`, { cache: "no-store" });
+        const data = (await res.json().catch(() => ({}))) as any;
+        if (!res.ok || cancelled) return;
+        const tx = data?.transaction as AuthTransaction | undefined;
+        if (!tx) return;
+        if (tx.status === "pending") {
+          setBrowserPairingTx(tx);
+          setStage("browser_pairing");
+          return;
+        }
+        if (tx.status === "completed" && tx.sessionToken) {
+          try {
+            localStorage.setItem("lgc.session", String(tx.sessionToken));
+            sessionStorage.removeItem(BROWSER_PAIRING_TX_KEY);
+          } catch {
+            // ignore
+          }
+          setStage("authenticated");
+          await redirectIntoGame(tx.channelId);
+          return;
+        }
+        try {
+          sessionStorage.removeItem(BROWSER_PAIRING_TX_KEY);
+        } catch {
+          // ignore
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [browserPairingTx?.id, oauthCodeFromQuery, redirectIntoGame]);
 
   useEffect(() => {
     if (!browserPairingTx?.id) return;
@@ -177,12 +229,18 @@ export default function DiscordBlackjackEntryPage() {
         if (tx.status === "completed" && tx.sessionToken) {
           try {
             localStorage.setItem("lgc.session", String(tx.sessionToken));
+            sessionStorage.removeItem(BROWSER_PAIRING_TX_KEY);
           } catch {
             // ignore
           }
           setStage("authenticated");
           await redirectIntoGame(tx.channelId);
         } else if (tx.status === "failed" || tx.status === "expired") {
+          try {
+            sessionStorage.removeItem(BROWSER_PAIRING_TX_KEY);
+          } catch {
+            // ignore
+          }
           setStage("fallback_available");
           setErr(tx.error ?? "Discord browser pairing expired. Please retry.");
         }
@@ -205,11 +263,21 @@ export default function DiscordBlackjackEntryPage() {
         setErr(null);
         if (!clientId) throw new Error("Missing NEXT_PUBLIC_DISCORD_CLIENT_ID");
 
+        if (browserPairingTx?.id && !oauthCodeFromQuery) {
+          setStage("browser_pairing");
+          return;
+        }
+
         if (oauthCodeFromQuery && transactionIdFromQuery) {
           const completed = await completeTransaction(transactionIdFromQuery, oauthCodeFromQuery);
           if (cancelled) return;
           const tx = completed.transaction;
           if (tx?.kind === "browser_pairing" && !hasFrameId) {
+            try {
+              sessionStorage.removeItem(BROWSER_PAIRING_TX_KEY);
+            } catch {
+              // ignore
+            }
             setStage("linked");
             setBrowserPairingTx(tx);
             return;
@@ -220,7 +288,7 @@ export default function DiscordBlackjackEntryPage() {
         }
 
         if (!hasFrameId) {
-          setStage("fallback_available");
+          setStage("failed");
           setErr("Discord Activity params are missing, so embedded sign-in could not start.");
           return;
         }
@@ -256,7 +324,7 @@ export default function DiscordBlackjackEntryPage() {
           client_id: clientId,
           response_type: "code",
           prompt: "none",
-          scope: ["identify", "rpc.activities.write"],
+          scope: ["identify"],
           state: tx.id,
         });
         const code = String(authz?.code ?? "");
@@ -278,14 +346,14 @@ export default function DiscordBlackjackEntryPage() {
         await redirectIntoGame(completed?.transaction?.channelId ?? channelId);
       } catch (e: any) {
         if (cancelled) return;
-        setStage("fallback_available");
+        setStage("failed");
         setErr(String(e?.message ?? "Failed to start Discord blackjack."));
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [clientId, oauthCodeFromQuery, transactionIdFromQuery, hasFrameId, isMobile, channelId, guildId, completeTransaction, redirectIntoGame]);
+  }, [clientId, oauthCodeFromQuery, transactionIdFromQuery, hasFrameId, isMobile, channelId, guildId, completeTransaction, redirectIntoGame, beginBrowserPairing, browserPairingTx?.id]);
 
   const progress = useMemo(() => {
     if (stage === "booting") return 10;
