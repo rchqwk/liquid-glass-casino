@@ -154,14 +154,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const authed = data.user ?? null;
         setUser(authed);
 
-        // Inside Discord, hand off unauthenticated users to the dedicated controller page.
-        // Keep the auth implementation in one place instead of duplicating it here.
+        // Inside Discord, redirect unauthenticated users to the auth page.
+        // Skipped on the root page (/) and the auth controller page (/casino/blackjack/discord)
+        // since those render DiscordMobileAuth which handles auth inline.
         if (!authed && isDiscord && !discordAttempted) {
           setDiscordAttempted(true);
           setDiscordError(null);
           try {
             const path = window.location.pathname || "";
-            if (!path.startsWith("/casino/blackjack/discord")) {
+            if (path !== "/" && !path.startsWith("/casino/blackjack/discord")) {
               window.location.replace(`/casino/blackjack/discord${search || ""}`);
               return;
             }
