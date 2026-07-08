@@ -1,14 +1,15 @@
-// Discord OAuth callback handler.
-// Discord's Developer Portal redirect_uri is configured to this path.
-// This page handles both:
-//   1. OAuth callback — Discord sends the user back here with ?code=&state=
-//   2. Direct Activity load (fallback) — frame_id etc from Discord iframe
-//
-// The actual auth logic lives in DiscordMobileAuth. This page is just a
-// thin shell that routes to it.
+"use client";
 
-import DiscordMobileAuth from "../../../components/DiscordRootBootstrapper";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function DiscordAuthEntryPage() {
-  return <DiscordMobileAuth />;
+  const router = useRouter();
+  useEffect(() => {
+    // Discord Activity auth has been disabled.
+    // Users should use the temporary username path instead.
+    // Browser pairing at /discord/mobile is still available as a manual option.
+    router.replace("/casino/blackjack-v2");
+  }, [router]);
+  return null;
 }

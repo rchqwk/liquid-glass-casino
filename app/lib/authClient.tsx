@@ -124,7 +124,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // ignore
         }
 
-        // Detect Discord embedded environment (frame_id etc). If present, persist for later navigation.
+        // Detect Discord embedded environment — just set a flag, don't redirect.
+        // Discord Activity auth is disabled. Users sign in with a username normally.
         let isDiscord = false;
         let search = "";
         const disableDiscordOauthSession = getDiscordUsernameModeDisabled();
@@ -153,23 +154,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = (await res.json()) as { user: UserWithRole | null };
         const authed = data.user ?? null;
         setUser(authed);
-
-        // Inside Discord, redirect unauthenticated users to the auth page.
-        // Skipped on the root page (/) and the auth controller page (/casino/blackjack/discord)
-        // since those render DiscordMobileAuth which handles auth inline.
-        if (!authed && isDiscord && !discordAttempted) {
-          setDiscordAttempted(true);
-          setDiscordError(null);
-          try {
-            const path = window.location.pathname || "";
-            if (path !== "/" && !path.startsWith("/casino/blackjack/discord")) {
-              window.location.replace(`/casino/blackjack/discord${search || ""}`);
-              return;
-            }
-          } catch (e: any) {
-            setDiscordError(String(e?.message ?? "Failed to open Discord sign-in."));
-          }
-        }
       } catch {
         setUser(null);
       } finally {
