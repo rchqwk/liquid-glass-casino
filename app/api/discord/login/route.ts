@@ -45,12 +45,9 @@ export async function POST(req: Request) {
 
   const clientId = requireEnv("DISCORD_CLIENT_ID");
   const clientSecret = requireEnv("DISCORD_CLIENT_SECRET");
-  let redirectUri = process.env.DISCORD_REDIRECT_URI
-    || String(body?.redirectUri ?? "").trim()
-    || "https://rchqwk.com";
-  if (redirectUri && !redirectUri.startsWith("http")) {
-    redirectUri = `https://${redirectUri}`;
-  }
+  const redirectUri = String(body?.redirectUri ?? "").trim()
+    || process.env.DISCORD_REDIRECT_URI
+    || "https://rchqwk-liquid-glass-casino.vercel.app/casino/blackjack/discord";
 
   const form = new URLSearchParams();
   form.set("client_id", clientId);

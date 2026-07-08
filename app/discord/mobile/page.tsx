@@ -4,12 +4,21 @@ import { useMemo, useState } from "react";
 
 export default function DiscordMobileLinkPage() {
   const [code, setCode] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const normalizedCode = useMemo(() => String(code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12), [code]);
   const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ?? "";
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const redirectUri = origin ? `${origin}/casino/blackjack/discord` : "https://rchqwk.com/casino/blackjack/discord";
+  const redirectUri =
+    process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI ?? "https://rchqwk-liquid-glass-casino.vercel.app/casino/blackjack/discord";
+
+  const oauthUrl = useMemo(() => {
+    if (!clientId || !normalizedCode) return null;
+    const url = new URL("https://discord.com/oauth2/authorize");
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("scope", "identify");
+    url.searchParams.set("state", `mobile:${normalizedCode}`);
+    return url.toString();
+  }, [clientId, normalizedCode, redirectUri]);
 
   return (
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-xl items-center justify-center px-4 py-10">
@@ -27,37 +36,18 @@ export default function DiscordMobileLinkPage() {
         />
         <button
           type="button"
-          disabled={!clientId || !normalizedCode || busy}
+          disabled={!oauthUrl}
           className="mt-5 glass-soft rounded-2xl border border-indigo-300/20 bg-indigo-500/10 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-500/15 disabled:opacity-40"
-          onClick={async () => {
-            if (!clientId || !normalizedCode) return;
-            setBusy(true);
-            setMsg(null);
-            try {
-              const statusRes = await fetch(`/api/discord/auth/status?code=${encodeURIComponent(normalizedCode)}`, { cache: "no-store" });
-              const statusJson = (await statusRes.json().catch(() => ({}))) as any;
-              if (!statusRes.ok || !statusJson?.transaction?.id) throw new Error(statusJson?.error ?? "Pairing code not found");
-              const txId = String(statusJson.transaction.id);
-              const url = new URL("https://discord.com/oauth2/authorize");
-              url.searchParams.set("client_id", clientId);
-              url.searchParams.set("response_type", "code");
-              url.searchParams.set("redirect_uri", redirectUri);
-              url.searchParams.set("scope", "identify");
-              url.searchParams.set("state", txId);
-              window.location.href = url.toString();
-            } catch (e: any) {
-              setMsg(String(e?.message ?? "Failed to start Discord sign-in"));
-              setBusy(false);
-            }
+          onClick={() => {
+            if (!oauthUrl) return;
+            window.location.href = oauthUrl;
           }}
         >
-          {busy ? "Checking code…" : "Continue with Discord"}
+          Continue with Discord
         </button>
         <div className="mt-4 text-xs leading-5 text-white/50">
-          Use this only if the embedded Discord sign-in inside the Activity failed. After authorization completes here,
-          your Discord Activity should pick up the session automatically.
+          After authorization completes here, your Discord Activity should pick up the session automatically.
         </div>
-        {msg ? <div className="mt-4 text-sm text-rose-200">{msg}</div> : null}
       </div>
     </div>
   );
