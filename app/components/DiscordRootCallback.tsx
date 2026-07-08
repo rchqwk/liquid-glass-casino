@@ -22,7 +22,9 @@ export function DiscordRootCallback({ code, state }: { code: string; state?: str
     let cancelled = false;
     (async () => {
       try {
-        const redirectUri = window.location.origin;
+        const redirectUri =
+          process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI ||
+          (typeof window !== "undefined" ? window.location.origin : "https://rchqwk.com");
         setStage("logging_in");
         const res = await fetch("/api/discord/login", {
           method: "POST",

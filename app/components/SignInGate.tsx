@@ -39,34 +39,26 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   }, [blocked, discordMode]);
 
   useEffect(() => {
-    if (discordMode) return;
+    const redirectUri = process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI;
+    if (!redirectUri || user) return;
+
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const hostname = typeof window !== "undefined" ? window.location.hostname : "";
     const returnTo = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/";
 
-    // Web version on rchqwk.com uses a root redirect URI and broader scopes.
-    if (hostname === "rchqwk.com") {
-      try {
-        sessionStorage.setItem("lgc.discord.webReturnTo", returnTo);
-      } catch {
-        // ignore
-      }
-      const url = new URL("https://discord.com/oauth2/authorize");
-      url.searchParams.set("client_id", "1512024820194349157");
-      url.searchParams.set("response_type", "code");
-      url.searchParams.set("redirect_uri", origin || "https://rchqwk.com");
-      url.searchParams.set(
-        "scope",
-        "activities.write activities.invites.write activities.read identify",
-      );
-      setDiscordUrl(url.toString());
-      return;
+    try {
+      sessionStorage.setItem("lgc.discord.webReturnTo", returnTo);
+    } catch {
+      // ignore
     }
 
     const clientId =
-      process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ?? "";
+      hostname === "rchqwk.com"
+        ? "1512024820194349157"
+        : (process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ?? "");
+
     if (!clientId) return;
-    const redirectUri = origin ? `${origin}/discord/callback` : "https://rchqwk.com/discord/callback";
+
     const url = new URL("https://discord.com/oauth2/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("response_type", "code");
@@ -74,7 +66,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
     url.searchParams.set("scope", "identify");
     url.searchParams.set("state", returnTo);
     setDiscordUrl(url.toString());
-  }, [discordMode]);
+  }, [discordMode, user]);
 
   return (
     <div className="relative">
