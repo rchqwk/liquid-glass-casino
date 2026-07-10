@@ -197,6 +197,91 @@ export function CardView({ idx, hidden, dealing, winning }: { idx: number; hidde
   );
 }
 
+const MAGNITUDES = [
+  { suffix: "", name: "", threshold: 1e3 },
+  { suffix: "K", name: "Thousand", threshold: 1e6 },
+  { suffix: "M", name: "Million", threshold: 1e9 },
+  { suffix: "B", name: "Billion", threshold: 1e12 },
+  { suffix: "T", name: "Trillion", threshold: 1e15 },
+  { suffix: "Qa", name: "Quadrillion", threshold: 1e18 },
+  { suffix: "Qi", name: "Quintillion", threshold: 1e21 },
+  { suffix: "Sx", name: "Sextillion", threshold: 1e24 },
+  { suffix: "Sp", name: "Septillion", threshold: 1e27 },
+  { suffix: "Oc", name: "Octillion", threshold: 1e30 },
+  { suffix: "No", name: "Nonillion", threshold: 1e33 },
+  { suffix: "Dc", name: "Decillion", threshold: 1e36 },
+  { suffix: "UDc", name: "Undecillion", threshold: 1e39 },
+  { suffix: "DDc", name: "Duodecillion", threshold: 1e42 },
+  { suffix: "TDc", name: "Tredecillion", threshold: 1e45 },
+  { suffix: "QaDc", name: "Quattuordecillion", threshold: 1e48 },
+  { suffix: "QiDc", name: "Quindecillion", threshold: 1e51 },
+  { suffix: "SxDc", name: "Sexdecillion", threshold: 1e54 },
+  { suffix: "SpDc", name: "Septendecillion", threshold: 1e57 },
+  { suffix: "OcDc", name: "Octodecillion", threshold: 1e60 },
+  { suffix: "NoDc", name: "Novemdecillion", threshold: 1e63 },
+  { suffix: "Vg", name: "Vigintillion", threshold: Infinity },
+];
+
+function abbreviateValue(value: number): { display: string; suffix: string; magnitude: string; percentage: number; exact: string } {
+  if (value < 1000) {
+    return {
+      display: value.toFixed(value % 1 === 0 ? 0 : 2),
+      suffix: "",
+      magnitude: "",
+      percentage: Math.min(100, value),
+      exact: value.toLocaleString(),
+    };
+  }
+  
+  let mag = MAGNITUDES[0]!;
+  for (const m of MAGNITUDES) {
+    if (value < m.threshold) break;
+    mag = m;
+  }
+  
+  const divisor = mag.threshold / 1000;
+  const normalized = value / divisor;
+  const displayValue = normalized.toFixed(2);
+  const prefixNum = parseFloat(displayValue);
+  const percentage = Math.min(100, (prefixNum / 100) * 100);
+  
+  return {
+    display: displayValue,
+    suffix: mag.suffix,
+    magnitude: mag.name,
+    percentage,
+    exact: value.toLocaleString(),
+  };
+}
+
+function getMagnitudeClass(suffix: string): string {
+  const map: Record<string, string> = {
+    "": "nn-chip-1",
+    K: "nn-chip-k",
+    M: "nn-chip-m",
+    B: "nn-chip-b",
+    T: "nn-chip-t",
+    Qa: "nn-chip-qa",
+    Qi: "nn-chip-qi",
+    Sx: "nn-chip-sx",
+    Sp: "nn-chip-sp",
+    Oc: "nn-chip-oc",
+    No: "nn-chip-no",
+    Dc: "nn-chip-dc",
+    UDc: "nn-chip-udc",
+    DDc: "nn-chip-ddc",
+    TDc: "nn-chip-tdc",
+    QaDc: "nn-chip-qadc",
+    QiDc: "nn-chip-qidc",
+    SxDc: "nn-chip-sxdc",
+    SpDc: "nn-chip-spdc",
+    OcDc: "nn-chip-ocdc",
+    NoDc: "nn-chip-nodc",
+    Vg: "nn-chip-vg",
+  };
+  return map[suffix] ?? "nn-chip-1";
+}
+
 export function ChipView({ amount, size = "md" }: { amount: number; size?: "sm" | "md" | "lg" }) {
   const getDenomination = (amt: number): string => {
     if (amt >= 500) return "500";
@@ -227,6 +312,90 @@ export function ChipView({ amount, size = "md" }: { amount: number; size?: "sm" 
       title={`${amount} chips`}
     >
       {denom}
+    </div>
+  );
+}
+
+export function StackedChipView({ 
+  value, 
+  showExact = false, 
+  size = "md",
+  className = ""
+}: { 
+  value: number; 
+  showExact?: boolean; 
+  size?: "sm" | "md" | "lg";
+  className?: string;
+}) {
+  const { display, suffix, magnitude, percentage, exact } = abbreviateValue(value);
+  const magnitudeClass = getMagnitudeClass(suffix);
+  const sizeMultiplier = size === "sm" ? 0.75 : size === "lg" ? 1.25 : 1;
+  const chipSize = Math.round(52 * sizeMultiplier);
+  const stackHeight = Math.round(percentage * 0.6);
+  
+  const parts = display.split(".");
+  const whole = parts[0]!;
+  const decimal = parts[1] ?? "00";
+  
+  return (
+    <div 
+      className={`nn-chip-container ${className}`}
+      title={`${exact} chips${magnitude ? ` (${magnitude})` : ""}`}
+    >
+      <div 
+        className="nn-chip-stack"
+        style={{ 
+          width: chipSize,
+          minHeight: chipSize + stackHeight,
+        }}
+      >
+        <div 
+          className="nn-chip-stack-base"
+          style={{
+            width: chipSize,
+            height: chipSize,
+          }}
+        />
+        
+        <div
+          className="nn-chip-stack-fill"
+          style={{
+            height: `${percentage}%`,
+            maxHeight: chipSize - 8,
+          }}
+        />
+        
+        <div 
+          className={`nn-chip-stack-chip ${magnitudeClass}`}
+          style={{
+            width: chipSize,
+            height: chipSize,
+            marginTop: -stackHeight,
+          }}
+        >
+          <div 
+            className="nn-chip-stack-value"
+            style={{ fontSize: Math.round(15 * sizeMultiplier) }}
+          >
+            {whole}
+            {suffix && <span className="nn-chip-stack-magnitude">{suffix}</span>}
+          </div>
+          {Number(decimal) > 0 && (
+            <div 
+              className="nn-chip-stack-decimal"
+              style={{ fontSize: Math.round(9 * sizeMultiplier) }}
+            >
+              .{decimal}
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {showExact && (
+        <div className="nn-chip-exact" style={{ fontSize: Math.round(10 * sizeMultiplier) }}>
+          {exact}
+        </div>
+      )}
     </div>
   );
 }

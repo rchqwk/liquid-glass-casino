@@ -545,6 +545,119 @@
   font-size: 14px;
 }
 
+/* Magnitude-based chip colors */
+.nn-chip-k { background: linear-gradient(135deg, #4ade80, #22c55e); color: #ffffff; }
+.nn-chip-m { background: linear-gradient(135deg, #60a5fa, #3b82f6); color: #ffffff; }
+.nn-chip-b { background: linear-gradient(135deg, #f472b6, #ec4899); color: #ffffff; }
+.nn-chip-t { background: linear-gradient(135deg, #a78bfa, #8b5cf6); color: #ffffff; }
+.nn-chip-qa { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #1a1a1a; }
+.nn-chip-qi { background: linear-gradient(135deg, var(--neon-cyan), #0891b2); color: #ffffff; }
+.nn-chip-sx { background: linear-gradient(135deg, var(--neon-magenta), #be185d); color: #ffffff; }
+.nn-chip-sp { background: linear-gradient(135deg, #f87171, #ef4444); color: #ffffff; }
+.nn-chip-oc { background: linear-gradient(135deg, #34d399, #10b981); color: #ffffff; }
+.nn-chip-no { background: linear-gradient(135deg, #c084fc, #a855f7); color: #ffffff; }
+.nn-chip-dc { background: linear-gradient(135deg, var(--neon-gold), #d97706); color: #1a1a1a; }
+.nn-chip-udc { background: linear-gradient(135deg, #fb7185, #f43f5e); color: #ffffff; }
+.nn-chip-ddc { background: linear-gradient(135deg, #38bdf8, #0ea5e9); color: #ffffff; }
+.nn-chip-tdc { background: linear-gradient(135deg, #4ade80, #22c55e); color: #ffffff; }
+.nn-chip-qadc { background: linear-gradient(135deg, #c084fc, #a855f7); color: #ffffff; }
+.nn-chip-qidc { background: linear-gradient(135deg, #f472b6, #ec4899); color: #ffffff; }
+.nn-chip-sxdc { background: linear-gradient(135deg, var(--neon-cyan), #06b6d4); color: #ffffff; }
+.nn-chip-spdc { background: linear-gradient(135deg, var(--neon-magenta), #db2777); color: #ffffff; }
+.nn-chip-ocdc { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #1a1a1a; }
+.nn-chip-nodc { background: linear-gradient(135deg, #60a5fa, #3b82f6); color: #ffffff; }
+.nn-chip-vg { background: linear-gradient(135deg, var(--neon-gold), #b45309); color: #1a1a1a; }
+
+.nn-chip-stack-decimal {
+  font-size: 9px;
+  opacity: 0.75;
+}
+
+/* Stacked chip container */
+.nn-chip-stack {
+  position: relative;
+  width: 52px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+}
+
+.nn-chip-stack-base {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255,255,255,0.2);
+  opacity: 0.3;
+}
+
+.nn-chip-stack-chip {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: var(--weight-bold);
+  position: relative;
+  box-shadow: 
+    0 4px 12px rgba(0,0,0,0.5),
+    inset 0 2px 4px rgba(255,255,255,0.15),
+    inset 0 -2px 4px rgba(0,0,0,0.15);
+  transition: transform var(--transition-fast);
+}
+
+.nn-chip-stack-chip::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  border: 2px dashed currentColor;
+  opacity: 0.35;
+}
+
+.nn-chip-stack-value {
+  font-size: 15px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.nn-chip-stack-magnitude {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.nn-chip-stack-fill {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, transparent 100%);
+  border-radius: 4px 4px 50% 50%;
+  transition: height var(--transition-slow);
+  pointer-events: none;
+}
+
+.nn-chip-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.nn-chip-exact {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
 .nn-chip-stack {
   display: flex;
   flex-direction: column-reverse;

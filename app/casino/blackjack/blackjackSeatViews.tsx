@@ -1,7 +1,7 @@
 "use client";
 
 import type { Seat } from "./blackjackTableTypes";
-import { CardView, ChipView, handValue } from "./blackjackUiPrimitives";
+import { CardView, StackedChipView, handValue } from "./blackjackUiPrimitives";
 
 export function getBlackjackNameClass(nameColor?: string | null, fallback = "text-white/85") {
   const effective = String(nameColor ?? "").trim().toLowerCase();
@@ -114,9 +114,8 @@ export function BlackjackTableSeat({
               </span>
             ) : null}
             {seat.bet ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-white/70">
-                <ChipView amount={Number(seat.bet)} size="sm" />
-                <span className="font-mono text-white/85">{Number(seat.bet).toFixed(0)}</span>
+              <span className="inline-flex items-center gap-1.5">
+                <StackedChipView value={Number(seat.bet)} size="sm" />
               </span>
             ) : null}
             <span className={`nn-badge ${hv.total > 21 ? "nn-badge-red" : hv.total === 21 ? "nn-badge-gold" : "nn-badge-cyan"}`}>
@@ -166,9 +165,8 @@ export function BlackjackTableSeat({
               </span>
             ) : null}
           </div>
-          <div className="inline-flex items-center gap-1.5 text-xs text-white/60">
-            <ChipView amount={Math.max(1, Math.round(seat.bet))} size="sm" />
-            <span className="font-mono text-white/80">{seat.bet.toFixed(0)}</span>
+          <div className="flex items-center gap-2">
+            <StackedChipView value={Math.max(1, Math.round(seat.bet))} size="sm" showExact />
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
