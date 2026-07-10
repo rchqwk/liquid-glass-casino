@@ -15,7 +15,7 @@ export default function DiscordBlackjackEntryPage() {
 
   const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ?? "";
   const redirectUri =
-    process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI ?? "https://rchqwk-liquid-glass-casino.vercel.app/casino/blackjack/discord";
+    process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI ?? "https://rchqwk.com/casino/blackjack-v2/discord";
 
   const qs = useMemo(() => {
     if (typeof window === "undefined") return null;
