@@ -11,6 +11,7 @@ export default function DiscordBlackjackEntryPage() {
   const [err, setErr] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [mobileAuth, setMobileAuth] = useState<null | { token: string; code: string; channelId?: string | null; expiresAt: number }>(null);
+  const [isReady, setIsReady] = useState(false);
 
   const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ?? "";
   const redirectUri =
@@ -20,6 +21,13 @@ export default function DiscordBlackjackEntryPage() {
     if (typeof window === "undefined") return null;
     return new URL(window.location.href).searchParams;
   }, []);
+
+  useEffect(() => {
+    console.log("[Discord Entry] Component mounted");
+    console.log("[Discord Entry] Client ID present:", !!clientId);
+    console.log("[Discord Entry] Redirect URI:", redirectUri);
+    setIsReady(true);
+  }, [clientId, redirectUri]);
 
   const hasFrameId = useMemo(() => !!qs?.get("frame_id"), [qs]);
   const channelIdFromQuery = useMemo(() => qs?.get("channel_id") ?? null, [qs]);
@@ -125,15 +133,21 @@ export default function DiscordBlackjackEntryPage() {
   }, [isMobile, mobileAuth, oauthCodeFromQuery, router]);
 
   useEffect(() => {
+    if (!isReady) return;
     let cancelled = false;
     (async () => {
       try {
+        console.log("[Discord Entry] Starting auth flow");
         setErr(null);
-        if (!clientId) throw new Error("Missing NEXT_PUBLIC_DISCORD_CLIENT_ID");
+        if (!clientId) {
+          console.error("[Discord Entry] Missing client ID");
+          throw new Error("Missing NEXT_PUBLIC_DISCORD_CLIENT_ID");
+        }
 
-        // PATH 1: If we already have an OAuth code in the URL, complete login immediately.
-        // This covers both desktop OAuth callbacks and mobile pairing-code browser completions.
+        console.log("[Discord Entry] hasFrameId:", hasFrameId, "oauthCodeFromQuery:", !!oauthCodeFromQuery, "channelId:", channelId);
+
         if (oauthCodeFromQuery) {
+          console.log("[Discord Entry] PATH 1: Processing OAuth callback");
           setStage("logging_in");
           const loginRes = await fetch("/api/discord/login", {
             method: "POST",
@@ -176,25 +190,40 @@ export default function DiscordBlackjackEntryPage() {
           return;
         }
 
-        // PATH 2: Try the Embedded App SDK path on ALL platforms (desktop + mobile).
-        // Discord Activities support the Embedded App SDK on iOS and Android per official docs.
-        // Only skip the SDK attempt if frame_id is completely missing (not an Activity context).
         if (hasFrameId) {
+          console.log("[Discord Entry] PATH 2: Attempting Embedded App SDK");
           try {
-            // Dynamic import so local dev / non-discord environments don't crash bundling.
-            const { DiscordSDK } = await import("@discord/embedded-app-sdk");
-            // eslint-disable-next-line new-cap
+            let DiscordSDK: any;
+            try {
+              console.log("[Discord Entry] Importing @discord/embedded-app-sdk");
+              const sdkModule = await import("@discord/embedded-app-sdk");
+              DiscordSDK = sdkModule.DiscordSDK;
+              console.log("[Discord Entry] SDK imported successfully");
+            } catch (importErr: any) {
+              console.error("[Discord Entry] SDK import failed:", importErr);
+              throw new Error(`Failed to load Discord SDK: ${importErr?.message ?? "Unknown error"}`);
+            }
+            if (!DiscordSDK) {
+              throw new Error("DiscordSDK not found in module");
+            }
+            console.log("[Discord Entry] Creating DiscordSDK instance");
             const discordSdk = new DiscordSDK(clientId);
+            console.log("[Discord Entry] Waiting for SDK ready");
             await Promise.race([
               discordSdk.ready(),
-              // Shorter timeout on mobile (10s vs 20s) since mobile Activities can be slower to handshake.
               new Promise((_, reject) => window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), isMobile ? 10000 : 20000)),
             ]);
+            console.log("[Discord Entry] SDK ready");
 
             const sdkChannelId = (discordSdk as any).channelId as string | undefined;
             const effectiveChannelId = sdkChannelId ?? channelId;
-            if (!effectiveChannelId) throw new Error("Missing channel id (must be launched from a voice call Activity).");
+            console.log("[Discord Entry] SDK channelId:", sdkChannelId, "effectiveChannelId:", effectiveChannelId);
+            if (!effectiveChannelId) {
+              console.error("[Discord Entry] Missing channel ID");
+              throw new Error("Missing channel id (must be launched from a voice call Activity).");
+            }
 
+            console.log("[Discord Entry] Calling authorize");
             setStage("authorizing");
             const authz = await (discordSdk as any).commands.authorize({
               client_id: clientId,
@@ -202,9 +231,15 @@ export default function DiscordBlackjackEntryPage() {
               prompt: "none",
               scope: ["identify", "rpc.activities.write"],
             });
+            console.log("[Discord Entry] Authorize returned");
             const sdkCode = String(authz?.code ?? "");
-            if (!sdkCode) throw new Error("Discord authorize did not return a code.");
+            if (!sdkCode) {
+              console.error("[Discord Entry] No code from authorize");
+              throw new Error("Discord authorize did not return a code.");
+            }
+            console.log("[Discord Entry] Got auth code");
 
+            console.log("[Discord Entry] Calling login API");
             setStage("logging_in");
             const loginRes = await fetch("/api/discord/login", {
               method: "POST",
@@ -212,7 +247,11 @@ export default function DiscordBlackjackEntryPage() {
               body: JSON.stringify({ code: sdkCode, redirectUri }),
             });
             const loginJson = (await loginRes.json().catch(() => ({}))) as any;
-            if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
+            console.log("[Discord Entry] Login API response:", loginRes.status, loginJson);
+            if (!loginRes.ok) {
+              console.error("[Discord Entry] Login failed:", loginJson?.error);
+              throw new Error(loginJson?.error ?? "Discord login failed.");
+            }
             if (loginJson?.session_token) {
               try {
                 localStorage.setItem("lgc.session", String(loginJson.session_token));
@@ -223,19 +262,28 @@ export default function DiscordBlackjackEntryPage() {
 
             const accessToken = String(loginJson?.access_token ?? "");
             if (accessToken) {
+              console.log("[Discord Entry] Authenticating with access token");
               await (discordSdk as any).commands.authenticate({ access_token: accessToken });
+              console.log("[Discord Entry] Authenticated");
             }
 
+            console.log("[Discord Entry] Ensuring table for channel:", effectiveChannelId);
             setStage("ensuring_table");
             const ensureRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(effectiveChannelId)}/ensure`, { method: "POST" });
             const ensureJson = (await ensureRes.json().catch(() => ({}))) as any;
-            if (!ensureRes.ok) throw new Error(ensureJson?.error ?? "Failed to create/join table.");
+            console.log("[Discord Entry] Ensure table response:", ensureRes.status, ensureJson);
+            if (!ensureRes.ok) {
+              console.error("[Discord Entry] Table ensure failed:", ensureJson?.error);
+              throw new Error(ensureJson?.error ?? "Failed to create/join table.");
+            }
 
+            console.log("[Discord Entry] Joining table");
             await fetch(`/api/blackjack/tables/${encodeURIComponent(effectiveChannelId)}/join`, {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({ spectate: false }),
             });
+            console.log("[Discord Entry] Joined table");
 
             if (cancelled) return;
             setStage("redirecting");
@@ -243,21 +291,22 @@ export default function DiscordBlackjackEntryPage() {
             return;
           } catch (sdkErr: any) {
             const msg = String(sdkErr?.message ?? "");
+            console.error("[Discord Entry] SDK error:", msg, sdkErr);
             if (cancelled) return;
-            // If the SDK handshake fails on mobile, fall through to the OAuth / pairing-code fallback.
-            if (!msg.includes("handshake timed out") && !msg.includes("frame_id")) throw sdkErr;
-            // Otherwise, on handshake timeout, fall through to PATH 3.
+            if (!msg.includes("handshake timed out") && !msg.includes("frame_id")) {
+              console.error("[Discord Entry] Non-timeout SDK error, rethrowing");
+              throw sdkErr;
+            }
+            console.log("[Discord Entry] SDK timeout, falling through to fallback");
           }
         }
 
-        // PATH 3: No frame_id OR SDK handshake failed → use OAuth redirect (desktop) or pairing code (mobile).
+        console.log("[Discord Entry] PATH 3: Fallback path - isMobile:", isMobile);
         if (isMobile) {
-          // On mobile, the pairing code flow is the safest fallback because
-          // browser-based OAuth redirects often lose the Activity context on mobile.
-          // The pairing-code creation effect (above) will show instructions to the user.
+          console.log("[Discord Entry] Mobile - setting awaiting_oauth for pairing code");
           setStage("awaiting_oauth");
         } else {
-          // On desktop, OAuth redirect works reliably as a fallback.
+          console.log("[Discord Entry] Desktop - awaiting_oauth with auto redirect");
           setStage("awaiting_oauth");
           if (oauthAuthorizeUrl) {
             try {
@@ -277,6 +326,7 @@ export default function DiscordBlackjackEntryPage() {
         }
       } catch (e: any) {
         if (cancelled) return;
+        console.error("[Discord Entry] Fatal error in auth flow:", e);
         setStage("error");
         setErr(String(e?.message ?? "Failed to start Discord blackjack."));
       }
@@ -284,8 +334,7 @@ export default function DiscordBlackjackEntryPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isReady]);
 
   const progress = useMemo(() => {
     if (stage === "init") return 8;
@@ -405,186 +454,188 @@ export default function DiscordBlackjackEntryPage() {
 
       <div style={{ margin: "0 auto", maxWidth: 900, minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div className="lgc-card">
-          <div style={{ fontSize: 16, fontWeight: 700 }}>Launching Discord Blackjack…</div>
-          <div className="lgc-subtle" style={{ marginTop: 8, fontSize: 14 }}>
-            {stageLabel}
-          </div>
-
-          <div style={{ marginTop: 16 }}>
-            <div className="lgc-progress-track">
-              <div className="lgc-progress-bar" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
-            </div>
-            <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12 }}>
-              <div className="lgc-spinner" />
-              <div className="lgc-subtle" style={{ fontSize: 14 }}>
-                Loading… <span className="lgc-mono" style={{ color: "rgba(255,255,255,.60)" }}>{elapsed}s</span>
+          {!isReady ? (
+            <div style={{ fontSize: 16, fontWeight: 700 }}>Initializing…</div>
+          ) : (
+            <>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Launching Discord Blackjack…</div>
+              <div className="lgc-subtle" style={{ marginTop: 8, fontSize: 14 }}>
+                {stageLabel}
               </div>
-            </div>
-            <div className="lgc-tiny" style={{ marginTop: 8 }}>
-              {progress}% • <span className="lgc-mono">{stage}</span>
-            </div>
-          </div>
 
-          {err ? (
-            <div
-              style={{
-                marginTop: 16,
-                borderRadius: 16,
-                border: "1px solid rgba(251,113,133,.25)",
-                background: "rgba(244,63,94,.12)",
-                padding: "10px 12px",
-                color: "rgba(255,228,230,.95)",
-                fontSize: 14,
-              }}
-            >
-              {err}
-            </div>
-          ) : null}
-
-          {stage === "linked" ? (
-            <div
-              style={{
-                marginTop: 16,
-                borderRadius: 16,
-                border: "1px solid rgba(52,211,153,.25)",
-                background: "rgba(16,185,129,.12)",
-                padding: "10px 12px",
-                color: "rgba(220,252,231,.96)",
-                fontSize: 14,
-              }}
-            >
-              Discord sign-in completed. Return to the Discord Activity and it should continue automatically.
-            </div>
-          ) : null}
-
-          {err && String(err).toLowerCase().includes("handshake timed out") ? (
-            <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 10 }}>
-              <button
-                type="button"
-                style={{
-                  borderRadius: 16,
-                  border: "1px solid rgba(255,255,255,.14)",
-                  background: "rgba(255,255,255,.08)",
-                  padding: "10px 12px",
-                  color: "rgba(255,255,255,.90)",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  // Some iOS contexts get stuck during the Embedded SDK handshake.
-                  // Allow a temporary fallback to the normal web sign-in flow (username).
-                  try {
-                    sessionStorage.removeItem("lgc.discord.embedded");
-                    sessionStorage.removeItem("lgc.discord.qs");
-                    sessionStorage.removeItem("lgc.discord.fallback.tried");
-                    sessionStorage.removeItem("lgc.discord.oauthAutoRedirected");
-                  } catch {
-                    // ignore
-                  }
-                  try {
-                    window.location.href = "/casino/blackjack";
-                  } catch {
-                    // ignore
-                  }
-                }}
-              >
-                Play with username (temporary)
-              </button>
-              <div className="lgc-tiny" style={{ alignSelf: "center" }}>
-                This skips Discord auth so you can still play on iOS.
+              <div style={{ marginTop: 16 }}>
+                <div className="lgc-progress-track">
+                  <div className="lgc-progress-bar" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
+                </div>
+                <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12 }}>
+                  <div className="lgc-spinner" />
+                  <div className="lgc-subtle" style={{ fontSize: 14 }}>
+                    Loading… <span className="lgc-mono" style={{ color: "rgba(255,255,255,.60)" }}>{elapsed}s</span>
+                  </div>
+                </div>
+                <div className="lgc-tiny" style={{ marginTop: 8 }}>
+                  {progress}% • <span className="lgc-mono">{stage}</span>
+                </div>
               </div>
-            </div>
-          ) : null}
 
-          {isMobile && stage === "awaiting_oauth" && mobileAuth ? (
-            <div
-              style={{
-                marginTop: 16,
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,.12)",
-                background: "rgba(255,255,255,.06)",
-                padding: "14px 16px",
-                color: "rgba(255,255,255,.82)",
-                fontSize: 14,
-              }}
-            >
-              <div style={{ fontWeight: 700, color: "rgba(255,255,255,.96)" }}>Mobile pairing code</div>
-              <div className="lgc-mono" style={{ marginTop: 10, fontSize: 28, letterSpacing: "0.32em" }}>{mobileAuth.code}</div>
-              <div style={{ marginTop: 10, lineHeight: 1.6 }}>
-                Open <span className="lgc-mono">{mobileLinkUrl}</span> in your phone browser, enter this code, and finish Discord sign-in there.
-                This Activity will continue automatically as soon as the browser step completes.
+              {err ? (
+                <div
+                  style={{
+                    marginTop: 16,
+                    borderRadius: 16,
+                    border: "1px solid rgba(251,113,133,.25)",
+                    background: "rgba(244,63,94,.12)",
+                    padding: "10px 12px",
+                    color: "rgba(255,228,230,.95)",
+                    fontSize: 14,
+                  }}
+                >
+                  {err}
+                </div>
+              ) : null}
+
+              {stage === "linked" ? (
+                <div
+                  style={{
+                    marginTop: 16,
+                    borderRadius: 16,
+                    border: "1px solid rgba(52,211,153,.25)",
+                    background: "rgba(16,185,129,.12)",
+                    padding: "10px 12px",
+                    color: "rgba(220,252,231,.96)",
+                    fontSize: 14,
+                  }}
+                >
+                  Discord sign-in completed. Return to the Discord Activity and it should continue automatically.
+                </div>
+              ) : null}
+
+              {err && String(err).toLowerCase().includes("handshake timed out") ? (
+                <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 10 }}>
+                  <button
+                    type="button"
+                    style={{
+                      borderRadius: 16,
+                      border: "1px solid rgba(255,255,255,.14)",
+                      background: "rgba(255,255,255,.08)",
+                      padding: "10px 12px",
+                      color: "rgba(255,255,255,.90)",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                    onClick={() => {
+                      try {
+                        sessionStorage.removeItem("lgc.discord.embedded");
+                        sessionStorage.removeItem("lgc.discord.qs");
+                        sessionStorage.removeItem("lgc.discord.fallback.tried");
+                        sessionStorage.removeItem("lgc.discord.oauthAutoRedirected");
+                      } catch {
+                        // ignore
+                      }
+                      try {
+                        window.location.href = "/casino/blackjack";
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                  >
+                    Play with username (temporary)
+                  </button>
+                  <div className="lgc-tiny" style={{ alignSelf: "center" }}>
+                    This skips Discord auth so you can still play on iOS.
+                  </div>
+                </div>
+              ) : null}
+
+              {isMobile && stage === "awaiting_oauth" && mobileAuth ? (
+                <div
+                  style={{
+                    marginTop: 16,
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,.12)",
+                    background: "rgba(255,255,255,.06)",
+                    padding: "14px 16px",
+                    color: "rgba(255,255,255,.82)",
+                    fontSize: 14,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: "rgba(255,255,255,.96)" }}>Mobile pairing code</div>
+                  <div className="lgc-mono" style={{ marginTop: 10, fontSize: 28, letterSpacing: "0.32em" }}>{mobileAuth.code}</div>
+                  <div style={{ marginTop: 10, lineHeight: 1.6 }}>
+                    Open <span className="lgc-mono">{mobileLinkUrl}</span> in your phone browser, enter this code, and finish Discord sign-in there.
+                    This Activity will continue automatically as soon as the browser step completes.
+                  </div>
+                  <div className="lgc-tiny" style={{ marginTop: 10 }}>
+                    Code expires in {Math.max(0, Math.ceil((mobileAuth.expiresAt - Date.now()) / 60000))} min.
+                  </div>
+                  <button
+                    type="button"
+                    className="lgc-link"
+                    style={{ marginTop: 12, background: "transparent", border: 0, padding: 0, cursor: "pointer" }}
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem("lgc.discord.disableOauthSession", "1");
+                      } catch {
+                        // ignore
+                      }
+                      window.location.href = "/casino/blackjack-v2";
+                    }}
+                  >
+                    Play with temporary username instead
+                  </button>
+                </div>
+              ) : null}
+
+              {!isMobile && (stage === "init" || stage === "awaiting_oauth") && (elapsed >= 2 || stage === "awaiting_oauth") && oauthAuthorizeUrl ? (
+                <div
+                  style={{
+                    marginTop: 16,
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,.12)",
+                    background: "rgba(255,255,255,.06)",
+                    padding: "10px 12px",
+                    color: "rgba(255,255,255,.78)",
+                    fontSize: 14,
+                  }}
+                >
+                  <>
+                    If this stays stuck, click{" "}
+                    <a className="lgc-link" href={oauthAuthorizeUrl}>
+                      Authorize with Discord
+                    </a>{" "}
+                    to continue.
+                  </>
+                </div>
+              ) : null}
+
+              {!hasFrameId && !oauthCodeFromQuery ? (
+                <div
+                  style={{
+                    marginTop: 16,
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,.12)",
+                    background: "rgba(255,255,255,.06)",
+                    padding: "10px 12px",
+                    color: "rgba(255,255,255,.78)",
+                    fontSize: 13,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: "rgba(255,255,255,.92)" }}>Not embedded yet (missing frame_id)</div>
+                  <div style={{ marginTop: 6 }}>
+                    This usually means Discord is opening this as a normal web page instead of an Activity iframe. Start it from a
+                    voice channel: <span className="lgc-mono">Rocket (Activities) → your app → Start</span>.
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="lgc-tiny" style={{ marginTop: 16 }}>
+                Tip: launch this as a Discord Activity from within a voice call. (For local testing you can pass{" "}
+                <span className="lgc-mono">?channel_id=...</span>.)
               </div>
-              <div className="lgc-tiny" style={{ marginTop: 10 }}>
-                Code expires in {Math.max(0, Math.ceil((mobileAuth.expiresAt - Date.now()) / 60000))} min.
-              </div>
-              <button
-                type="button"
-                className="lgc-link"
-                style={{ marginTop: 12, background: "transparent", border: 0, padding: 0, cursor: "pointer" }}
-                onClick={() => {
-                  try {
-                    sessionStorage.setItem("lgc.discord.disableOauthSession", "1");
-                  } catch {
-                    // ignore
-                  }
-                  window.location.href = "/casino/blackjack-v2";
-                }}
-              >
-                Play with temporary username instead
-              </button>
-            </div>
-          ) : null}
-
-          {!isMobile && (stage === "init" || stage === "awaiting_oauth") && (elapsed >= 2 || stage === "awaiting_oauth") && oauthAuthorizeUrl ? (
-            <div
-              style={{
-                marginTop: 16,
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,.12)",
-                background: "rgba(255,255,255,.06)",
-                padding: "10px 12px",
-                color: "rgba(255,255,255,.78)",
-                fontSize: 14,
-              }}
-            >
-              {
-                <>
-                  If this stays stuck, click{" "}
-                  <a className="lgc-link" href={oauthAuthorizeUrl}>
-                    Authorize with Discord
-                  </a>{" "}
-                  to continue.
-                </>
-              }
-            </div>
-          ) : null}
-
-          {!hasFrameId && !oauthCodeFromQuery ? (
-            <div
-              style={{
-                marginTop: 16,
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,.12)",
-                background: "rgba(255,255,255,.06)",
-                padding: "10px 12px",
-                color: "rgba(255,255,255,.78)",
-                fontSize: 13,
-                lineHeight: 1.45,
-              }}
-            >
-              <div style={{ fontWeight: 700, color: "rgba(255,255,255,.92)" }}>Not embedded yet (missing frame_id)</div>
-              <div style={{ marginTop: 6 }}>
-                This usually means Discord is opening this as a normal web page instead of an Activity iframe. Start it from a
-                voice channel: <span className="lgc-mono">Rocket (Activities) → your app → Start</span>.
-              </div>
-            </div>
-          ) : null}
-
-          <div className="lgc-tiny" style={{ marginTop: 16 }}>
-            Tip: launch this as a Discord Activity from within a voice call. (For local testing you can pass{" "}
-            <span className="lgc-mono">?channel_id=...</span>.)
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>
