@@ -420,223 +420,71 @@ export default function DiscordBlackjackEntryPage() {
 
   return (
     <div
+      className="flex flex-col items-center justify-center"
       style={{
         minHeight: "100dvh",
         width: "100%",
-        background: "radial-gradient(1200px 600px at 50% -10%, rgba(168,85,247,.22), transparent 60%), linear-gradient(#05070f, #070a14)",
+        backgroundColor: "var(--void)",
+        backgroundImage: "radial-gradient(1200px 600px at 50% -10%, rgba(0,245,255,0.04) 0%, transparent 60%)",
         padding: "40px 16px",
         color: "white",
-        fontFamily:
-          'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"',
+        fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
       }}
     >
       <style>{`
-        @keyframes lgc-spin { to { transform: rotate(360deg); } }
-        .lgc-card {
-          width: 100%;
-          max-width: 620px;
-          border-radius: 24px;
-          border: 1px solid rgba(255,255,255,.12);
-          background: rgba(255,255,255,.06);
-          box-shadow: 0 22px 60px rgba(0,0,0,.45);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          padding: 20px;
-        }
-        .lgc-subtle { color: rgba(255,255,255,.70); }
-        .lgc-tiny { color: rgba(255,255,255,.55); font-size: 12px; }
-        .lgc-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-        .lgc-progress-track { height: 8px; width: 100%; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); overflow: hidden; }
-        .lgc-progress-bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #34d399, #d946ef); transition: width 500ms ease; }
-        .lgc-spinner { width: 32px; height: 32px; border-radius: 999px; border: 2px solid rgba(255,255,255,.22); border-top-color: #6ee7b7; animation: lgc-spin 900ms linear infinite; }
-        .lgc-link { color: rgba(255,255,255,.92); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: rgba(255,255,255,.28); }
+        @keyframes nn-spin { to { transform: rotate(360deg); } }
+        .nn-spinner { width: 32px; height: 32px; border-radius: 999px; border: 2px solid rgba(255,255,255,.22); border-top-color: var(--neon-cyan); animation: nn-spin 900ms linear infinite; }
       `}</style>
 
-      <div style={{ margin: "0 auto", maxWidth: 900, minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div className="lgc-card">
-          {!isReady ? (
-            <div style={{ fontSize: 16, fontWeight: 700 }}>Initializing…</div>
-          ) : (
-            <>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>Launching Discord Blackjack…</div>
-              <div className="lgc-subtle" style={{ marginTop: 8, fontSize: 14 }}>
-                {stageLabel}
+      <div className="nn-card nn-fade-in p-6 text-center" style={{ maxWidth: 480 }}>
+        {!isReady ? (
+          <div>
+            <div className="nn-spinner mx-auto" />
+            <div className="mt-4 text-sm text-white/70">Initializing…</div>
+          </div>
+        ) : (
+          <>
+            <div className="text-lg font-bold text-white">Launching Discord Blackjack…</div>
+            <div className="mt-2 text-sm text-white/70">{stageLabel}</div>
+
+            <div className="mt-4">
+              <div className="nn-badge nn-badge-cyan text-xs">
+                {progress}% · <span className="font-mono">{stage}</span>
               </div>
+            </div>
 
-              <div style={{ marginTop: 16 }}>
-                <div className="lgc-progress-track">
-                  <div className="lgc-progress-bar" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
-                </div>
-                <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12 }}>
-                  <div className="lgc-spinner" />
-                  <div className="lgc-subtle" style={{ fontSize: 14 }}>
-                    Loading… <span className="lgc-mono" style={{ color: "rgba(255,255,255,.60)" }}>{elapsed}s</span>
-                  </div>
-                </div>
-                <div className="lgc-tiny" style={{ marginTop: 8 }}>
-                  {progress}% • <span className="lgc-mono">{stage}</span>
+            {err ? (
+              <div className="mt-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {err}
+              </div>
+            ) : null}
+
+            {stage === "linked" ? (
+              <div className="mt-4 rounded-xl border border-green-500/25 bg-green-500/10 px-4 py-3 text-sm text-green-200">
+                Discord sign-in completed. Return to the Discord Activity to continue.
+              </div>
+            ) : null}
+
+            {!hasFrameId && !oauthCodeFromQuery ? (
+              <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/70">
+                <div className="font-semibold text-white/90">Not launched from Discord</div>
+                <div className="mt-2">
+                  Launch this as a Discord Activity from a voice channel: <span className="font-mono text-neon-cyan">Rocket → your app → Start</span>
                 </div>
               </div>
+            ) : null}
 
-              {err ? (
-                <div
-                  style={{
-                    marginTop: 16,
-                    borderRadius: 16,
-                    border: "1px solid rgba(251,113,133,.25)",
-                    background: "rgba(244,63,94,.12)",
-                    padding: "10px 12px",
-                    color: "rgba(255,228,230,.95)",
-                    fontSize: 14,
-                  }}
-                >
-                  {err}
+            {isMobile && stage === "awaiting_oauth" && mobileAuth ? (
+              <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80">
+                <div className="font-semibold text-white">Mobile pairing code</div>
+                <div className="mt-3 font-mono text-2xl tracking-widest text-neon-cyan">{mobileAuth.code}</div>
+                <div className="mt-3 text-xs text-white/60">
+                  Open <span className="font-mono text-neon-magenta">{mobileLinkUrl}</span> in your browser, enter the code above, and complete Discord sign-in.
                 </div>
-              ) : null}
-
-              {stage === "linked" ? (
-                <div
-                  style={{
-                    marginTop: 16,
-                    borderRadius: 16,
-                    border: "1px solid rgba(52,211,153,.25)",
-                    background: "rgba(16,185,129,.12)",
-                    padding: "10px 12px",
-                    color: "rgba(220,252,231,.96)",
-                    fontSize: 14,
-                  }}
-                >
-                  Discord sign-in completed. Return to the Discord Activity and it should continue automatically.
-                </div>
-              ) : null}
-
-              {err && String(err).toLowerCase().includes("handshake timed out") ? (
-                <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 10 }}>
-                  <button
-                    type="button"
-                    style={{
-                      borderRadius: 16,
-                      border: "1px solid rgba(255,255,255,.14)",
-                      background: "rgba(255,255,255,.08)",
-                      padding: "10px 12px",
-                      color: "rgba(255,255,255,.90)",
-                      fontSize: 14,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                    onClick={() => {
-                      try {
-                        sessionStorage.removeItem("lgc.discord.embedded");
-                        sessionStorage.removeItem("lgc.discord.qs");
-                        sessionStorage.removeItem("lgc.discord.fallback.tried");
-                        sessionStorage.removeItem("lgc.discord.oauthAutoRedirected");
-                      } catch {
-                        // ignore
-                      }
-                      try {
-                        window.location.href = "/casino/blackjack";
-                      } catch {
-                        // ignore
-                      }
-                    }}
-                  >
-                    Play with username (temporary)
-                  </button>
-                  <div className="lgc-tiny" style={{ alignSelf: "center" }}>
-                    This skips Discord auth so you can still play on iOS.
-                  </div>
-                </div>
-              ) : null}
-
-              {isMobile && stage === "awaiting_oauth" && mobileAuth ? (
-                <div
-                  style={{
-                    marginTop: 16,
-                    borderRadius: 16,
-                    border: "1px solid rgba(255,255,255,.12)",
-                    background: "rgba(255,255,255,.06)",
-                    padding: "14px 16px",
-                    color: "rgba(255,255,255,.82)",
-                    fontSize: 14,
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: "rgba(255,255,255,.96)" }}>Mobile pairing code</div>
-                  <div className="lgc-mono" style={{ marginTop: 10, fontSize: 28, letterSpacing: "0.32em" }}>{mobileAuth.code}</div>
-                  <div style={{ marginTop: 10, lineHeight: 1.6 }}>
-                    Open <span className="lgc-mono">{mobileLinkUrl}</span> in your phone browser, enter this code, and finish Discord sign-in there.
-                    This Activity will continue automatically as soon as the browser step completes.
-                  </div>
-                  <div className="lgc-tiny" style={{ marginTop: 10 }}>
-                    Code expires in {Math.max(0, Math.ceil((mobileAuth.expiresAt - Date.now()) / 60000))} min.
-                  </div>
-                  <button
-                    type="button"
-                    className="lgc-link"
-                    style={{ marginTop: 12, background: "transparent", border: 0, padding: 0, cursor: "pointer" }}
-                    onClick={() => {
-                      try {
-                        sessionStorage.setItem("lgc.discord.disableOauthSession", "1");
-                      } catch {
-                        // ignore
-                      }
-                      window.location.href = "/casino/blackjack-v2";
-                    }}
-                  >
-                    Play with temporary username instead
-                  </button>
-                </div>
-              ) : null}
-
-              {!isMobile && (stage === "init" || stage === "awaiting_oauth") && (elapsed >= 2 || stage === "awaiting_oauth") && oauthAuthorizeUrl ? (
-                <div
-                  style={{
-                    marginTop: 16,
-                    borderRadius: 16,
-                    border: "1px solid rgba(255,255,255,.12)",
-                    background: "rgba(255,255,255,.06)",
-                    padding: "10px 12px",
-                    color: "rgba(255,255,255,.78)",
-                    fontSize: 14,
-                  }}
-                >
-                  <>
-                    If this stays stuck, click{" "}
-                    <a className="lgc-link" href={oauthAuthorizeUrl}>
-                      Authorize with Discord
-                    </a>{" "}
-                    to continue.
-                  </>
-                </div>
-              ) : null}
-
-              {!hasFrameId && !oauthCodeFromQuery ? (
-                <div
-                  style={{
-                    marginTop: 16,
-                    borderRadius: 16,
-                    border: "1px solid rgba(255,255,255,.12)",
-                    background: "rgba(255,255,255,.06)",
-                    padding: "10px 12px",
-                    color: "rgba(255,255,255,.78)",
-                    fontSize: 13,
-                    lineHeight: 1.45,
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: "rgba(255,255,255,.92)" }}>Not embedded yet (missing frame_id)</div>
-                  <div style={{ marginTop: 6 }}>
-                    This usually means Discord is opening this as a normal web page instead of an Activity iframe. Start it from a
-                    voice channel: <span className="lgc-mono">Rocket (Activities) → your app → Start</span>.
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="lgc-tiny" style={{ marginTop: 16 }}>
-                Tip: launch this as a Discord Activity from within a voice call. (For local testing you can pass{" "}
-                <span className="lgc-mono">?channel_id=...</span>.)
               </div>
-            </>
-          )}
-        </div>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );

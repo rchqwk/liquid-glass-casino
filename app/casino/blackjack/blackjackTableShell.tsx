@@ -173,10 +173,10 @@ export function BlackjackTurnActionBar({
 
   return (
     <div className="sticky top-3 z-[60]">
-      <div className="glass glass-shine rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4">
+      <div className="nn-card nn-fade-in-up p-4" style={{ borderColor: "rgba(0,255,136,0.3)", boxShadow: "0 0 30px var(--neon-green-glow)" }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm font-semibold text-white">
-            Your turn
+            <span className="nn-badge nn-badge-green mr-2">YOUR TURN</span>
             {myHandCount > 1 ? (
               <span className="ml-2 text-xs font-medium text-white/70">
                 (Hand {myHandIndex + 1}/{myHandCount})
@@ -184,24 +184,19 @@ export function BlackjackTurnActionBar({
             ) : null}
           </div>
           <div className="text-xs text-white/70">
-            Time: <span className="font-mono text-white/85">{turnLeft}s</span>
+            Time: <span className="font-mono text-neon-cyan">{turnLeft}s</span>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
-            onClick={onHit}
-            disabled={busted}
-          >
+          <button type="button" className="nn-btn nn-btn-primary nn-btn-md" onClick={onHit} disabled={busted}>
             Hit
           </button>
-          <button type="button" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10" onClick={onStand}>
+          <button type="button" className="nn-btn nn-btn-secondary nn-btn-md" onClick={onStand}>
             Stand
           </button>
           <button
             type="button"
-            className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+            className="nn-btn nn-btn-secondary nn-btn-md"
             onClick={onDoubleDown}
             disabled={!canDoubleDown}
             title="Double your bet, draw one card, and stand"
@@ -210,24 +205,19 @@ export function BlackjackTurnActionBar({
           </button>
           <button
             type="button"
-            className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/10 disabled:opacity-40"
+            className="nn-btn nn-btn-secondary nn-btn-md"
             onClick={onSplit}
             disabled={!canSplit}
             title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
           >
             Split
           </button>
-          <button
-            type="button"
-            className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10"
-            onClick={onVoteSkip}
-            title="Skip the remaining turn timer"
-          >
+          <button type="button" className="nn-btn nn-btn-ghost nn-btn-md" onClick={onVoteSkip} title="Skip the remaining turn timer">
             Vote skip
           </button>
           <button
             type="button"
-            className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/10 disabled:opacity-40"
+            className="nn-btn nn-btn-ghost nn-btn-md"
             onClick={onExtend}
             disabled={extendUsed}
             title="Extend your turn timer once"
@@ -272,24 +262,24 @@ export function BlackjackV2StatusStrip({
   if (!visible) return null;
 
   return (
-    <div className="glass glass-shine rounded-3xl border border-cyan-300/15 bg-cyan-400/5 p-4">
+    <div className="nn-card nn-fade-in p-4" style={{ borderColor: "rgba(0,245,255,0.15)" }}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
+          <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
             <div className="text-[10px] uppercase tracking-wide text-white/45">Round state</div>
-            <div className="mt-1 text-sm font-semibold text-white">{phase || "-"}</div>
+            <div className="mt-1 text-sm font-semibold text-neon-cyan">{phase || "-"}</div>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
+          <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
             <div className="text-[10px] uppercase tracking-wide text-white/45">{timerLabel || "Timer"}</div>
             <div className="mt-1 text-sm font-semibold text-white">
               {typeof timerSeconds === "number" ? `${timerSeconds}s` : "Live"}
             </div>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
+          <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
             <div className="text-[10px] uppercase tracking-wide text-white/45">Seats filled</div>
             <div className="mt-1 text-sm font-semibold text-white">{seatCount}/10</div>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
+          <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
             <div className="text-[10px] uppercase tracking-wide text-white/45">Watching live</div>
             <div className="mt-1 text-sm font-semibold text-white">{spectatorCount}</div>
           </div>
@@ -299,37 +289,25 @@ export function BlackjackV2StatusStrip({
           {isMyTurn ? (
             <button
               type="button"
-              className="glass-soft rounded-2xl border border-emerald-300/25 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/20"
+              className="nn-btn nn-btn-success nn-btn-sm"
               onClick={onOpenControls}
             >
               Open turn controls
             </button>
           ) : null}
-          <button
-            type="button"
-            className="glass-soft relative rounded-2xl px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
-            onClick={onOpenChat}
-          >
+          <button type="button" className="nn-btn nn-btn-secondary nn-btn-sm relative" onClick={onOpenChat}>
             Open chat
             {unreadChat > 0 ? (
-              <span className="ml-2 rounded-full bg-fuchsia-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              <span className="ml-1 rounded-full bg-fuchsia-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                 {Math.min(99, unreadChat)}
               </span>
             ) : null}
           </button>
-          <button
-            type="button"
-            className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
-            onClick={onOpenCollectibles}
-          >
+          <button type="button" className="nn-btn nn-btn-secondary nn-btn-sm" onClick={onOpenCollectibles}>
             Felt items
           </button>
           {isHost ? (
-            <button
-              type="button"
-              className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
-              onClick={onOpenHost}
-            >
+            <button type="button" className="nn-btn nn-btn-gold nn-btn-sm" onClick={onOpenHost}>
               Host tools
             </button>
           ) : null}

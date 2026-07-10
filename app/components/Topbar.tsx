@@ -222,19 +222,20 @@ export function Topbar() {
           <button
             type="button"
             disabled={prestigeBusy}
-            className="glass glass-shine rounded-3xl border border-yellow-300/25 bg-yellow-500/10 px-4 py-3 text-left text-xs text-yellow-100 shadow-[0_0_30px_rgba(250,204,21,.18)] hover:bg-yellow-500/15 disabled:opacity-40"
+            className="nn-card nn-card-hover px-4 py-3 text-left text-xs"
+            style={{ borderColor: "rgba(255,215,0,0.3)", boxShadow: "0 0 30px var(--neon-gold-glow)" }}
             onClick={() => setPrestigeModalOpen(true)}
             title={`Prestige ${nextPrestigeLevel}`}
           >
-            <div className="text-[11px] text-yellow-200/80">Prestige ready</div>
-            <div className="mt-0.5 text-sm font-semibold">Prestige {nextPrestigeLevel} ★</div>
+            <div className="text-[11px] text-neon-gold">Prestige ready</div>
+            <div className="mt-0.5 text-sm font-semibold text-white">Prestige {nextPrestigeLevel} ★</div>
           </button>
         </div>
       ) : null}
 
       {prestigeModalOpen ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4">
-          <div className="glass glass-shine w-full max-w-[520px] rounded-3xl border border-yellow-300/15 p-6">
+        <div className="nn-modal-backdrop nn-fade-in">
+          <div className="nn-modal w-full max-w-[520px] p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-white">Prestige {nextPrestigeLevel}</div>
@@ -242,16 +243,12 @@ export function Topbar() {
                   Next prestige after this: <span className="font-mono">{formatNumberWords(nextAfterPrestigeAt)}</span>
                 </div>
               </div>
-              <button
-                type="button"
-                className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white"
-                onClick={() => setPrestigeModalOpen(false)}
-              >
+              <button type="button" className="nn-btn nn-btn-ghost nn-btn-sm" onClick={() => setPrestigeModalOpen(false)}>
                 Close
               </button>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-white/75">
+            <div className="mt-4 rounded-xl border border-white/8 bg-black/20 p-4 text-xs text-white/75">
               <div className="font-semibold text-white/90">You gain:</div>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 <li>
@@ -261,25 +258,21 @@ export function Topbar() {
                 <li>+2:1 bonus on Blackjack payouts (prestige bonus)</li>
                 <li>+2:1 bonus on 5+ card win bonuses (prestige bonus)</li>
               </ul>
-              <div className="mt-3 font-semibold text-rose-200">Warning (resets):</div>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-rose-100/90">
+              <div className="mt-3 font-semibold text-neon-red">Warning (resets):</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-neon-red">
                 <li>Your money (chips) will be reset</li>
                 <li>Your Blackjack powerups / boxes will be reset</li>
               </ul>
             </div>
 
             <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                className="glass-soft rounded-2xl px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10"
-                onClick={() => setPrestigeModalOpen(false)}
-              >
+              <button type="button" className="nn-btn nn-btn-secondary nn-btn-md" onClick={() => setPrestigeModalOpen(false)}>
                 Cancel
               </button>
               <button
                 type="button"
                 disabled={prestigeBusy || !canPrestigeNow}
-                className="glass-soft rounded-2xl border border-yellow-300/25 bg-yellow-500/10 px-4 py-2 text-sm font-semibold text-yellow-100 hover:bg-yellow-500/15 disabled:opacity-40"
+                className="nn-btn nn-btn-gold nn-btn-md"
                 onClick={async () => {
                   if (prestigeBusy) return;
                   setPrestigeBusy(true);
@@ -316,25 +309,21 @@ export function Topbar() {
         <div className="fixed top-3 right-3 z-[75]">
           <button
             type="button"
-            className="glass glass-shine rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 opacity-75 hover:bg-white/10"
+            className="nn-card nn-card-hover px-4 py-3 text-left text-xs opacity-80"
             onClick={() => setBarOpen(true)}
             title="Toggle top bar"
           >
             <div className="text-[11px] text-white/60">Balance</div>
-            <div className="mt-0.5 font-mono text-sm font-semibold text-white/90">{formatChips(displayBalance)} ⓒ</div>
+            <div className="mt-0.5 font-mono text-sm font-semibold text-neon-cyan">{formatChips(displayBalance)} ⓒ</div>
           </button>
         </div>
       ) : null}
 
       {barOpen ? (
         <header className="sticky top-0 z-20 px-4 pt-4 sm:px-6">
-          <div className="glass glass-shine flex items-center justify-between gap-3 rounded-3xl px-4 py-3">
+          <div className="nn-card flex items-center justify-between gap-3 px-4 py-3">
             <div className="flex items-center gap-3">
-              <Link
-                href="/casino/blackjack-v2"
-                className="glass-soft inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/10"
-                title="Home"
-              >
+              <Link href="/casino/blackjack-v2" className="nn-btn nn-btn-secondary nn-btn-sm" title="Home">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path
                     d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"
@@ -351,15 +340,12 @@ export function Topbar() {
             <div className="flex items-center gap-2">
               {bjCtx?.active ? (
                 <>
-                  <Link
-                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
-                    href="/casino/blackjack-v2"
-                  >
+                  <Link className="nn-btn nn-btn-secondary nn-btn-sm" href="/casino/blackjack-v2">
                     Back to blackjack
                   </Link>
                   <button
                     type="button"
-                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
+                    className="nn-btn nn-btn-secondary nn-btn-sm"
                     onClick={() => {
                       try {
                         window.dispatchEvent(new CustomEvent("lgc:blackjackInvite"));
@@ -372,7 +358,7 @@ export function Topbar() {
                   </button>
                   <button
                     type="button"
-                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
+                    className="nn-btn nn-btn-secondary nn-btn-sm"
                     onClick={() => {
                       try {
                         window.dispatchEvent(new CustomEvent("lgc:blackjackLeave"));
@@ -385,40 +371,25 @@ export function Topbar() {
                   </button>
                 </>
               ) : null}
-              <Link
-                className="hidden rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white sm:inline"
-                href="/casino/legacy"
-              >
+              <Link className="hidden nn-btn nn-btn-ghost nn-btn-sm sm:inline" href="/casino/legacy">
                 Legacy Casino
               </Link>
-              <Link
-                className="hidden rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white sm:inline"
-                href="/casino/leaderboard"
-              >
+              <Link className="hidden nn-btn nn-btn-ghost nn-btn-sm sm:inline" href="/casino/leaderboard">
                 Leaderboard
               </Link>
               {!mobileTableMenuMode ? (
                 <>
-                  <Link
-                    className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
-                    href="/casino/customizations"
-                  >
+                  <Link className="nn-btn nn-btn-ghost nn-btn-sm" href="/casino/customizations">
                     Customizations
                   </Link>
-                  <Link
-                    className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
-                    href="/casino/prestige-shop"
-                  >
+                  <Link className="nn-btn nn-btn-ghost nn-btn-sm" href="/casino/prestige-shop">
                     Prestige Shop
                   </Link>
-                  <Link
-                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
-                    href="/casino/profile"
-                  >
+                  <Link className="nn-btn nn-btn-secondary nn-btn-sm" href="/casino/profile">
                     {loading ? "…" : user ? `@${user.username}` : "Sign in"}
                   </Link>
                   <button
-                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10"
+                    className="nn-btn nn-btn-primary nn-btn-sm"
                     onClick={async () => {
                       setMsg(null);
                       if (!canRefill) {
@@ -443,7 +414,7 @@ export function Topbar() {
                     {refill100Label}
                   </button>
                   <button
-                    className="glass-soft rounded-2xl px-3 py-2 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-40"
+                    className="nn-btn nn-btn-success nn-btn-sm"
                     onClick={async () => {
                       setMsg(null);
                       if (!canRefill) {
@@ -472,12 +443,7 @@ export function Topbar() {
                     {refillLabel}
                   </button>
                   {role >= 1 ? (
-                    <button
-                      className="rounded-2xl px-3 py-2 text-xs font-medium text-white/70 transition hover:text-white"
-                      onClick={() => void reset()}
-                      type="button"
-                      title="Reset wallet + RNG seeds"
-                    >
+                    <button className="nn-btn nn-btn-ghost nn-btn-sm" onClick={() => void reset()} type="button" title="Reset wallet + RNG seeds">
                       Reset
                     </button>
                   ) : null}
@@ -488,9 +454,7 @@ export function Topbar() {
           {msg ? <div className="px-1 pt-2 text-xs text-white/60">{msg}</div> : null}
           {broadcast && !isMobileViewport ? (
             <div className="px-1 pt-2">
-              <div className="glass-soft glass-shine rounded-2xl border border-white/10 px-3 py-2 text-xs text-white/80">
-                {broadcast}
-              </div>
+              <div className="nn-card px-3 py-2 text-xs text-white/80">{broadcast}</div>
             </div>
           ) : null}
         </header>

@@ -7,7 +7,14 @@ import { GlobalChatBubble } from "../components/GlobalChatBubble";
 
 export default function CasinoLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-[100dvh] w-full flex-col">
+    <div
+      className="flex min-h-[100dvh] w-full flex-col"
+      style={{
+        backgroundColor: "var(--void)",
+        backgroundImage:
+          "radial-gradient(1200px 600px at 50% -10%, rgba(0,245,255,0.04) 0%, transparent 60%), radial-gradient(1000px 500px at 90% 110%, rgba(255,0,170,0.03) 0%, transparent 60%)",
+      }}
+    >
       <Topbar />
       <BigWinOverlay />
       <MysteryBoxTab />

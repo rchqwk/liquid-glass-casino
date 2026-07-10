@@ -1,7 +1,7 @@
 "use client";
 
 import type { Seat } from "./blackjackTableTypes";
-import { CardView, handValue } from "./blackjackUiPrimitives";
+import { CardView, ChipView, handValue } from "./blackjackUiPrimitives";
 
 export function getBlackjackNameClass(nameColor?: string | null, fallback = "text-white/85") {
   const effective = String(nameColor ?? "").trim().toLowerCase();
@@ -98,9 +98,9 @@ export function BlackjackTableSeat({
   if (variant === "table") {
     return (
       <div className={className}>
-        <div className={`${isTurn ? "drop-shadow-[0_0_18px_rgba(52,211,153,.25)]" : ""}`}>
-          <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px] text-white/80">
-            <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 font-semibold text-white/85">
+        <div className={`nn-fade-in ${isTurn ? "nn-pulse-glow" : ""}`} style={isTurn ? { color: "var(--neon-cyan)" } : undefined}>
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="nn-badge nn-badge-neutral">
               <BlackjackNameBadge
                 seat={seat}
                 currentUserId={currentUserId}
@@ -109,28 +109,26 @@ export function BlackjackTableSeat({
               />
             </span>
             {seat.allIn ? (
-              <span
-                className="rounded-full border border-yellow-300/25 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-100"
-                title="All in"
-              >
-                🟡 ALL-IN{Number(seat.allInWinStreak ?? 0) > 0 ? ` x${Number(seat.allInWinStreak)}` : ""}
+              <span className="nn-badge nn-badge-gold" title="All in">
+                ALL-IN{Number(seat.allInWinStreak ?? 0) > 0 ? ` x${Number(seat.allInWinStreak)}` : ""}
               </span>
             ) : null}
             {seat.bet ? (
-              <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
-                {experience === "v2" ? "Stake" : "Bet"} <span className="font-mono text-white/80">{Number(seat.bet).toFixed(2)}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-white/70">
+                <ChipView amount={Number(seat.bet)} size="sm" />
+                <span className="font-mono text-white/85">{Number(seat.bet).toFixed(0)}</span>
               </span>
             ) : null}
-            <span className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-white/70">
-              <span className="font-mono text-white/85">{hv.total}</span>
-              {seat.bonusPoints ? <span className="ml-1 text-amber-200">(+{seat.bonusPoints})</span> : null}
+            <span className={`nn-badge ${hv.total > 21 ? "nn-badge-red" : hv.total === 21 ? "nn-badge-gold" : "nn-badge-cyan"}`}>
+              <span className="font-mono">{hv.total}</span>
+              {seat.bonusPoints ? <span className="ml-1">+{seat.bonusPoints}</span> : null}
             </span>
-            {seat.busted ? <span className="text-rose-200">{experience === "v2" ? "Busted" : "BUST"}</span> : null}
-            {seat.stood ? <span className="text-white/50">{experience === "v2" ? "Held" : "STAND"}</span> : null}
+            {seat.busted ? <span className="nn-badge nn-badge-red">{experience === "v2" ? "Busted" : "BUST"}</span> : null}
+            {seat.stood ? <span className="nn-badge nn-badge-neutral">{experience === "v2" ? "Held" : "STAND"}</span> : null}
           </div>
           <div className="flex flex-wrap gap-2">
             {seat.cards.map((c, idx) => (
-              <CardView key={`${seatIndex}-${idx}`} idx={c} />
+              <CardView key={`${seatIndex}-${idx}`} idx={c} dealing={idx === seat.cards.length - 1} winning={!seat.busted && hv.total === 21} />
             ))}
           </div>
           {effects.length ? (
@@ -138,7 +136,7 @@ export function BlackjackTableSeat({
               {effects.slice(-3).map((e) => (
                 <span
                   key={String(e.id ?? `${e.at}-${e.powerupName}`)}
-                  className="rounded-full border border-white/10 bg-black/20 px-1.5 py-0.5 text-[10px] text-white/70"
+                  className="nn-badge nn-badge-magenta"
                   title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
                 >
                   {String(e.powerupName ?? "Powerup")}
@@ -153,7 +151,7 @@ export function BlackjackTableSeat({
 
   return (
     <div className={className}>
-      <div className={`rounded-2xl border border-white/10 bg-white/5 p-3 ${isTurn ? "ring-2 ring-emerald-300/50" : ""}`}>
+      <div className={`nn-card nn-card-hover p-4 ${isTurn ? "ring-2 ring-cyan-400/50" : ""}`} style={isTurn ? { boxShadow: "0 0 20px var(--neon-cyan-glow)" } : undefined}>
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-semibold">
             <BlackjackNameBadge
@@ -163,33 +161,36 @@ export function BlackjackTableSeat({
               currentUserPrestigeLevel={currentUserPrestigeLevel}
             />
             {seat.allIn ? (
-              <span className="ml-2 rounded-full border border-yellow-300/25 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-semibold text-yellow-100">
+              <span className="nn-badge nn-badge-gold ml-2">
                 ALL-IN{Number(seat.allInWinStreak ?? 0) > 0 ? ` x${Number(seat.allInWinStreak)}` : ""}
               </span>
             ) : null}
           </div>
-          <div className="text-xs text-white/60">
-            {experience === "v2" ? "Stake" : "Bet"}: <span className="font-mono text-white/80">{seat.bet.toFixed(2)}</span>
+          <div className="inline-flex items-center gap-1.5 text-xs text-white/60">
+            <ChipView amount={Math.max(1, Math.round(seat.bet))} size="sm" />
+            <span className="font-mono text-white/80">{seat.bet.toFixed(0)}</span>
           </div>
         </div>
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           {seat.cards.map((c, idx) => (
-            <CardView key={`${seatIndex}-${idx}`} idx={c} />
+            <CardView key={`${seatIndex}-${idx}`} idx={c} dealing={idx === seat.cards.length - 1} winning={!seat.busted && hv.total === 21} />
           ))}
         </div>
-        <div className="mt-2 text-xs text-white/60">
-          {experience === "v2" ? "Hand total" : "Total"}: <span className="font-mono text-white/80">{hv.total}</span>
-          {hv.soft ? <span className="ml-2 text-white/45">(soft)</span> : null}
-          {seat.bonusPoints ? <span className="ml-2 text-amber-200">(+{seat.bonusPoints})</span> : null}
-          {seat.busted ? <span className="ml-2 text-rose-200">{experience === "v2" ? "Busted" : "BUST"}</span> : null}
-          {seat.stood ? <span className="ml-2 text-white/45">{experience === "v2" ? "Held" : "STAND"}</span> : null}
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className={`nn-badge ${hv.total > 21 ? "nn-badge-red" : hv.total === 21 ? "nn-badge-gold" : "nn-badge-cyan"}`}>
+            <span className="font-mono">{hv.total}</span>
+          </span>
+          {hv.soft ? <span className="text-white/45">(soft)</span> : null}
+          {seat.bonusPoints ? <span className="nn-badge nn-badge-gold">+{seat.bonusPoints}</span> : null}
+          {seat.busted ? <span className="nn-badge nn-badge-red">{experience === "v2" ? "Busted" : "BUST"}</span> : null}
+          {seat.stood ? <span className="nn-badge nn-badge-neutral">{experience === "v2" ? "Held" : "STAND"}</span> : null}
         </div>
         {effects.length ? (
           <div className="mt-2 flex flex-wrap gap-1">
             {effects.slice(-4).map((e) => (
               <span
                 key={String(e.id ?? `${e.at}-${e.powerupName}`)}
-                className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/70"
+                className="nn-badge nn-badge-magenta"
                 title={e.fromUsername ? `Used by ${e.fromUsername}` : undefined}
               >
                 {String(e.powerupName ?? "Powerup")}

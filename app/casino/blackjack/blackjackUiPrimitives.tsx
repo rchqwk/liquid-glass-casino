@@ -168,27 +168,65 @@ export function PowerupStickerIcon({ id, className }: { id: string; className?: 
   return null;
 }
 
-export function CardView({ idx, hidden }: { idx: number; hidden?: boolean }) {
+export function CardView({ idx, hidden, dealing, winning }: { idx: number; hidden?: boolean; dealing?: boolean; winning?: boolean }) {
   if (idx < 0 || hidden) {
     return (
-      <div className="lgc-card lgc-card--back relative flex h-[72px] w-[52px] items-center justify-center rounded-2xl border border-white/15 bg-white/10 shadow-[0_10px_30px_rgba(0,0,0,.35)]">
-        <div className="h-[86%] w-[86%] rounded-xl bg-gradient-to-br from-white/20 to-white/5" />
-      </div>
+      <div
+        className={`nn-card-playing nn-card-back ${dealing ? "nn-card-dealing" : ""}`}
+        style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}
+      />
     );
   }
   const c = cardFromIndex(idx);
   const isRed = c.suit === "♥" || c.suit === "♦";
+  const colorClass = isRed ? "nn-card-red" : "nn-card-black";
   return (
-    <div className="lgc-card relative flex h-[72px] w-[52px] items-center justify-center rounded-2xl border border-white/15 bg-white/90 shadow-[0_10px_30px_rgba(0,0,0,.35)]">
-      <div className={`absolute left-2 top-2 text-[9px] font-semibold ${isRed ? "text-rose-600" : "text-zinc-900"}`}>
+    <div
+      className={`nn-card-playing ${colorClass} ${dealing ? "nn-card-dealing" : ""} ${winning ? "nn-card-winning" : ""}`}
+    >
+      <div className="nn-card-rank-top">
         {c.rank}
-        <div className="text-[8px] leading-3">{c.suit}</div>
+        <div className="nn-card-suit-top">{c.suit}</div>
       </div>
-      <div className={`text-lg ${isRed ? "text-rose-600" : "text-zinc-900"}`}>{c.suit}</div>
-      <div className={`absolute bottom-2 right-2 rotate-180 text-[9px] font-semibold ${isRed ? "text-rose-600" : "text-zinc-900"}`}>
+      <div className="nn-card-suit-center">{c.suit}</div>
+      <div className="nn-card-rank-bottom">
         {c.rank}
-        <div className="text-[8px] leading-3">{c.suit}</div>
+        <div className="nn-card-suit-bottom">{c.suit}</div>
       </div>
+    </div>
+  );
+}
+
+export function ChipView({ amount, size = "md" }: { amount: number; size?: "sm" | "md" | "lg" }) {
+  const getDenomination = (amt: number): string => {
+    if (amt >= 500) return "500";
+    if (amt >= 100) return "100";
+    if (amt >= 50) return "50";
+    if (amt >= 25) return "25";
+    if (amt >= 10) return "10";
+    if (amt >= 5) return "5";
+    return "1";
+  };
+  const getChipClass = (denom: string): string => {
+    const map: Record<string, string> = {
+      "1": "nn-chip-1",
+      "5": "nn-chip-5",
+      "10": "nn-chip-10",
+      "25": "nn-chip-25",
+      "50": "nn-chip-50",
+      "100": "nn-chip-100",
+      "500": "nn-chip-500",
+    };
+    return map[denom] ?? "nn-chip-1";
+  };
+  const denom = getDenomination(amount);
+  const sizeClass = size === "sm" ? "nn-chip-sm" : size === "lg" ? "nn-chip-lg" : "";
+  return (
+    <div
+      className={`nn-chip ${getChipClass(denom)} ${sizeClass}`}
+      title={`${amount} chips`}
+    >
+      {denom}
     </div>
   );
 }
