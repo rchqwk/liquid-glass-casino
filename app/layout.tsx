@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
-import Script from "next/script";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -31,14 +30,16 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        {/* Google AdSense loader — enables auto ads once the site is approved. */}
-        <Script
+      <head>
+        {/* Google AdSense. Raw tag in <head> so the AdSense verification crawler sees it in the
+            server-rendered HTML — next/script with afterInteractive only injects it client-side. */}
+        <script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3256641731859297"
           crossOrigin="anonymous"
-          strategy="afterInteractive"
         />
+      </head>
+      <body className="min-h-full flex flex-col">
         <div className="flex-1">
           <Providers>{children}</Providers>
         </div>
