@@ -55,6 +55,7 @@ type AuthContextValue = {
   loading: boolean;
   discordMode: boolean;
   discordError: string | null;
+  sessionExpired: boolean;
   retryDiscord: () => void;
   refresh: () => Promise<void>;
   signIn: (
@@ -75,24 +76,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [discordMode, setDiscordMode] = useState(false);
   const [discordError, setDiscordError] = useState<string | null>(null);
   const [discordAttempted, setDiscordAttempted] = useState(false);
+  // True when we held a session token but the server rejected it (idle timeout / expiry).
+  // Lets the UI say "session expired" instead of silently dumping the user to the gate.
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const refresh = async () => {
     try {
       const res = await fetchWithDevice("/api/auth", { cache: "no-store" });
       const data = (await res.json()) as { user: UserWithRole | null };
-      setUser(data.user ?? null);
+      const authed = data.user ?? null;
+      setUser(authed);
+      setSessionExpired(!authed && !!getSessionTokenClient());
     } catch {
       // ignore
     }
   };
 
+  // Canonical Discord OAuth entry (must match the registered redirect URI).
+  const DISCORD_ENTRY = "/casino/blackjack-v2/discord";
+
   const retryDiscord = () => {
     try {
       sessionStorage.removeItem("lgc.discord.disableOauthSession");
       const qs = sessionStorage.getItem("lgc.discord.qs") ?? "";
-      window.location.href = `/casino/blackjack/discord${qs || ""}`;
+      window.location.href = `${DISCORD_ENTRY}${qs || ""}`;
     } catch {
-      window.location.href = "/casino/blackjack/discord";
+      window.location.href = DISCORD_ENTRY;
     }
   };
 
@@ -153,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = (await res.json()) as { user: UserWithRole | null };
         const authed = data.user ?? null;
         setUser(authed);
+        setSessionExpired(!authed && !!getSessionTokenClient());
 
         // If we're inside Discord and not authed yet, automatically sign-in via Embedded App SDK.
         if (!authed && isDiscord && !discordAttempted) {
@@ -169,8 +179,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const isMobile = /iPhone|iPad|iPod|Android/i.test(ua);
             if (isMobile) {
               const path = window.location.pathname || "";
-              if (!path.startsWith("/casino/blackjack/discord")) {
-                window.location.replace(`/casino/blackjack/discord${search || ""}`);
+              if (!path.startsWith("/casino/blackjack-v2/discord")) {
+                window.location.replace(`${DISCORD_ENTRY}${search || ""}`);
                 return;
               }
             }
@@ -184,8 +194,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // OAuth authorize link and can still complete login with `code` + `channel_id`.
             try {
               const path = window.location.pathname || "";
-              if (!path.startsWith("/casino/blackjack/discord")) {
-                window.location.replace(`/casino/blackjack/discord${search || ""}`);
+              if (!path.startsWith("/casino/blackjack-v2/discord")) {
+                window.location.replace(`${DISCORD_ENTRY}${search || ""}`);
                 return;
               }
             } catch {
@@ -199,7 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               "";
             const redirectUri =
               process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI ??
-              "https://rchqwk-liquid-glass-casino.vercel.app/casino/blackjack/discord";
+              "https://rchqwk.com/casino/blackjack-v2/discord";
             if (!clientId) {
               setDiscordError("Missing NEXT_PUBLIC_DISCORD_CLIENT_ID.");
             } else {
@@ -236,14 +246,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     // ignore
                   }
                 }
-                if (loginJson?.user) setUser(loginJson.user as UserWithRole);
+                if (loginJson?.user) {
+                  setUser(loginJson.user as UserWithRole);
+                  setSessionExpired(false);
+                }
               } catch (e: any) {
                 const msg = String(e?.message ?? "Discord sign-in failed.");
                 // iOS can get stuck during Activity initialization and never complete the RPC handshake.
                 // If that happens, fall back to the OAuth entry page so the user can still play.
                 if (msg.includes("handshake timed out")) {
                   try {
-                    window.location.replace(`/casino/blackjack/discord${search || ""}`);
+                    window.location.replace(`${DISCORD_ENTRY}${search || ""}`);
                     return;
                   } catch {
                     // ignore
@@ -269,6 +282,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       discordMode,
       discordError,
+      sessionExpired,
       retryDiscord,
       refresh,
       signIn: async (username) => {
@@ -290,7 +304,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               // ignore
             }
           }
-          if ("user" in data) setUser(data.user);
+          if ("user" in data) {
+            setUser(data.user);
+            setSessionExpired(false);
+          }
           return { ok: true, inactivePrompt: "inactivePrompt" in data ? data.inactivePrompt : undefined };
         } catch {
           return { ok: false, error: "Network error" };
@@ -306,6 +323,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // ignore
           }
           setUser(null);
+          setSessionExpired(false);
         }
       },
       reportResult: async ({ game, profit, wager, baseWager, balance }) => {
@@ -322,7 +340,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       },
     };
-  }, [user, loading, discordMode, discordError]);
+  }, [user, loading, discordMode, discordError, sessionExpired]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "../lib/authClient";
 
 export function SignInGate({ children }: { children: React.ReactNode }) {
-  const { user, loading, signIn, discordMode, discordError, retryDiscord } = useAuth();
+  const { user, loading, signIn, discordMode, discordError, retryDiscord, sessionExpired } = useAuth();
   const pathname = usePathname();
   const [username, setUsername] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
@@ -21,6 +21,9 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
     if (pathname === "/casino/blackjack/rules") return true;
     if (pathname === "/casino/blackjack/special-rules") return true;
     if (pathname === "/casino/blackjack/strategy") return true;
+    // The Discord OAuth entry pages drive their own auth flow + pairing UI.
+    if (pathname === "/casino/blackjack-v2/discord") return true;
+    if (pathname === "/casino/blackjack/discord") return true;
     return false;
   }, [pathname]);
 
@@ -145,6 +148,12 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                   <p className="mt-2 text-sm leading-6 text-white/70">
                     Choose a username to start playing. Quick sign-in for play-money tables.
                   </p>
+
+                  {sessionExpired ? (
+                    <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-200">
+                      Your session expired. Sign in again to pick up where you left off.
+                    </div>
+                  ) : null}
 
                   {discordUrl ? (
                     <>

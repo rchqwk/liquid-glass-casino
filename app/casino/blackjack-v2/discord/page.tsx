@@ -1,307 +1,475 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
-type Stage = "init" | "sdk_init" | "authorizing" | "logging_in" | "joining" | "redirecting" | "done" | "error";
+type Stage =
+  | "init"
+  | "awaiting_oauth"
+  | "authorizing"
+  | "logging_in"
+  | "ensuring_table"
+  | "redirecting"
+  | "linked"
+  | "error";
+
+// Canonical OAuth redirect target (must match the redirect URI registered in the
+// Discord Developer Portal and DISCORD_REDIRECT_URI in .env / Vercel env vars).
+const CANONICAL_REDIRECT_URI = "https://rchqwk.com/casino/blackjack-v2/discord";
+
+const TABLE_BASE = "/casino/blackjack-v2";
 
 export default function DiscordV2EntryPage() {
-  const router = useRouter();
   const [stage, setStage] = useState<Stage>("init");
-  const [error, setError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<Record<string, string>>({});
+  const [err, setErr] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [mobileAuth, setMobileAuth] = useState<null | { token: string; code: string; channelId?: string | null; expiresAt: number }>(null);
+  const [isReady, setIsReady] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
+
+  const clientId =
+    process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ??
+    process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ??
+    "";
+  const redirectUri = process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI ?? CANONICAL_REDIRECT_URI;
 
   const addLog = (msg: string) => {
-    const timestamp = new Date().toISOString().split("T")[1].split(".")[0];
-    setLogs(prev => [...prev.slice(-20), `${timestamp} ${msg}`]);
-    console.log(`[Discord V2] ${msg}`);
+    try {
+      const t = new Date().toISOString().split("T")[1]?.split(".")[0] ?? "";
+      setLogs((prev) => [...prev.slice(-30), `${t} ${msg}`]);
+    } catch {
+      // ignore
+    }
   };
 
-  const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? "1512024820194349157";
-  const redirectUri = process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI ?? "https://rchqwk.com/casino/blackjack-v2/discord";
-
-  const params = useMemo(() => {
+  const qs = useMemo(() => {
     if (typeof window === "undefined") return null;
-    const url = new URL(window.location.href);
-    return {
-      frameId: url.searchParams.get("frame_id"),
-      channelId: url.searchParams.get("channel_id"),
-      guildId: url.searchParams.get("guild_id"),
-      code: url.searchParams.get("code"),
-    };
+    return new URL(window.location.href).searchParams;
   }, []);
 
   useEffect(() => {
-    if (!params) return;
-    
-    addLog("Page mounted");
-    setDebugInfo({
-      frameId: params.frameId ?? "null",
-      channelId: params.channelId ?? "null",
-      guildId: params.guildId ?? "null",
-      hasCode: params.code ? "yes" : "no",
-      clientId: clientId,
-      redirectUri: redirectUri,
-      href: typeof window !== "undefined" ? window.location.href : "n/a",
+    setIsReady(true);
+    addLog("Entry page mounted");
+    addLog(`redirectUri=${redirectUri}`);
+  }, [redirectUri]);
+
+  const hasFrameId = useMemo(() => !!qs?.get("frame_id"), [qs]);
+  const channelIdFromQuery = useMemo(() => qs?.get("channel_id") ?? null, [qs]);
+  const oauthCodeFromQuery = useMemo(() => qs?.get("code") ?? null, [qs]);
+  const oauthStateFromQuery = useMemo(() => qs?.get("state") ?? null, [qs]);
+
+  // state=mobile:CODE is used by the /discord/mobile pairing flow.
+  const mobileAuthCode = useMemo(() => {
+    const raw = String(oauthStateFromQuery ?? "");
+    return raw.startsWith("mobile:")
+      ? raw.slice("mobile:".length).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12)
+      : null;
+  }, [oauthStateFromQuery]);
+
+  // If we initiated OAuth ourselves we store the channel id in `state`.
+  const channelId = channelIdFromQuery ?? (mobileAuthCode ? null : oauthStateFromQuery);
+
+  const isMobile = useMemo(() => {
+    try {
+      if (typeof navigator === "undefined") return false;
+      return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent ?? "");
+    } catch {
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────
+  // Mobile pairing code creation (only after SDK path is exhausted)
+  // ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isMobile) return;
+    if (oauthCodeFromQuery) return;
+    if (mobileAuth) return;
+    if (stage !== "awaiting_oauth" && stage !== "error") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/discord/mobile-auth", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ channelId }),
+        });
+        const data = (await res.json().catch(() => ({}))) as any;
+        if (!res.ok || !data?.token || !data?.code) throw new Error(data?.error ?? "Failed to create mobile auth code");
+        if (cancelled) return;
+        addLog(`Pairing code created: ${data.code}`);
+        setMobileAuth({
+          token: String(data.token),
+          code: String(data.code),
+          channelId: (data.channelId ?? channelId ?? null) as string | null,
+          expiresAt: Number(data.expiresAt ?? 0) || Date.now() + 15 * 60 * 1000,
+        });
+      } catch (e: any) {
+        if (cancelled) return;
+        addLog(`Pairing code creation failed: ${e?.message ?? "unknown"}`);
+        setStage("error");
+        setErr(String(e?.message ?? "Failed to initialize mobile Discord sign-in."));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isMobile, oauthCodeFromQuery, mobileAuth, channelId, stage]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Mobile pairing poll: wait for the code to be used on another device
+  // ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isMobile) return;
+    if (!mobileAuth?.token) return;
+    if (oauthCodeFromQuery) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/discord/mobile-auth?token=${encodeURIComponent(mobileAuth.token)}`, { cache: "no-store" });
+        const data = (await res.json().catch(() => ({}))) as any;
+        if (!res.ok) return;
+        if (cancelled) return;
+        if (data?.status === "completed" && data?.sessionToken) {
+          try {
+            localStorage.setItem("lgc.session", String(data.sessionToken));
+          } catch {
+            // ignore
+          }
+          addLog("Pairing completed, session stored");
+          setStage("redirecting");
+          const nextChannelId = String(data?.channelId ?? mobileAuth.channelId ?? "").trim();
+          window.location.replace(nextChannelId ? `${TABLE_BASE}/${encodeURIComponent(nextChannelId)}` : TABLE_BASE);
+        }
+      } catch {
+        // ignore transient poll failures
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [isMobile, mobileAuth, oauthCodeFromQuery]);
+
+  const persistSession = (token: string | null | undefined) => {
+    if (!token) return;
+    try {
+      localStorage.setItem("lgc.session", String(token));
+    } catch {
+      // ignore
+    }
+  };
+
+  const joinTableFlow = async (targetChannelId: string | null | undefined) => {
+    if (!targetChannelId) return;
+    setStage("ensuring_table");
+    const ensureRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(targetChannelId)}/ensure`, { method: "POST" });
+    const ensureJson = (await ensureRes.json().catch(() => ({}))) as any;
+    if (!ensureRes.ok) throw new Error(ensureJson?.error ?? "Failed to create/join table.");
+    await fetch(`/api/blackjack/tables/${encodeURIComponent(targetChannelId)}/join`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ spectate: false }),
     });
+  };
 
-    if (params.code) {
-      addLog("Detected OAuth code callback");
-      handleOAuthCallback(params.code);
-      return;
-    }
+  // ─────────────────────────────────────────────────────────────
+  // Main auth cascade
+  // ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setErr(null);
+        if (!clientId) throw new Error("Missing NEXT_PUBLIC_DISCORD_CLIENT_ID");
+        addLog(`hasFrameId=${hasFrameId} hasCode=${!!oauthCodeFromQuery} channelId=${channelId} isMobile=${isMobile}`);
 
-    if (params.frameId) {
-      addLog("Detected Discord frame_id, initializing SDK");
-      initSDK();
-    } else {
-      addLog("No frame_id, showing manual sign-in");
-      setStage("init");
-    }
-  }, [params]);
+        // ── PATH 1: OAuth callback (code in URL) ─────────────────
+        if (oauthCodeFromQuery) {
+          addLog("PATH 1: OAuth callback");
+          setStage("logging_in");
+          const loginRes = await fetch("/api/discord/login", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code: oauthCodeFromQuery, redirectUri, mobileAuthCode }),
+          });
+          const loginJson = (await loginRes.json().catch(() => ({}))) as any;
+          if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
+          persistSession(loginJson?.session_token);
+          addLog("Login OK (OAuth)");
 
-  const initSDK = async () => {
-    try {
-      setStage("sdk_init");
-      addLog("Importing Discord SDK...");
-      
-      const { DiscordSDK } = await import("@discord/embedded-app-sdk").catch(err => {
-        addLog(`SDK import failed: ${err}`);
-        throw new Error("SDK import failed");
-      });
-      
-      addLog("SDK imported, creating instance...");
-      const sdk = new DiscordSDK(clientId);
-      
-      addLog("Waiting for SDK ready...");
-      setStage("authorizing");
-      
-      await Promise.race([
-        sdk.ready(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("SDK timeout after 10s")), 10000)
-        ),
-      ]);
-      
-      addLog("SDK ready, authorizing...");
-      const authResult = await (sdk as any).commands.authorize({
-        client_id: clientId,
-        response_type: "code",
-        prompt: "none",
-        scope: ["identify", "rpc.activities.write"],
-      });
-      
-      if (!authResult?.code) {
-        throw new Error("No auth code from SDK");
+          // If this was a mobile pairing completion, the Activity polls for it.
+          if (mobileAuthCode) {
+            setStage("linked");
+            return;
+          }
+
+          if (channelId) await joinTableFlow(channelId);
+          if (cancelled) return;
+          setStage("redirecting");
+          window.location.replace(channelId ? `${TABLE_BASE}/${encodeURIComponent(channelId)}` : TABLE_BASE);
+          return;
+        }
+
+        // ── PATH 2: Embedded SDK (frame_id present) ─────────────
+        if (hasFrameId) {
+          addLog("PATH 2: Embedded App SDK");
+          try {
+            let DiscordSDK: any;
+            try {
+              const sdkModule = await import("@discord/embedded-app-sdk");
+              DiscordSDK = sdkModule.DiscordSDK;
+            } catch (importErr: any) {
+              throw new Error(`Failed to load Discord SDK: ${importErr?.message ?? "Unknown error"}`);
+            }
+            if (!DiscordSDK) throw new Error("DiscordSDK not found in module");
+            addLog("SDK imported");
+            const discordSdk = new DiscordSDK(clientId);
+            addLog("Waiting for SDK ready…");
+            await Promise.race([
+              discordSdk.ready(),
+              new Promise((_, reject) =>
+                window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), isMobile ? 10000 : 20000),
+              ),
+            ]);
+            addLog("SDK ready");
+
+            const sdkChannelId = (discordSdk as any).channelId as string | undefined;
+            const effectiveChannelId = sdkChannelId ?? channelId;
+            if (!effectiveChannelId) {
+              addLog("Missing channel id");
+              throw new Error("Missing channel id (must be launched from a voice call Activity).");
+            }
+
+            setStage("authorizing");
+            const authz = await (discordSdk as any).commands.authorize({
+              client_id: clientId,
+              response_type: "code",
+              prompt: "none",
+              scope: ["identify", "rpc.activities.write"],
+            });
+            const sdkCode = String(authz?.code ?? "");
+            if (!sdkCode) throw new Error("Discord authorize did not return a code.");
+            addLog("Got SDK auth code");
+
+            setStage("logging_in");
+            const loginRes = await fetch("/api/discord/login", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ code: sdkCode, redirectUri }),
+            });
+            const loginJson = (await loginRes.json().catch(() => ({}))) as any;
+            if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
+            persistSession(loginJson?.session_token);
+            addLog("Login OK (SDK)");
+
+            const accessToken = String(loginJson?.access_token ?? "");
+            if (accessToken) {
+              try {
+                await (discordSdk as any).commands.authenticate({ access_token: accessToken });
+                addLog("authenticate() OK");
+              } catch (authErr: any) {
+                addLog(`authenticate() failed: ${authErr?.message ?? "unknown"}`);
+              }
+            }
+
+            await joinTableFlow(effectiveChannelId);
+            if (cancelled) return;
+            setStage("redirecting");
+            window.location.replace(`${TABLE_BASE}/${encodeURIComponent(effectiveChannelId)}`);
+            return;
+          } catch (sdkErr: any) {
+            const msg = String(sdkErr?.message ?? "");
+            addLog(`SDK error: ${msg}`);
+            if (cancelled) return;
+            // Mobile webviews are unreliable with the Embedded SDK — fall through to
+            // pairing on ANY SDK failure. On desktop only timeouts fall through.
+            if (!isMobile && !msg.includes("handshake timed out") && !msg.includes("frame_id")) throw sdkErr;
+            // Fall through to fallback path
+          }
+        }
+
+        // ── PATH 3: Fallback ────────────────────────────────────
+        addLog(`PATH 3: Fallback (isMobile=${isMobile})`);
+        setStage("awaiting_oauth");
+      } catch (e: any) {
+        if (cancelled) return;
+        addLog(`Fatal: ${e?.message ?? "unknown"}`);
+        setStage("error");
+        setErr(String(e?.message ?? "Failed to start Discord blackjack."));
       }
-      
-      addLog(`Got auth code: ${authResult.code.substring(0, 8)}...`);
-      await loginWithCode(authResult.code);
-      
-    } catch (err: any) {
-      addLog(`SDK init failed: ${err.message}`);
-      setError(err.message);
-      setStage("error");
-    }
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady]);
 
-  const handleOAuthCallback = async (code: string) => {
-    addLog(`Processing OAuth code: ${code.substring(0, 8)}...`);
-    await loginWithCode(code);
-  };
+  const oauthAuthorizeUrl = useMemo(() => {
+    if (!clientId) return null;
+    const state = channelId ?? "";
+    const url = new URL("https://discord.com/oauth2/authorize");
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("scope", "identify rpc.activities.write");
+    if (state) url.searchParams.set("state", state);
+    return url.toString();
+  }, [clientId, redirectUri, channelId]);
 
-  const loginWithCode = async (code: string) => {
+  // Desktop: auto-redirect to OAuth once when in the fallback state.
+  useEffect(() => {
+    if (isMobile) return;
+    if (oauthCodeFromQuery) return;
+    if (!oauthAuthorizeUrl) return;
+    if (stage !== "awaiting_oauth") return;
     try {
-      setStage("logging_in");
-      addLog("Calling /api/discord/login...");
-      
-      const res = await fetch("/api/discord/login", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code, redirectUri }),
-      });
-      
-      const data = await res.json().catch(() => ({}));
-      
-      if (!res.ok) {
-        throw new Error(data?.error || `Login failed: ${res.status}`);
-      }
-      
-      addLog("Login successful!");
-      
-      const effectiveChannelId = params?.channelId;
-      if (effectiveChannelId) {
-        await joinTable(effectiveChannelId);
-      } else {
-        addLog("No channel ID, redirecting to lobby");
-        setStage("redirecting");
-        router.push("/casino/blackjack-v2");
-      }
-      
-    } catch (err: any) {
-      addLog(`Login failed: ${err.message}`);
-      setError(err.message);
-      setStage("error");
+      const key = "lgc.discord.oauthAutoRedirected";
+      if (sessionStorage.getItem(key) === "1") return;
+      sessionStorage.setItem(key, "1");
+      const t = window.setTimeout(() => {
+        window.location.href = oauthAuthorizeUrl;
+      }, 700);
+      return () => window.clearTimeout(t);
+    } catch {
+      // ignore
     }
-  };
+  }, [stage, oauthCodeFromQuery, oauthAuthorizeUrl, isMobile]);
 
-  const joinTable = async (tableId: string) => {
-    try {
-      setStage("joining");
-      addLog(`Ensuring table ${tableId}...`);
-      
-      await fetch(`/api/blackjack/tables/${encodeURIComponent(tableId)}/ensure`, {
-        method: "POST",
-      });
-      
-      addLog("Joining table...");
-      await fetch(`/api/blackjack/tables/${encodeURIComponent(tableId)}/join`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ spectate: false }),
-      });
-      
-      addLog("Redirecting to table...");
-      setStage("redirecting");
-      router.push(`/casino/blackjack-v2/${tableId}`);
-      
-    } catch (err: any) {
-      addLog(`Join failed: ${err.message}`);
-      setError(err.message);
-      setStage("error");
-    }
-  };
+  const mobileLinkUrl = useMemo(() => {
+    if (typeof window === "undefined") return "/discord/mobile";
+    return `${window.location.origin}/discord/mobile`;
+  }, []);
 
-  const handleManualSignIn = () => {
-    const authUrl = `https://discord.com/oauth2/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=identify&prompt=none`;
-    addLog("Redirecting to Discord OAuth...");
-    window.location.href = authUrl;
-  };
+  const progress = useMemo(() => {
+    if (stage === "init") return 8;
+    if (stage === "awaiting_oauth") return 18;
+    if (stage === "authorizing") return 30;
+    if (stage === "logging_in") return 55;
+    if (stage === "ensuring_table") return 78;
+    if (stage === "redirecting") return 95;
+    if (stage === "linked") return 100;
+    if (stage === "error") return 100;
+    return 10;
+  }, [stage]);
 
-  const stageLabels: Record<Stage, string> = {
-    init: "Ready",
-    sdk_init: "Initializing Discord SDK...",
-    authorizing: "Authorizing...",
-    logging_in: "Signing in...",
-    joining: "Joining table...",
-    redirecting: "Redirecting...",
-    done: "Done!",
-    error: "Error",
-  };
-
-  const boxStyle: React.CSSProperties = {
-    position: "absolute",
-    inset: 0,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#050508",
-    color: "#ffffff",
-    fontFamily: "system-ui, -apple-system, sans-serif",
-    padding: "20px",
-  };
-
-  const cardStyle: React.CSSProperties = {
-    backgroundColor: "#101018",
-    borderRadius: "16px",
-    padding: "32px",
-    maxWidth: "500px",
-    width: "100%",
-    border: "1px solid rgba(255,255,255,0.1)",
-  };
-
-  const buttonStyle: React.CSSProperties = {
-    backgroundColor: "#00f5ff",
-    color: "#050508",
-    border: "none",
-    borderRadius: "10px",
-    padding: "14px 28px",
-    fontSize: "16px",
-    fontWeight: 600,
-    cursor: "pointer",
-    marginTop: "20px",
-  };
-
-  const errorBoxStyle: React.CSSProperties = {
-    backgroundColor: "rgba(255,51,102,0.15)",
-    border: "1px solid rgba(255,51,102,0.3)",
-    borderRadius: "10px",
-    padding: "16px",
-    marginTop: "16px",
-    color: "#ff6688",
-  };
-
-  const debugBoxStyle: React.CSSProperties = {
-    backgroundColor: "#08080c",
-    borderRadius: "10px",
-    padding: "12px",
-    marginTop: "16px",
-    fontSize: "11px",
-    fontFamily: "monospace",
-    color: "#888",
-    maxHeight: "150px",
-    overflow: "auto",
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-all",
-  };
-
-  const logBoxStyle: React.CSSProperties = {
-    backgroundColor: "#08080c",
-    borderRadius: "10px",
-    padding: "12px",
-    marginTop: "12px",
-    fontSize: "10px",
-    fontFamily: "monospace",
-    color: "#6a6a7a",
-    maxHeight: "120px",
-    overflow: "auto",
-  };
+  const stageLabel = useMemo(() => {
+    if (stage === "init") return "Connecting to Discord…";
+    if (stage === "awaiting_oauth") return isMobile ? "Mobile pairing" : "Authorize with Discord to continue…";
+    if (stage === "authorizing") return "Authorizing…";
+    if (stage === "logging_in") return "Signing you in…";
+    if (stage === "ensuring_table") return "Creating / joining table…";
+    if (stage === "redirecting") return "Loading table…";
+    if (stage === "linked") return "Discord sign-in completed.";
+    return "Error";
+  }, [stage, isMobile]);
 
   return (
-    <div style={boxStyle}>
-      <div style={cardStyle}>
-        <h1 style={{ margin: 0, marginBottom: "8px", fontSize: "24px", fontWeight: 700 }}>
-          Discord Blackjack V2
-        </h1>
-        <p style={{ margin: 0, color: "#aaa", fontSize: "14px" }}>
-          {stageLabels[stage]}
-        </p>
+    <div
+      className="flex flex-col items-center justify-center"
+      style={{
+        minHeight: "100dvh",
+        width: "100%",
+        backgroundColor: "var(--void)",
+        backgroundImage: "radial-gradient(1200px 600px at 50% -10%, rgba(0,245,255,0.04) 0%, transparent 60%)",
+        padding: "40px 16px",
+        color: "white",
+        fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+      }}
+    >
+      <style>{`
+        @keyframes nn-spin { to { transform: rotate(360deg); } }
+        .nn-spinner { width: 32px; height: 32px; border-radius: 999px; border: 2px solid rgba(255,255,255,.22); border-top-color: var(--neon-cyan); animation: nn-spin 900ms linear infinite; }
+        .nn-log-toggle { cursor: pointer; color: rgba(255,255,255,.45); text-decoration: underline; }
+        .nn-log-toggle:hover { color: rgba(255,255,255,.8); }
+      `}</style>
 
-        {error && (
-          <div style={errorBoxStyle}>
-            <strong>Error:</strong> {error}
+      <div className="nn-card nn-fade-in p-6 text-center" style={{ maxWidth: 480 }}>
+        <div className="text-lg font-bold text-white">Launching Discord Blackjack…</div>
+        <div className="mt-2 text-sm text-white/70">{stageLabel}</div>
+
+        <div className="mt-4">
+          <div className="nn-badge nn-badge-cyan text-xs">
+            {progress}% · <span className="font-mono">{stage}</span>
           </div>
-        )}
+        </div>
 
-        {stage === "init" && !params?.frameId && !params?.code && (
-          <button style={buttonStyle} onClick={handleManualSignIn}>
-            Sign in with Discord
-          </button>
-        )}
+        {err ? (
+          <div className="mt-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">{err}</div>
+        ) : null}
 
-        {stage === "error" && (
-          <button style={buttonStyle} onClick={handleManualSignIn}>
-            Try Again
-          </button>
-        )}
+        {stage === "linked" ? (
+          <div className="mt-4 rounded-xl border border-green-500/25 bg-green-500/10 px-4 py-3 text-sm text-green-200">
+            Discord sign-in completed. Return to the Discord Activity to continue.
+          </div>
+        ) : null}
 
-        <div style={debugBoxStyle}>
-          <div style={{ color: "#00f5ff", marginBottom: "8px" }}>Debug Info:</div>
-          {Object.entries(debugInfo).map(([k, v]) => (
-            <div key={k}>
-              <span style={{ color: "#666" }}>{k}:</span> {v}
+        {!hasFrameId && !oauthCodeFromQuery ? (
+          <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/70">
+            <div className="font-semibold text-white/90">Not launched from Discord</div>
+            <div className="mt-2">
+              Launch this as a Discord Activity from a voice channel:{" "}
+              <span className="font-mono text-neon-cyan">Rocket → your app → Start</span>
             </div>
-          ))}
+          </div>
+        ) : null}
+
+        {isMobile && stage === "awaiting_oauth" && mobileAuth ? (
+          <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80">
+            <div className="font-semibold text-white">Mobile pairing code</div>
+            <div className="mt-3 font-mono text-2xl tracking-widest text-neon-cyan">{mobileAuth.code}</div>
+            <div className="mt-3 text-xs text-white/60">
+              Open <span className="font-mono text-neon-magenta">{mobileLinkUrl}</span> in your browser, enter the code
+              above, and complete Discord sign-in.
+            </div>
+          </div>
+        ) : null}
+
+        {stage === "error" ? (
+          <div className="mt-4 flex flex-col gap-2">
+            <button
+              type="button"
+              className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/10"
+              onClick={() => {
+                try {
+                  sessionStorage.setItem("lgc.discord.disableOauthSession", "1");
+                } catch {
+                  // ignore
+                }
+                const target = channelId ? `${TABLE_BASE}/${encodeURIComponent(channelId)}` : TABLE_BASE;
+                window.location.replace(target);
+              }}
+            >
+              Play with temporary username
+            </button>
+          </div>
+        ) : null}
+
+        <div className="mt-5">
+          <button
+            type="button"
+            className="nn-log-toggle text-xs"
+            onClick={() => setShowLogs((s) => !s)}
+          >
+            {showLogs ? "Hide debug log" : "Show debug log"}
+          </button>
         </div>
 
-        <div style={logBoxStyle}>
-          <div style={{ color: "#4a4a5a", marginBottom: "8px" }}>Log:</div>
-          {logs.map((log, i) => (
-            <div key={i}>{log}</div>
-          ))}
-        </div>
+        {showLogs ? (
+          <div className="mt-3 max-h-48 overflow-auto rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-left font-mono text-[10px] leading-5 text-white/55">
+            {logs.map((log, i) => (
+              <div key={i}>{log}</div>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

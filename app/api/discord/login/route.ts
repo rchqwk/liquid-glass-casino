@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     const redirectUri = String(body?.redirectUri ?? "").trim()
       || process.env.DISCORD_REDIRECT_URI
       || process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI
-      || "https://rchqwk-liquid-glass-casino.vercel.app/casino/blackjack/discord";
+      || "https://rchqwk.com/casino/blackjack-v2/discord";
 
     const form = new URLSearchParams();
     form.set("client_id", clientId);
