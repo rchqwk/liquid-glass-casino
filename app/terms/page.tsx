@@ -6,12 +6,12 @@ export default function TermsOfServicePage() {
       <div className="glass glass-shine rounded-3xl p-8">
         <h1 className="text-2xl font-semibold text-white">Terms of Service</h1>
         <p className="mt-3 text-sm leading-6 text-white/70">
-          This is a play‑money service for entertainment. By using the site, you agree to these terms.
+          This is a token‑based arcade for entertainment. By using the site, you agree to these terms.
         </p>
 
         <h2 className="mt-8 text-lg font-semibold text-white">No real money</h2>
         <p className="mt-3 text-sm leading-6 text-white/70">
-          The app does not support real-money gambling. Any balances, chips, or “credits” are simulated and have no cash value.
+          The app is a play‑for‑fun arcade with no real‑money wagering. Any balances, tokens, or “credits” are simulated and have no cash value.
         </p>
 
         <h2 className="mt-8 text-lg font-semibold text-white">Discord Activity</h2>

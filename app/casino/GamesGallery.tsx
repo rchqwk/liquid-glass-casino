@@ -121,7 +121,7 @@ export function GamesGallery({
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70">
-            Total wagered (last 24h):{" "}
+            Total played (last 24h):{" "}
             <span className="ml-2 font-mono font-semibold text-white">{money(totalWagered)} ⓒ</span>
           </div>
 
@@ -133,7 +133,7 @@ export function GamesGallery({
               }`}
               onClick={() => setSortBy("wager")}
             >
-              Sort: Total wagered
+              Sort: Total played
             </button>
             <button
               type="button"
@@ -172,7 +172,7 @@ export function GamesGallery({
                 Bets: <span className="font-mono text-white/80">{c.bets}</span>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                Wagered (24h): <span className="font-mono text-white/80">{money(c.wagerTotal)} ⓒ</span>
+                Played (24h): <span className="font-mono text-white/80">{money(c.wagerTotal)} ⓒ</span>
               </div>
             </div>
           </Link>

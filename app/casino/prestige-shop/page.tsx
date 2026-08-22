@@ -161,7 +161,7 @@ export default function PrestigeShopPage() {
                   15-minute refill amount: <span className="font-mono text-white/85">+{formatChips(currentRefill)}</span> ⓒ
                 </li>
                 <li>
-                  Blackjack prestige bonus: <span className="font-mono text-white/85">+{currentPrestigeBonus}x</span> on Blackjack payouts
+                  Blackjack prestige bonus: <span className="font-mono text-white/85">+{currentPrestigeBonus}x</span> on Blackjack prizes
                 </li>
                 <li>
                   5+ card win prestige bonus: <span className="font-mono text-white/85">+{currentPrestigeBonus}x</span>

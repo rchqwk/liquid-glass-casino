@@ -335,7 +335,7 @@ export default function Slots5x5Page() {
             </p>
           </div>
 
-          <label className="mt-4 block text-xs text-white/60">Wager per spin (ⓒ)</label>
+          <label className="mt-4 block text-xs text-white/60">Tokens per spin (ⓒ)</label>
           <input
             type="number"
             min={0}

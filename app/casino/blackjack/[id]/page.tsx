@@ -2126,7 +2126,7 @@ export function BlackjackTablePageClient({
                           </>
                         ) : (
                       <>
-                        <label className="mt-4 block text-xs text-white/60">Bet amount (ⓒ)</label>
+                        <label className="mt-4 block text-xs text-white/60">Play amount (ⓒ)</label>
                         <input
                           type="number"
                           min={0}

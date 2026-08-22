@@ -52,8 +52,8 @@ export default function LeaderboardPage() {
                   <th className="py-2 pr-4">#</th>
                   <th className="py-2 pr-4">User</th>
                   <th className="py-2 pr-4">Profit</th>
-                  <th className="py-2 pr-4">Wagered</th>
-                  <th className="py-2 pr-4">Bets</th>
+                  <th className="py-2 pr-4">Played</th>
+                  <th className="py-2 pr-4">Rounds</th>
                 </tr>
               </thead>
               <tbody>

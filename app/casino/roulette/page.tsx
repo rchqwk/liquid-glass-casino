@@ -64,7 +64,7 @@ export default function RoulettePage() {
             <ChipSelector value={chip} onChange={setChip} />
             <div className="glass-soft glass-shine rounded-3xl p-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-white">Bet slip</p>
+                <p className="text-sm font-medium text-white">Play slip</p>
                 <p className="text-xs text-white/60">
                   Balance: <span className="font-mono">{formatChips(balance)}</span> ⓒ
                 </p>

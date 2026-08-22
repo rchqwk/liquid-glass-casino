@@ -109,8 +109,8 @@ export function BlackjackTableSeat({
               />
             </span>
             {seat.allIn ? (
-              <span className="nn-badge nn-badge-gold" title="All in">
-                ALL-IN{Number(seat.allInWinStreak ?? 0) > 0 ? ` x${Number(seat.allInWinStreak)}` : ""}
+              <span className="nn-badge nn-badge-gold" title="Max play">
+                MAX PLAY{Number(seat.allInWinStreak ?? 0) > 0 ? ` x${Number(seat.allInWinStreak)}` : ""}
               </span>
             ) : null}
             {seat.bet ? (
@@ -161,7 +161,7 @@ export function BlackjackTableSeat({
             />
             {seat.allIn ? (
               <span className="nn-badge nn-badge-gold ml-2">
-                ALL-IN{Number(seat.allInWinStreak ?? 0) > 0 ? ` x${Number(seat.allInWinStreak)}` : ""}
+                MAX PLAY{Number(seat.allInWinStreak ?? 0) > 0 ? ` x${Number(seat.allInWinStreak)}` : ""}
               </span>
             ) : null}
           </div>

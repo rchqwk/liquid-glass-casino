@@ -6,7 +6,7 @@ export default function PrivacyPolicyPage() {
       <div className="glass glass-shine rounded-3xl p-8">
         <h1 className="text-2xl font-semibold text-white">Privacy Policy</h1>
         <p className="mt-3 text-sm leading-6 text-white/70">
-          This policy explains what data is collected for the play-money service and how it is used.
+          This policy explains what data is collected for the token‑based arcade and how it is used.
         </p>
 
         <h2 className="mt-8 text-lg font-semibold text-white">What we collect</h2>
@@ -15,7 +15,7 @@ export default function PrivacyPolicyPage() {
             Account identifiers used to sign in (e.g. a chosen username, or your Discord user ID/display name when using the
             Discord Activity).
           </li>
-          <li>Gameplay state and tables you join (e.g. blackjack table state, bets, and powerups).</li>
+          <li>Gameplay state and tables you join (e.g. blackjack table state, plays, and powerups).</li>
           <li>Basic usage/security data such as timestamps for last activity (used for presence and anti-abuse).</li>
         </ul>
 

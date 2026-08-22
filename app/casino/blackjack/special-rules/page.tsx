@@ -9,7 +9,7 @@ export default function BlackjackSpecialRulesPage() {
 
       <h2 className="mt-6 text-lg font-semibold text-white">Round flow</h2>
       <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-white/70">
-        <li>Betting phase (timer): place your bet (and optional side bets), or skip.</li>
+        <li>Play phase (timer): set your play (and optional bonus plays), or skip.</li>
         <li>Player turns: players act in order.</li>
         <li>Dealer window: short window where certain dealer-interaction powerups can be used (when available).</li>
       </ul>

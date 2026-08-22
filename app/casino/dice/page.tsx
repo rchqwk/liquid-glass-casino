@@ -40,13 +40,13 @@ export default function DicePage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="glass-soft glass-shine rounded-3xl p-5">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-white">Bet</p>
+            <p className="text-sm font-medium text-white">Play</p>
             <p className="text-xs text-white/60">
               Balance: <span className="font-mono">{formatChips(balance)}</span> ⓒ
             </p>
           </div>
 
-          <label className="mt-4 block text-xs text-white/60">Wager (ⓒ)</label>
+          <label className="mt-4 block text-xs text-white/60">Tokens (ⓒ)</label>
           <input
             type="number"
             min={0}
@@ -80,7 +80,7 @@ export default function DicePage() {
                 {winMultiplier.toFixed(4)}x
               </span>
             </span>
-            <span>House edge: 1%</span>
+            <span>Return: 99%</span>
           </div>
 
           <button
