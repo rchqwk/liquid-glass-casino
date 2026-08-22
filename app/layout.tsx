@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Liquid Glass Casino",
+  title: "Liquid Glass Arcade",
   description:
-    "A play-money casino with a Liquid Glass UI and provably-fair style RNG.",
+    "A token-based arcade with a Liquid Glass UI and provably fair RNG. Play skill games, win tickets, and unlock prizes.",
 };
 
 export default function RootLayout({

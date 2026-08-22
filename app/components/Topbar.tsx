@@ -255,12 +255,12 @@ export function Topbar() {
                   +1 <span className="font-semibold">Prestige Point</span> (you will have {prestigePoints + 1})
                 </li>
                 <li>★{nextPrestigeLevel} badge next to your name</li>
-                <li>+2:1 bonus on Blackjack payouts (prestige bonus)</li>
+                <li>+2:1 bonus on Blackjack prizes (prestige bonus)</li>
                 <li>+2:1 bonus on 5+ card win bonuses (prestige bonus)</li>
               </ul>
               <div className="mt-3 font-semibold text-neon-red">Warning (resets):</div>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-neon-red">
-                <li>Your money (chips) will be reset</li>
+                <li>Your tokens will be reset</li>
                 <li>Your Blackjack powerups / boxes will be reset</li>
               </ul>
             </div>
@@ -313,7 +313,7 @@ export function Topbar() {
             onClick={() => setBarOpen(true)}
             title="Toggle top bar"
           >
-            <div className="text-[11px] text-white/60">Balance</div>
+            <div className="text-[11px] text-white/60">Tokens</div>
             <div className="mt-0.5 font-mono text-sm font-semibold text-neon-cyan">{formatChips(displayBalance)} ⓒ</div>
           </button>
         </div>
@@ -334,7 +334,10 @@ export function Topbar() {
                 </svg>
                 Blackjack
               </Link>
-              <span className="hidden text-xs text-white/55 sm:inline">Play-money tables</span>
+              <Link href="/arcade/blackjack-roguelike" className="nn-btn nn-btn-secondary nn-btn-sm" title="Roguelike Blackjack">
+                Roguelike
+              </Link>
+              <span className="hidden text-xs text-white/55 sm:inline">Token tables</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -372,7 +375,7 @@ export function Topbar() {
                 </>
               ) : null}
               <Link className="hidden nn-btn nn-btn-ghost nn-btn-sm sm:inline" href="/casino/legacy">
-                Legacy Casino
+                Legacy Games
               </Link>
               <Link className="hidden nn-btn nn-btn-ghost nn-btn-sm sm:inline" href="/casino/leaderboard">
                 Leaderboard
@@ -393,7 +396,7 @@ export function Topbar() {
                     onClick={async () => {
                       setMsg(null);
                       if (!canRefill) {
-                        setMsg("Sign in to refill.");
+                        setMsg("Sign in to add tokens.");
                         return;
                       }
                       const res = await deposit(quickRefillAmount, { bypassCooldown: role >= 1, refill100: true });
@@ -404,12 +407,12 @@ export function Topbar() {
                             : res.error,
                         );
                       } else {
-                        setMsg(`Added ${formatChips(quickRefillAmount)} chips.`);
+                        setMsg(`Added ${formatChips(quickRefillAmount)} tokens.`);
                       }
                     }}
                     disabled={!canRefill || (role < 1 && refill100CooldownMs > 0)}
                     type="button"
-                    title={quickRefillEventActive ? "Night event live: +50,000 quick refill every minute from 9pm to midnight GMT." : "Standard quick refill: +100 every minute."}
+                    title={quickRefillEventActive ? "Night event live: +50,000 token top-up every minute from 9pm to midnight GMT." : "Standard quick add: +100 tokens every minute."}
                   >
                     {refill100Label}
                   </button>
@@ -418,7 +421,7 @@ export function Topbar() {
                     onClick={async () => {
                       setMsg(null);
                       if (!canRefill) {
-                        setMsg("Sign in to refill.");
+                        setMsg("Sign in to add tokens.");
                         return;
                       }
                       const res = await deposit(refillAmount, { bypassCooldown: role >= 1, refill5000: true });
@@ -429,21 +432,21 @@ export function Topbar() {
                             : res.error,
                         );
                       } else {
-                        setMsg(`Added ${formatChips(refillAmount)} chips.`);
+                        setMsg(`Added ${formatChips(refillAmount)} tokens.`);
                       }
                     }}
                     disabled={!canRefill || (role < 1 && refillCooldownMs > 0)}
                     type="button"
                     title={
                       role < 1
-                        ? `Standard users: one +${formatChips(refillAmount)} refill every 15 minutes (includes +10000 per prestige level)`
-                        : "Admin: unlimited refills"
+                        ? `Standard users: one +${formatChips(refillAmount)} token top-up every 15 minutes (includes +10000 per prestige level)`
+                        : "Admin: unlimited top-ups"
                     }
                   >
                     {refillLabel}
                   </button>
                   {role >= 1 ? (
-                    <button className="nn-btn nn-btn-ghost nn-btn-sm" onClick={() => void reset()} type="button" title="Reset wallet + RNG seeds">
+                    <button className="nn-btn nn-btn-ghost nn-btn-sm" onClick={() => void reset()} type="button" title="Reset tokens + RNG seeds">
                       Reset
                     </button>
                   ) : null}

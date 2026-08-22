@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useAuth } from "../lib/authClient";
 
 const nav = [
+  { href: "/arcade/blackjack-roguelike", label: "Roguelike Blackjack" },
   { href: "/casino/blackjack-v2", label: "Blackjack" },
-  { href: "/casino/legacy", label: "Legacy Casino" },
+  { href: "/casino/legacy", label: "Legacy Games" },
   { href: "/casino/dice", label: "Dice" },
   { href: "/casino/roulette", label: "Roulette" },
   { href: "/casino/slots", label: "EMOJI Hold and Win" },
@@ -26,7 +27,7 @@ export function Sidebar() {
       <div className="glass glass-shine h-full rounded-3xl p-4">
         <div className="mb-4 rounded-2xl px-3 py-3">
           <p className="text-xs tracking-wide text-white/60">Liquid Glass</p>
-          <p className="text-lg font-semibold text-white">Casino</p>
+          <p className="text-lg font-semibold text-white">Arcade</p>
         </div>
 
         <nav className="flex flex-col gap-1">
@@ -50,9 +51,9 @@ export function Sidebar() {
         </nav>
 
         <div className="mt-6 rounded-2xl border border-white/10 p-3 text-xs text-white/55">
-          <p className="font-medium text-white/70">Play-money only</p>
+          <p className="font-medium text-white/70">Tokens only</p>
           <p className="mt-1 leading-5">
-            Local wallet + RNG demo. No real deposits or payouts.
+            Local tokens + RNG demo. No real money — win tickets and prizes.
           </p>
         </div>
       </div>
