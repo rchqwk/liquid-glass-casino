@@ -8,6 +8,7 @@ import {
   coinsForWin,
   computeHandValue,
   DECK_PRESETS,
+  dealerDraws,
   getJoker,
   handsForRun,
   isBlackjack,
@@ -16,6 +17,7 @@ import {
   loadMeta,
   MetaState,
   newRun,
+  outcomeOf,
   recordDiscoveries,
   recordRunEnd,
   recordRoundWin,
@@ -26,9 +28,10 @@ import {
   ConsumableId,
   Card,
   RunState,
+  HandOutcome,
 } from "./game";
 
-type LastResult = { score: number; value: number; label: string; color: string } | null;
+type LastResult = { score: number; value: number; label: string; color: string; outcome: HandOutcome } | null;
 
 // Balatro-style joker rarity colors.
 function rarityColor(rarity: "common" | "uncommon" | "rare"): string {
@@ -80,27 +83,53 @@ export default function RoguelikeBlackjackPage() {
   const deal = useCallback(() => {
     if (!run || run.phase !== "playing" || run.playing || run.handsRemaining <= 0) return;
     let deck = [...run.deck];
-    if (deck.length < 2) deck = buildDeckForPreset(preset).sort(() => Math.random() - 0.5);
+    if (deck.length < 4) deck = buildDeckForPreset(preset).sort(() => Math.random() - 0.5);
     const hand: Card[] = [deck.shift()!, deck.shift()!];
+    const dealer: Card[] = [deck.shift()!, deck.shift()!];
     setLastResult(null);
-    setRun({ ...run, deck, hand, playing: true, handsRemaining: run.handsRemaining - 1 });
+    setRun({ ...run, deck, hand, dealer, playing: true, handsRemaining: run.handsRemaining - 1 });
   }, [run, preset]);
 
   const finishHand = useCallback(
     (state: RunState, hand: Card[]) => {
-      const result = scoreHand(state, hand);
-      const label = result.blackjack
-        ? "Blackjack!"
-        : result.charlie
-          ? "Five-Card Charlie!"
-          : result.bust
-            ? "Bust"
-            : `Stand · ${result.value}`;
-      const color = result.blackjack ? "#ffd24a" : result.charlie ? "#9b8cff" : result.bust ? "#ff5d8f" : "#4de3c1";
-      setLastResult({ score: result.score, value: result.value, label, color });
+      const playerValue = computeHandValue(hand);
+      const playerBust = playerValue > 21;
 
-      const roundScore = state.roundScore + result.score;
-      const next: RunState = { ...state, roundScore, hand: [], playing: false, handResult: null };
+      let deck = state.deck;
+      let dealer = state.dealer;
+      let dealerValue = computeHandValue(dealer);
+      let dealerBust = dealerValue > 21;
+
+      // The house only plays out when the player hasn't already busted.
+      if (!playerBust) {
+        const res = dealerDraws(deck, dealer);
+        deck = res.deck;
+        dealer = res.hand;
+        dealerValue = computeHandValue(dealer);
+        dealerBust = dealerValue > 21;
+      }
+
+      const outcome = outcomeOf(playerValue, playerBust, dealerValue, dealerBust);
+      const result = scoreHand(state, hand);
+      const points = outcome === "win" ? result.score : 0;
+
+      const label = playerBust
+        ? "Bust — house wins"
+        : outcome === "win"
+          ? result.blackjack
+            ? "Blackjack! You win"
+            : result.charlie
+              ? "Five-Card Charlie! You win"
+              : `You win · ${playerValue} vs ${dealerValue}`
+          : outcome === "push"
+            ? `Push · ${playerValue} vs ${dealerValue}`
+            : `House wins · ${playerValue} vs ${dealerValue}`;
+      const color = playerBust ? "#ff5d8f" : outcome === "win" ? "#ffd24a" : outcome === "push" ? "#9b8cff" : "#ff5d8f";
+
+      setLastResult({ score: points, value: playerValue, label, color, outcome });
+
+      const roundScore = state.roundScore + points;
+      const next: RunState = { ...state, roundScore, deck, dealer, playing: false, handResult: null };
 
       if (roundScore >= state.target) {
         const overkill = roundScore - state.target;
@@ -172,6 +201,7 @@ export default function RoguelikeBlackjackPage() {
       handsRemaining: handsForRun(run),
       redrawsRemaining: redrawsForRun(run),
       hand: [],
+      dealer: [],
       playing: false,
       phase: "playing",
     });
@@ -316,6 +346,32 @@ export default function RoguelikeBlackjackPage() {
           {run.phase === "playing" ? (
             <>
               <div className="bjr-table">
+                {run.dealer.length > 0 ? (
+                  <div className="bjr-dealer">
+                    <div className="bjr-dealer-label">House</div>
+                    <div className="bjr-hand">
+                      {run.dealer.map((card, i) => {
+                        const hidden = run.playing && i === 1;
+                        return (
+                          <div key={card.id} className={`bjr-card${hidden ? " bjr-card-hidden" : ""}`} style={{ color: hidden ? undefined : cardColor(card) }}>
+                            {hidden ? (
+                              <span className="bjr-card-back">✦</span>
+                            ) : (
+                              <>
+                                <span className="bjr-card-rank">{card.rank}</span>
+                                <span className="bjr-card-suit">{card.suit}</span>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {!run.playing && run.dealer.length > 0 ? (
+                      <div className="bjr-dealer-value">House total: {computeHandValue(run.dealer)}</div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {run.hand.length > 0 ? (
                   <>
                     <div className="bjr-hand-value" style={{ color: handValue > 21 ? "#ff5d8f" : blackjackNow ? "#ffd24a" : "#eaf6ff" }}>
@@ -473,6 +529,11 @@ const bjrStyles = `
   .bjr-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,.14) 0%, transparent 42%); pointer-events: none; }
   .bjr-card-rank { font-size: 34px; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
   .bjr-card-suit { font-size: 34px; line-height: 1; filter: drop-shadow(0 0 6px rgba(255,255,255,.22)); }
+  .bjr-dealer { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .bjr-dealer-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.5); }
+  .bjr-dealer-value { font-size: 13px; color: rgba(255,255,255,.7); }
+  .bjr-card-hidden { border-color: rgba(168,85,247,.45) !important; background: repeating-linear-gradient(45deg, #141a2b, #141a2b 6px, #0c1020 6px, #0c1020 12px) !important; }
+  .bjr-card-back { font-size: 30px; color: rgba(168,85,247,.8); }
   .bjr-hand-value { font-size: 20px; font-weight: 700; min-height: 24px; }
   .bjr-empty { color: rgba(255,255,255,.5); font-size: 15px; }
   .bjr-result { font-size: 20px; font-weight: 800; }

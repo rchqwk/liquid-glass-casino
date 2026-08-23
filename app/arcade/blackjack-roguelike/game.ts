@@ -87,6 +87,7 @@ export interface RunState {
   redrawsRemaining: number;
   deck: Card[];
   hand: Card[];
+  dealer: Card[];
   playing: boolean; // whether we are mid-hand (cards dealt, not yet resolved)
   handResult: HandResult | null;
   jokers: JokerId[];
@@ -212,6 +213,28 @@ export function isBlackjack(cards: Card[]): boolean {
 
 export function isCharlie(cards: Card[]): boolean {
   return cards.length >= 5 && computeHandValue(cards) <= 21;
+}
+
+// ── House dealer ────────────────────────────────────────────────────────────
+
+export type HandOutcome = "win" | "lose" | "push";
+
+// Standard house rule: dealer draws until their total is 17 or higher.
+export function dealerDraws(deck: Card[], hand: Card[]): { deck: Card[]; hand: Card[] } {
+  const d = [...deck];
+  const h = [...hand];
+  while (computeHandValue(h) < 17 && d.length > 0) {
+    h.push(d.shift()!);
+  }
+  return { deck: d, hand: h };
+}
+
+export function outcomeOf(playerValue: number, playerBust: boolean, dealerValue: number, dealerBust: boolean): HandOutcome {
+  if (playerBust) return "lose";
+  if (dealerBust) return "win";
+  if (playerValue > dealerValue) return "win";
+  if (playerValue < dealerValue) return "lose";
+  return "push";
 }
 
 // ── Jokers ───────────────────────────────────────────────────────────────────
@@ -429,6 +452,7 @@ export function newRun(preset: string): RunState {
     redrawsRemaining: baseRedrawsPerRound(),
     deck,
     hand: [],
+    dealer: [],
     playing: false,
     handResult: null,
     jokers: [],
