@@ -30,6 +30,13 @@ import {
 
 type LastResult = { score: number; value: number; label: string; color: string } | null;
 
+// Balatro-style joker rarity colors.
+function rarityColor(rarity: "common" | "uncommon" | "rare"): string {
+  if (rarity === "rare") return "rgba(176,124,255,.75)";
+  if (rarity === "uncommon") return "rgba(77,166,255,.6)";
+  return "rgba(255,255,255,.22)";
+}
+
 export default function RoguelikeBlackjackPage() {
   const [meta, setMeta] = useState<MetaState>(() => loadMeta());
   const [run, setRun] = useState<RunState | null>(null);
@@ -258,7 +265,7 @@ export default function RoguelikeBlackjackPage() {
               <div className="bjr-section-title">Discovered jokers</div>
               <div className="bjr-gallery-grid">
                 {JOKERS.map((j) => (
-                  <div key={j.id} className="bjr-gallery-item" style={{ opacity: meta.discoveredJokers.includes(j.id) ? 1 : 0.3 }}>
+                  <div key={j.id} className="bjr-gallery-item" style={{ opacity: meta.discoveredJokers.includes(j.id) ? 1 : 0.3, borderColor: meta.discoveredJokers.includes(j.id) ? rarityColor(j.rarity) : "rgba(255,255,255,.1)" }}>
                     <div className="bjr-gallery-name">{meta.discoveredJokers.includes(j.id) ? j.name : "???"}</div>
                     <div className="bjr-gallery-desc">{meta.discoveredJokers.includes(j.id) ? j.desc : "Not yet discovered"}</div>
                   </div>
@@ -353,7 +360,7 @@ export default function RoguelikeBlackjackPage() {
                 ) : (
                   <div className="bjr-joker-list">
                     {ownedJokers.map((j) => (
-                      <div key={j.id} className="bjr-joker-chip" title={j.desc}>
+                      <div key={j.id} className="bjr-joker-chip" title={j.desc} style={{ borderColor: rarityColor(j.rarity) }}>
                         <b>{j.name}</b>
                         <span className="bjr-muted">{j.desc}</span>
                       </div>
@@ -373,7 +380,7 @@ export default function RoguelikeBlackjackPage() {
                   const j = getJoker(id);
                   const canAfford = run.coins >= j.cost;
                   return (
-                    <button key={id} className="bjr-shop-item" disabled={!canAfford} onClick={() => buyJoker(id)}>
+                    <button key={id} className="bjr-shop-item" disabled={!canAfford} onClick={() => buyJoker(id)} style={{ borderColor: rarityColor(j.rarity) }}>
                       <div className="bjr-shop-name">{j.name}</div>
                       <div className="bjr-shop-desc">{j.desc}</div>
                       <div className="bjr-shop-cost">{j.cost} coins</div>
@@ -423,7 +430,7 @@ export default function RoguelikeBlackjackPage() {
 
 const bjrStyles = `
   .bjr-root {
-    background: radial-gradient(1200px 600px at 50% -10%, rgba(168,85,247,.18), transparent 60%), linear-gradient(#05070f, #070a14);
+    background: radial-gradient(1200px 700px at 50% -10%, rgba(168,85,247,.22), transparent 60%), radial-gradient(900px 500px at 100% 110%, rgba(56,189,248,.14), transparent 60%), linear-gradient(#06060d, #0a0a14);
     color: #eaf6ff;
     overflow-x: hidden;
   }
@@ -432,7 +439,7 @@ const bjrStyles = `
     background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 3px);
     mix-blend-mode: overlay;
   }
-  .bjr-logo { font-size: 34px; font-weight: 800; letter-spacing: .12em; color: #fff; text-shadow: 0 0 24px rgba(168,85,247,.65); }
+  .bjr-logo { font-size: 38px; font-weight: 900; letter-spacing: .14em; color: #fff; text-shadow: 2px 0 0 rgba(255,60,90,.55), -2px 0 0 rgba(60,200,255,.55), 0 0 28px rgba(168,85,247,.7); }
   .bjr-subtitle { margin-top: 4px; color: rgba(255,255,255,.7); font-size: 16px; letter-spacing: .08em; }
   .bjr-muted { color: rgba(255,255,255,.55); font-size: 13px; line-height: 1.6; }
   .bjr-section-title { margin: 18px 0 10px; font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.75); }
@@ -455,16 +462,17 @@ const bjrStyles = `
   .bjr-hud { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 12px; }
   .bjr-hud > div { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 10px; text-align: center; }
   .bjr-hud-label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.5); }
-  .bjr-hud-value { font-size: 22px; font-weight: 800; color: #fff; }
+  .bjr-hud-value { font-size: 26px; font-weight: 900; color: #fff; text-shadow: 0 0 16px rgba(168,85,247,.45); }
   .bjr-accent { color: #4de3c1; }
   .bjr-coin { color: #ffd24a; }
   .bjr-progress-track { height: 14px; border-radius: 999px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.1); overflow: hidden; margin-bottom: 22px; }
   .bjr-progress-fill { height: 100%; background: linear-gradient(90deg, #38bdf8, #a855f7); border-radius: 999px; transition: width .3s ease; }
   .bjr-table { min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; border: 1px solid rgba(255,255,255,.1); border-radius: 22px; background: rgba(255,255,255,.03); padding: 24px; }
   .bjr-hand { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-  .bjr-card { width: 92px; height: 132px; border-radius: 14px; background: linear-gradient(180deg, #0f1420, #0a0e18); border: 1px solid rgba(255,255,255,.16); box-shadow: 0 10px 30px rgba(0,0,0,.5); display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 800; }
-  .bjr-card-rank { font-size: 34px; }
-  .bjr-card-suit { font-size: 34px; line-height: 1; }
+  .bjr-card { width: 94px; height: 136px; border-radius: 16px; background: linear-gradient(160deg, #161d2e 0%, #0a0e18 55%); border: 2px solid rgba(255,255,255,.18); box-shadow: 0 12px 34px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08); display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 900; position: relative; overflow: hidden; }
+  .bjr-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,.14) 0%, transparent 42%); pointer-events: none; }
+  .bjr-card-rank { font-size: 34px; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+  .bjr-card-suit { font-size: 34px; line-height: 1; filter: drop-shadow(0 0 6px rgba(255,255,255,.22)); }
   .bjr-hand-value { font-size: 20px; font-weight: 700; min-height: 24px; }
   .bjr-empty { color: rgba(255,255,255,.5); font-size: 15px; }
   .bjr-result { font-size: 20px; font-weight: 800; }

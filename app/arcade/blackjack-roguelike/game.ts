@@ -53,7 +53,7 @@ export interface JokerDef {
   // Flags that alter round structure (read before/independent of hand scoring).
   extraHands?: number;
   extraRedraws?: number;
-  // Applied during scoring of a finished hand.
+  // Applied during scoring of a finished hand (flat points / simple effects).
   score?: (ctx: ScoreContext, score: number) => number;
   // Applied once when the joker is acquired (deck editing / immediate effects).
   onAcquire?: (deck: Card[]) => Card[];

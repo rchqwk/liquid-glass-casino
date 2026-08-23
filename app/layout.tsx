@@ -48,6 +48,13 @@ export default function RootLayout({
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3256641731859297"
           crossOrigin="anonymous"
         />
+        {/* iOS Safari ignores user-scalable=no, so block multi-touch pinch/gesture zoom in JS. */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){
+          var block = function(e){ if (e.touches && e.touches.length > 1) e.preventDefault(); };
+          document.addEventListener('touchmove', block, { passive: false });
+          document.addEventListener('gesturestart', function(e){ e.preventDefault(); });
+          document.addEventListener('dblclick', function(e){ e.preventDefault(); });
+        })();` }} />
         <style>{`
           html, body, button, a, input, [role="button"] {
             touch-action: manipulation;
