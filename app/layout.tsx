@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
@@ -20,6 +20,16 @@ export const metadata: Metadata = {
     "A token-based arcade with a Liquid Glass UI and provably fair RNG. Play skill games, win tickets, and unlock prizes.",
 };
 
+// Disable pinch-zoom and double-tap-to-zoom on mobile for a fixed, game-like viewport.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  minimumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -38,6 +48,12 @@ export default function RootLayout({
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3256641731859297"
           crossOrigin="anonymous"
         />
+        <style>{`
+          html, body, button, a, input, [role="button"] {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+          }
+        `}</style>
       </head>
       <body className="min-h-full flex flex-col">
         <div className="flex-1">
