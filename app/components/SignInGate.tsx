@@ -10,6 +10,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   const [username, setUsername] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [needsAccount, setNeedsAccount] = useState(false);
   const [discordUrl, setDiscordUrl] = useState<string | null>(null);
   const [discordElapsed, setDiscordElapsed] = useState(0);
 
@@ -182,10 +183,14 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                     disabled={busy}
                     onClick={async () => {
                       setMsg(null);
+                      setNeedsAccount(false);
                       setBusy(true);
                       try {
                         const res = await signIn(username);
-                        if (!res.ok) setMsg(res.error);
+                        if (!res.ok) {
+                          setMsg(res.error);
+                          if (res.requiresAccount) setNeedsAccount(true);
+                        }
                       } finally {
                         setBusy(false);
                       }
@@ -193,6 +198,15 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                   >
                     {busy ? "Signing in…" : "Sign in"}
                   </button>
+
+                  {needsAccount ? (
+                    <a
+                      className="mt-3 inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                      href="/account"
+                    >
+                      Enter password / passcode
+                    </a>
+                  ) : null}
 
                   <p className="mt-3 text-[11px] leading-5 text-white/55">
                     Allowed: letters/numbers/underscore. We’ll normalize spaces to underscores.

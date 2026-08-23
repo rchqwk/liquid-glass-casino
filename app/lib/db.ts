@@ -61,6 +61,8 @@ type Store = {
     last_seen?: number;
     last_signout?: number;
     xp?: number;
+    passcode_hash?: string | null;
+    passcode_salt?: string | null;
   }>;
   sessions: Array<{ token: string; user_id: number; created_at: number }>;
   leaderboard: Array<{
@@ -396,6 +398,8 @@ async function ensureSchema() {
   await sql`ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_salt TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS passcode_hash TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS passcode_salt TEXT`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_attempts INT NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until BIGINT NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`;
@@ -1391,7 +1395,7 @@ export async function getUserAuthRow(username: string) {
   if (sql) {
     await ensureSchema();
     const rows = (await sql`
-      SELECT id, username, role_level, password_hash, password_salt, failed_attempts, locked_until, email, xp,
+      SELECT id, username, role_level, password_hash, password_salt, passcode_hash, passcode_salt, failed_attempts, locked_until, email, xp,
              prestige_level, prestige_points, name_color
       FROM users WHERE username = ${username}
     `) as any[];
@@ -1403,6 +1407,8 @@ export async function getUserAuthRow(username: string) {
       role_level: Number(u.role_level ?? 0),
       password_hash: u.password_hash ? String(u.password_hash) : null,
       password_salt: u.password_salt ? String(u.password_salt) : null,
+      passcode_hash: u.passcode_hash ? String(u.passcode_hash) : null,
+      passcode_salt: u.passcode_salt ? String(u.passcode_salt) : null,
       failed_attempts: Number(u.failed_attempts ?? 0),
       locked_until: Number(u.locked_until ?? 0),
       email: u.email ? String(u.email) : null,
@@ -1421,6 +1427,8 @@ export async function getUserAuthRow(username: string) {
       role_level: u.role_level ?? 0,
       password_hash: (u as any).password_hash ?? null,
       password_salt: (u as any).password_salt ?? null,
+      passcode_hash: u.passcode_hash ?? null,
+      passcode_salt: u.passcode_salt ?? null,
       failed_attempts: Number((u as any).failed_attempts ?? 0),
       locked_until: Number((u as any).locked_until ?? 0),
       email: (u as any).email ?? null,
@@ -1460,10 +1468,122 @@ export async function getUserXp(userId: number) {
   return withStore((s) => Number(s.users.find((x) => x.id === uid)?.xp ?? 0));
 }
 
+// Returns true if the account has any meaningful progress (played games, XP, prestige, wallet activity, or blackjack inventory).
+export async function hasUserProgress(userId: number): Promise<boolean> {
+  const uid = Number(userId);
+  if (!Number.isFinite(uid) || uid <= 0) return false;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const urows = (await sql`SELECT xp, prestige_level, prestige_points FROM users WHERE id = ${uid}`) as any[];
+    const u = urows[0];
+    if (!u) return false;
+    if (Number(u.xp ?? 0) > 0 || Number(u.prestige_level ?? 0) > 0 || Number(u.prestige_points ?? 0) > 0) return true;
+
+    const lrows = (await sql`SELECT bets, wager_total, profit_total FROM leaderboard WHERE user_id = ${uid}`) as any[];
+    const l = lrows[0];
+    if (l && (Number(l.bets ?? 0) > 0 || Number(l.wager_total ?? 0) > 0 || Math.abs(Number(l.profit_total ?? 0)) > 0.0001)) return true;
+
+    const wrows = (await sql`SELECT state_json FROM user_wallets WHERE user_id = ${uid}`) as any[];
+    const w = wrows[0];
+    if (w) {
+      try {
+        const ws = JSON.parse(String(w.state_json ?? "{}"));
+        const history = Array.isArray(ws.history) ? ws.history : [];
+        const openBets = ws.openBets && typeof ws.openBets === "object" ? ws.openBets : {};
+        const balance = Number(ws.balance ?? 0);
+        if (history.length > 0 || Object.keys(openBets).length > 0 || (Number.isFinite(balance) && balance !== 1000)) return true;
+      } catch {
+        // ignore malformed wallet
+      }
+    }
+
+    const irows = (await sql`SELECT inventory_json FROM blackjack_inventories WHERE user_id = ${uid}`) as any[];
+    const i = irows[0];
+    if (i) {
+      try {
+        const inv = JSON.parse(String(i.inventory_json ?? "{}"));
+        if (Number(inv.handsPlayed ?? 0) > 0 || Number(inv.bonusPoints ?? 0) > 0) return true;
+        const cats = inv.categories ?? {};
+        for (const key of Object.keys(cats)) {
+          const c = cats[key] ?? {};
+          for (const id of Object.keys(c)) {
+            if ((c[id] ?? 0) > 0) return true;
+          }
+        }
+      } catch {
+        // ignore malformed inventory
+      }
+    }
+    return false;
+  }
+
+  return withStore((s) => {
+    const u = s.users.find((x) => x.id === uid);
+    if (!u) return false;
+    if (Number(u.xp ?? 0) > 0 || Number(u.prestige_level ?? 0) > 0 || Number(u.prestige_points ?? 0) > 0) return true;
+    const l = s.leaderboard.find((x) => x.user_id === uid);
+    if (l && (Number(l.bets ?? 0) > 0 || Number(l.wager_total ?? 0) > 0 || Math.abs(Number(l.profit_total ?? 0)) > 0.0001)) return true;
+    const w = (s.user_wallets ?? []).find((x) => x.user_id === uid);
+    if (w) {
+      const ws = w.state;
+      const history = Array.isArray(ws?.history) ? ws.history : [];
+      const openBets = ws?.openBets && typeof ws.openBets === "object" ? ws.openBets : {};
+      const balance = Number(ws?.balance ?? 0);
+      if (history.length > 0 || Object.keys(openBets).length > 0 || (Number.isFinite(balance) && balance !== 1000)) return true;
+    }
+    const i = (s.blackjack_inventories ?? []).find((x) => x.user_id === uid);
+    if (i) {
+      const inv = i.inventory ?? {};
+      if (Number(inv.handsPlayed ?? 0) > 0 || Number(inv.bonusPoints ?? 0) > 0) return true;
+      const cats = inv.categories ?? {};
+      for (const key of Object.keys(cats)) {
+        const c = cats[key] ?? {};
+        for (const id of Object.keys(c)) if ((c[id] ?? 0) > 0) return true;
+      }
+    }
+    return false;
+  });
+}
+
+// Sets (or overwrites) a password and/or 6-digit passcode on an existing account.
+export async function setUserCredential(
+  userId: number,
+  fields: { password_hash?: string; password_salt?: string; passcode_hash?: string; passcode_salt?: string },
+): Promise<void> {
+  const uid = Number(userId);
+  if (!Number.isFinite(uid) || uid <= 0) return;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    if (fields.password_hash != null && fields.password_salt != null) {
+      await sql`UPDATE users SET password_hash = ${fields.password_hash}, password_salt = ${fields.password_salt} WHERE id = ${uid}`;
+    }
+    if (fields.passcode_hash != null && fields.passcode_salt != null) {
+      await sql`UPDATE users SET passcode_hash = ${fields.passcode_hash}, passcode_salt = ${fields.passcode_salt} WHERE id = ${uid}`;
+    }
+    return;
+  }
+  return withStore((s) => {
+    const u = s.users.find((x) => x.id === uid);
+    if (!u) return;
+    if (fields.password_hash != null && fields.password_salt != null) {
+      (u as any).password_hash = fields.password_hash;
+      (u as any).password_salt = fields.password_salt;
+    }
+    if (fields.passcode_hash != null && fields.passcode_salt != null) {
+      u.passcode_hash = fields.passcode_hash;
+      u.passcode_salt = fields.passcode_salt;
+    }
+  });
+}
+
 export async function registerUserWithPassword(input: {
   username: string;
-  passwordHash: string;
-  passwordSalt: string;
+  passwordHash: string | null;
+  passwordSalt: string | null;
+  passcodeHash?: string | null;
+  passcodeSalt?: string | null;
   email: string | null;
 }) {
   const now = Date.now();
@@ -1473,8 +1593,8 @@ export async function registerUserWithPassword(input: {
     const existing = (await sql`SELECT id FROM users WHERE username = ${input.username}`) as any[];
     if (existing.length > 0) return null;
     await sql`
-      INSERT INTO users (username, role_level, created_at, password_hash, password_salt, email)
-      VALUES (${input.username}, 0, ${now}, ${input.passwordHash}, ${input.passwordSalt}, ${input.email})
+      INSERT INTO users (username, role_level, created_at, password_hash, password_salt, passcode_hash, passcode_salt, email)
+      VALUES (${input.username}, 0, ${now}, ${input.passwordHash}, ${input.passwordSalt}, ${input.passcodeHash ?? null}, ${input.passcodeSalt ?? null}, ${input.email})
     `;
     const rows = (await sql`
       SELECT id, username, role_level, prestige_level, prestige_points, name_color
@@ -1500,6 +1620,8 @@ export async function registerUserWithPassword(input: {
     const user = { id: s.nextUserId++, username: input.username, role_level: 0, created_at: now } as any;
     user.password_hash = input.passwordHash;
     user.password_salt = input.passwordSalt;
+    user.passcode_hash = input.passcodeHash ?? null;
+    user.passcode_salt = input.passcodeSalt ?? null;
     user.email = input.email;
     user.failed_attempts = 0;
     user.locked_until = 0;

@@ -17,6 +17,14 @@ export function verifyPassword(password: string, hash: string, salt: string): bo
   }
 }
 
+// A 6-digit numeric passcode (iPhone-style) shares the same scrypt hashing as passwords.
+export const hashPasscode = hashPassword;
+export const verifyPasscode = verifyPassword;
+
+export function isValidPasscode(raw: string): boolean {
+  return /^\d{6}$/.test(String(raw ?? ""));
+}
+
 export function generateSessionToken(): string {
   return randomBytes(32).toString("hex");
 }

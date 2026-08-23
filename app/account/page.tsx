@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 
 type UserView = { id: number; username: string; role_level: number; prestige_level: number; prestige_points: number; name_color: string | null; xp?: number };
+type CredType = "password" | "passcode";
 
 export default function AccountPage() {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "claim">("login");
+  const [credType, setCredType] = useState<CredType>("password");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [passcode, setPasscode] = useState("");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [user, setUser] = useState<UserView | null>(null);
@@ -49,18 +52,28 @@ export default function AccountPage() {
     }
   };
 
+  const credentialBody = () => (credType === "passcode" ? { passcode } : { password });
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (mode === "register") {
-      const r = await post("/api/auth/register", { username, password, email });
+      const r = await post("/api/auth/register", { username, email, ...credentialBody() });
       if (r.ok) {
         setUser(r.data.user);
         setError(null);
       } else {
         setError(r.data.error ?? "Registration failed.");
       }
+    } else if (mode === "claim") {
+      const r = await post("/api/auth/claim", { username, email, ...credentialBody() });
+      if (r.ok) {
+        setUser(r.data.user);
+        setError(null);
+      } else {
+        setError(r.data.error ?? "Could not secure account.");
+      }
     } else {
-      const r = await post("/api/auth/login", { username, password });
+      const r = await post("/api/auth/login", { username, ...credentialBody() });
       if (r.ok) {
         setUser(r.data.user);
         setLockedUntil(null);
@@ -102,12 +115,24 @@ export default function AccountPage() {
     setUser(null);
     setUsername("");
     setPassword("");
+    setPasscode("");
     setEmail("");
     setCode("");
     setError(null);
     setLockedUntil(null);
     setCodeSent(false);
     setDevCode(null);
+    setMode("login");
+    setCredType("password");
+  };
+
+  const signOut = async () => {
+    try {
+      await fetch("/api/auth", { method: "DELETE" });
+    } catch {
+      // ignore
+    }
+    reset();
   };
 
   if (user) {
@@ -131,19 +156,20 @@ export default function AccountPage() {
               <div style={statValue}>{user.prestige_points}</div>
             </div>
           </div>
-          <button style={primary} onClick={reset}>Sign out</button>
+          <button style={primary} onClick={signOut}>Sign out</button>
         </div>
       </div>
     );
   }
 
   const locked = lockedUntil != null && lockedUntil > Date.now();
+  const showClaim = mode === "claim";
 
   return (
     <div style={wrap}>
       <div style={card}>
         <div style={logo}>LIQUID GLASS ARCADE</div>
-        <p style={muted}>Create a password account or sign in. After 5 failed attempts your account locks for 4 hours — you can unlock it with an email code.</p>
+        <p style={muted}>Secure your account with a password or a 6-digit passcode. After 5 failed attempts it locks for 4 hours — unlock with an email code.</p>
 
         {locked ? (
           <>
@@ -153,7 +179,7 @@ export default function AccountPage() {
               <button style={primary} onClick={requestCode} disabled={busy}>Send unlock code</button>
             ) : (
               <form onSubmit={verifyCode}>
-                <input style={input} value={code} maxLength={6} placeholder="6-digit code" onChange={(e) => setCode(e.target.value)} />
+                <input style={input} inputMode="numeric" value={code} maxLength={6} placeholder="6-digit code" onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
                 {devCode ? <p style={muted}>Dev code: <b style={{ color: "#ffd24a" }}>{devCode}</b></p> : null}
                 <button style={primary} type="submit" disabled={busy}>Unlock</button>
               </form>
@@ -165,20 +191,41 @@ export default function AccountPage() {
             <div style={{ display: "flex", gap: 8, margin: "16px 0" }}>
               <button style={mode === "login" ? primary : ghost} onClick={() => setMode("login")}>Login</button>
               <button style={mode === "register" ? primary : ghost} onClick={() => setMode("register")}>Register</button>
+              <button style={mode === "claim" ? primary : ghost} onClick={() => setMode("claim")}>Claim account</button>
             </div>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <button style={credType === "password" ? primary : ghost} onClick={() => setCredType("password")}>Password</button>
+              <button style={credType === "passcode" ? primary : ghost} onClick={() => setCredType("passcode")}>6-digit passcode</button>
+            </div>
+
             <form onSubmit={submit}>
               <label style={label}>Username</label>
               <input style={input} value={username} maxLength={24} placeholder="username" onChange={(e) => setUsername(e.target.value)} />
-              <label style={label}>Password</label>
-              <input style={input} type="password" value={password} placeholder="••••••" onChange={(e) => setPassword(e.target.value)} />
-              {mode === "register" ? (
+
+              {credType === "passcode" ? (
+                <>
+                  <label style={label}>Passcode (6 digits)</label>
+                  <input style={{ ...input, letterSpacing: ".4em", fontSize: 20, textAlign: "center" }} inputMode="numeric" maxLength={6} value={passcode} placeholder="••••••" onChange={(e) => setPasscode(e.target.value.replace(/\D/g, ""))} />
+                </>
+              ) : (
+                <>
+                  <label style={label}>Password</label>
+                  <input style={input} type="password" value={password} placeholder="••••••" onChange={(e) => setPassword(e.target.value)} />
+                </>
+              )}
+
+              {mode !== "login" ? (
                 <>
                   <label style={label}>Email (for account recovery)</label>
                   <input style={input} type="email" value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} />
                 </>
               ) : null}
+
+              {showClaim ? <p style={muted}>If your account has progress but no credential yet, set one here to secure it.</p> : null}
+
               <button style={{ ...primary, width: "100%", marginTop: 16 }} type="submit" disabled={busy}>
-                {mode === "login" ? "Sign in" : "Create account"}
+                {mode === "login" ? "Sign in" : mode === "claim" ? "Secure account" : "Create account"}
               </button>
             </form>
           </>

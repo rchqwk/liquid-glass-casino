@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { cookies } from "next/headers";
 import { clearSessionToken, getAuthedUserAsync, setSessionToken } from "../../lib/authServer";
-import { loginUsernameWithToken, normalizeUsername, signOutByToken } from "../../lib/db";
+import { getUserAuthRow, hasUserProgress, loginUsernameWithToken, normalizeUsername, signOutByToken } from "../../lib/db";
 
 function fingerprintFromRequest(req: Request) {
   const ua = req.headers.get("user-agent") ?? "";
@@ -39,6 +39,35 @@ export async function POST(req: Request) {
         { error: "Use only letters, numbers, underscore." },
         { status: 400 },
       );
+    }
+
+    // Progress gate: usernames that have accumulated progress must be protected
+    // by a password or a 6-digit passcode. Otherwise username-only login applies.
+    const existing = await getUserAuthRow(username);
+    if (existing) {
+      const progress = await hasUserProgress(existing.id);
+      if (progress) {
+        const hasPassword = !!(existing.password_hash && existing.password_salt);
+        const hasPasscode = !!(existing.passcode_hash && existing.passcode_salt);
+        if (hasPassword || hasPasscode) {
+          return NextResponse.json(
+            {
+              requiresAuth: true,
+              hasPassword,
+              hasPasscode,
+              error: "Enter your password or passcode to continue.",
+            },
+            { status: 401 },
+          );
+        }
+        return NextResponse.json(
+          {
+            requiresClaim: true,
+            error: "This account has progress but no password or passcode yet. Set one to secure it.",
+          },
+          { status: 403 },
+        );
+      }
     }
 
     // Create session token

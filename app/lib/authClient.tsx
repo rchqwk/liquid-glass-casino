@@ -62,7 +62,7 @@ type AuthContextValue = {
     username: string,
   ) => Promise<
     | { ok: true; inactivePrompt?: boolean }
-    | { ok: false; error: string }
+    | { ok: false; error: string; requiresAccount?: boolean }
   >;
   signOut: () => Promise<void>;
   reportResult: (input: { game: string; profit: number; wager: number; baseWager?: number; balance?: number }) => Promise<void>;
@@ -294,8 +294,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
           const data = (await res.json()) as
             | { user: UserWithRole; inactivePrompt?: boolean; session_token?: string }
-            | { error: string };
-          if (!res.ok) return { ok: false, error: ("error" in data ? data.error : "Sign-in failed") };
+            | { error: string; requiresAuth?: boolean; requiresClaim?: boolean };
+          if (!res.ok) {
+            const requiresAccount = "requiresAuth" in data && data.requiresAuth === true
+              ? true
+              : "requiresClaim" in data && data.requiresClaim === true;
+            return {
+              ok: false,
+              error: "error" in data ? data.error : "Sign-in failed",
+              requiresAccount,
+            };
+          }
           // Persist session token for environments where cookies may be blocked (iOS web).
           if ("session_token" in data && data.session_token) {
             try {
