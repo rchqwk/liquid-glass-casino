@@ -93,6 +93,7 @@ export interface RunState {
   jokers: JokerId[];
   coins: number;
   phase: Phase;
+  difficulty: Difficulty;
   log: string[];
 }
 
@@ -396,8 +397,34 @@ export function getConsumable(id: ConsumableId): ConsumableDef {
 
 // ── Round structure ─────────────────────────────────────────────────────────
 
+export type Difficulty = "easy" | "medium" | "hard";
+
+export interface DifficultyConfig {
+  id: Difficulty;
+  name: string;
+  desc: string;
+  startCoins: number;
+  extraHands: number;
+  extraRedraws: number;
+  targetMult: number;
+}
+
+export const DIFFICULTIES: DifficultyConfig[] = [
+  { id: "easy", name: "Easy", desc: "More hands, lower targets.", startCoins: 7, extraHands: 1, extraRedraws: 1, targetMult: 0.8 },
+  { id: "medium", name: "Medium", desc: "The standard challenge.", startCoins: 5, extraHands: 0, extraRedraws: 0, targetMult: 1 },
+  { id: "hard", name: "Hard", desc: "Higher targets, fewer coins.", startCoins: 4, extraHands: 0, extraRedraws: 0, targetMult: 1.3 },
+];
+
+export function difficultyConfig(d: Difficulty): DifficultyConfig {
+  return DIFFICULTIES.find((x) => x.id === d) ?? DIFFICULTIES[1]!;
+}
+
 export function targetForRound(round: number): number {
   return 25 + (round - 1) * 20;
+}
+
+export function targetForRun(round: number, difficulty: Difficulty): number {
+  return Math.round(targetForRound(round) * difficultyConfig(difficulty).targetMult);
 }
 
 export function baseHandsPerRound(): number {
@@ -410,12 +437,12 @@ export function baseRedrawsPerRound(): number {
 
 export function handsForRun(state: RunState): number {
   const bonus = state.jokers.reduce((sum, id) => sum + (getJoker(id).extraHands ?? 0), 0);
-  return baseHandsPerRound() + bonus;
+  return baseHandsPerRound() + difficultyConfig(state.difficulty).extraHands + bonus;
 }
 
 export function redrawsForRun(state: RunState): number {
   const bonus = state.jokers.reduce((sum, id) => sum + (getJoker(id).extraRedraws ?? 0), 0);
-  return baseRedrawsPerRound() + bonus;
+  return baseRedrawsPerRound() + difficultyConfig(state.difficulty).extraRedraws + bonus;
 }
 
 export function coinsForWin(round: number, overkill: number): number {
@@ -442,22 +469,24 @@ export function scoreHand(state: RunState, hand: Card[]): HandResult {
 
 // ── Run factory / mutations ─────────────────────────────────────────────────
 
-export function newRun(preset: string): RunState {
+export function newRun(preset: string, difficulty: Difficulty = "medium"): RunState {
   const deck = shuffle(buildDeckForPreset(preset));
+  const cfg = difficultyConfig(difficulty);
   const state: RunState = {
     round: 1,
-    target: targetForRound(1),
+    target: targetForRun(1, difficulty),
     roundScore: 0,
-    handsRemaining: baseHandsPerRound(),
-    redrawsRemaining: baseRedrawsPerRound(),
+    handsRemaining: baseHandsPerRound() + cfg.extraHands,
+    redrawsRemaining: baseRedrawsPerRound() + cfg.extraRedraws,
     deck,
     hand: [],
     dealer: [],
     playing: false,
     handResult: null,
     jokers: [],
-    coins: 5,
+    coins: cfg.startCoins,
     phase: "playing",
+    difficulty,
     log: [],
   };
   return state;

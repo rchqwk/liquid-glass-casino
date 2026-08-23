@@ -9,6 +9,8 @@ import {
   computeHandValue,
   DECK_PRESETS,
   dealerDraws,
+  DIFFICULTIES,
+  Difficulty,
   getJoker,
   handsForRun,
   isBlackjack,
@@ -24,7 +26,7 @@ import {
   redrawsForRun,
   saveMeta,
   scoreHand,
-  targetForRound,
+  targetForRun,
   ConsumableId,
   Card,
   RunState,
@@ -44,6 +46,7 @@ export default function RoguelikeBlackjackPage() {
   const [meta, setMeta] = useState<MetaState>(() => loadMeta());
   const [run, setRun] = useState<RunState | null>(null);
   const [preset, setPreset] = useState("standard");
+  const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [menu, setMenu] = useState(true);
   const [lastResult, setLastResult] = useState<LastResult>(null);
   const [shopJokers, setShopJokers] = useState<JokerId[]>([]);
@@ -61,8 +64,8 @@ export default function RoguelikeBlackjackPage() {
   }, []);
 
   const startRun = useCallback(
-    (deckPreset: string) => {
-      setRun(newRun(deckPreset));
+    (deckPreset: string, diff: Difficulty) => {
+      setRun(newRun(deckPreset, diff));
       setMenu(false);
       setLastResult(null);
       setShopJokers([]);
@@ -196,7 +199,7 @@ export default function RoguelikeBlackjackPage() {
     setRun({
       ...run,
       round,
-      target: targetForRound(round),
+      target: targetForRun(round, run.difficulty),
       roundScore: 0,
       handsRemaining: handsForRun(run),
       redrawsRemaining: redrawsForRun(run),
@@ -279,8 +282,22 @@ export default function RoguelikeBlackjackPage() {
             })}
           </div>
 
+          <div className="bjr-section-title">Difficulty</div>
+          <div className="bjr-decks">
+            {DIFFICULTIES.map((d) => (
+              <button
+                key={d.id}
+                className={`bjr-deck ${difficulty === d.id ? "bjr-deck-active" : ""}`}
+                onClick={() => setDifficulty(d.id)}
+              >
+                <div className="bjr-deck-name">{d.name}</div>
+                <div className="bjr-deck-desc">{d.desc}</div>
+              </button>
+            ))}
+          </div>
+
           <div className="bjr-menu-row">
-            <button className="bjr-btn bjr-btn-primary" onClick={() => startRun(preset)}>Start Run</button>
+            <button className="bjr-btn bjr-btn-primary" onClick={() => startRun(preset, difficulty)}>Start Run</button>
             <button className="bjr-btn bjr-btn-ghost" onClick={() => setGalleryOpen((v) => !v)}>Collection</button>
           </div>
 
@@ -318,10 +335,6 @@ export default function RoguelikeBlackjackPage() {
               <div className="bjr-hud-value bjr-accent">{run.target}</div>
             </div>
             <div>
-              <div className="bjr-hud-label">Score</div>
-              <div className="bjr-hud-value bjr-accent">{run.roundScore}</div>
-            </div>
-            <div>
               <div className="bjr-hud-label">Hands</div>
               <div className="bjr-hud-value">{run.handsRemaining}</div>
             </div>
@@ -343,6 +356,11 @@ export default function RoguelikeBlackjackPage() {
             <div className="bjr-progress-fill" style={{ width: `${progress}%` }} />
           </div>
 
+          <div className="bjr-chips-readout" key={run.roundScore}>
+            <div className="bjr-chips-number">{run.roundScore.toLocaleString()}</div>
+            <div className="bjr-chips-label">Chips</div>
+          </div>
+
           {run.phase === "playing" ? (
             <>
               <div className="bjr-table">
@@ -353,7 +371,7 @@ export default function RoguelikeBlackjackPage() {
                       {run.dealer.map((card, i) => {
                         const hidden = run.playing && i === 1;
                         return (
-                          <div key={card.id} className={`bjr-card${hidden ? " bjr-card-hidden" : ""}`} style={{ color: hidden ? undefined : cardColor(card) }}>
+                          <div key={card.id} className={`bjr-card${hidden ? " bjr-card-hidden" : ""}`} style={{ color: hidden ? undefined : cardColor(card), animationDelay: `${i * 60}ms` }}>
                             {hidden ? (
                               <span className="bjr-card-back">✦</span>
                             ) : (
@@ -378,8 +396,8 @@ export default function RoguelikeBlackjackPage() {
                       {run.playing ? (blackjackNow ? "Blackjack!" : handValue) : ""}
                     </div>
                     <div className="bjr-hand">
-                      {run.hand.map((card) => (
-                        <div key={card.id} className="bjr-card" style={{ color: cardColor(card) }}>
+                      {run.hand.map((card, i) => (
+                        <div key={card.id} className="bjr-card" style={{ color: cardColor(card), animationDelay: `${i * 60}ms` }}>
                           <span className="bjr-card-rank">{card.rank}</span>
                           <span className="bjr-card-suit">{card.suit}</span>
                         </div>
@@ -515,17 +533,20 @@ const bjrStyles = `
   .bjr-btn-ghost { background: transparent; color: rgba(255,255,255,.8); border: 1px solid rgba(255,255,255,.15); }
   .bjr-stats { display: flex; gap: 18px; margin-top: 22px; font-size: 13px; color: rgba(255,255,255,.6); flex-wrap: wrap; }
   .bjr-stats b { color: #fff; }
-  .bjr-hud { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 12px; }
+  .bjr-hud { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 12px; }
   .bjr-hud > div { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 10px; text-align: center; }
   .bjr-hud-label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.5); }
   .bjr-hud-value { font-size: 26px; font-weight: 900; color: #fff; text-shadow: 0 0 16px rgba(168,85,247,.45); }
   .bjr-accent { color: #4de3c1; }
   .bjr-coin { color: #ffd24a; }
-  .bjr-progress-track { height: 14px; border-radius: 999px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.1); overflow: hidden; margin-bottom: 22px; }
+  .bjr-progress-track { height: 14px; border-radius: 999px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.1); overflow: hidden; margin-bottom: 10px; }
   .bjr-progress-fill { height: 100%; background: linear-gradient(90deg, #38bdf8, #a855f7); border-radius: 999px; transition: width .3s ease; }
+  .bjr-chips-readout { text-align: center; margin: 4px 0 16px; animation: bjrChipsPop .18s ease; }
+  .bjr-chips-number { font-size: 56px; font-weight: 900; line-height: 1; color: #fff; text-shadow: 0 0 22px rgba(168,85,247,.6), 0 2px 0 rgba(0,0,0,.5); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+  .bjr-chips-label { margin-top: 6px; font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: rgba(255,255,255,.5); }
   .bjr-table { min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; border: 1px solid rgba(255,255,255,.1); border-radius: 22px; background: rgba(255,255,255,.03); padding: 24px; }
   .bjr-hand { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-  .bjr-card { width: 94px; height: 136px; border-radius: 16px; background: linear-gradient(160deg, #161d2e 0%, #0a0e18 55%); border: 2px solid rgba(255,255,255,.18); box-shadow: 0 12px 34px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08); display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 900; position: relative; overflow: hidden; }
+  .bjr-card { width: 94px; height: 136px; border-radius: 16px; background: linear-gradient(160deg, #161d2e 0%, #0a0e18 55%); border: 2px solid rgba(255,255,255,.18); box-shadow: 0 12px 34px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08); display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 900; position: relative; overflow: hidden; animation: bjrDeal .32s cubic-bezier(.2,.7,.3,1) backwards; }
   .bjr-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,.14) 0%, transparent 42%); pointer-events: none; }
   .bjr-card-rank { font-size: 34px; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
   .bjr-card-suit { font-size: 34px; line-height: 1; filter: drop-shadow(0 0 6px rgba(255,255,255,.22)); }
@@ -560,6 +581,8 @@ const bjrStyles = `
   .bjr-gallery-desc { margin-top: 4px; font-size: 11px; color: rgba(255,255,255,.55); }
   .bjr-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 100; background: rgba(10,14,24,.95); border: 1px solid rgba(168,85,247,.4); color: #fff; border-radius: 14px; padding: 12px 18px; font-size: 14px; font-weight: 600; box-shadow: 0 12px 40px rgba(0,0,0,.5); animation: bjrPop .2s ease; }
   @keyframes bjrPop { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  @keyframes bjrDeal { from { opacity: 0; transform: translateY(16px) scale(.92); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  @keyframes bjrChipsPop { from { transform: scale(1.06); } to { transform: scale(1); } }
   @media (max-width: 640px) {
     .bjr-hud { grid-template-columns: repeat(4, 1fr); }
     .bjr-card { width: 72px; height: 104px; }
