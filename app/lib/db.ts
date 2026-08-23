@@ -60,6 +60,7 @@ type Store = {
     active_session_token?: string | null;
     last_seen?: number;
     last_signout?: number;
+    xp?: number;
   }>;
   sessions: Array<{ token: string; user_id: number; created_at: number }>;
   leaderboard: Array<{
@@ -131,6 +132,8 @@ type Store = {
     reviewed_by_username?: string | null;
   }>;
   user_wallets?: Array<{ user_id: number; state: PersistedWalletState; updated_at: number }>;
+  roguelike_rooms?: Array<{ code: string; state: any; created_at: number; updated_at: number }>;
+  email_2fa_codes?: Array<{ user_id: number; code_hash: string; expires_at: number; attempts: number }>;
 };
 
 const STORE_PATH = (() => {
@@ -166,6 +169,8 @@ function defaultStore(): Store {
     discord_mobile_auths: [],
     progress_reset_requests: [],
     user_wallets: [],
+    roguelike_rooms: [],
+    email_2fa_codes: [],
   };
 }
 
@@ -367,6 +372,15 @@ async function ensureSchema() {
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS roguelike_rooms (
+      code TEXT PRIMARY KEY,
+      state_json TEXT NOT NULL,
+      created_at BIGINT NOT NULL,
+      updated_at BIGINT NOT NULL
+    )
+  `;
+
   // Migrations / new columns
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS fingerprint TEXT`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS active_session_token TEXT`;
@@ -380,6 +394,20 @@ async function ensureSchema() {
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_avatar_url TEXT`;
 
   await sql`ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_salt TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_attempts INT NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until BIGINT NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS xp BIGINT NOT NULL DEFAULT 0`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS email_2fa_codes (
+      user_id INT PRIMARY KEY REFERENCES users(id),
+      code_hash TEXT NOT NULL,
+      expires_at BIGINT NOT NULL,
+      attempts INT NOT NULL DEFAULT 0
+    )
+  `;
   schemaReady = true;
 }
 
@@ -1358,6 +1386,252 @@ export async function signOutByToken(token: string) {
   });
 }
 
+export async function getUserAuthRow(username: string) {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      SELECT id, username, role_level, password_hash, password_salt, failed_attempts, locked_until, email, xp,
+             prestige_level, prestige_points, name_color
+      FROM users WHERE username = ${username}
+    `) as any[];
+    const u = rows[0];
+    if (!u) return null;
+    return {
+      id: Number(u.id),
+      username: String(u.username),
+      role_level: Number(u.role_level ?? 0),
+      password_hash: u.password_hash ? String(u.password_hash) : null,
+      password_salt: u.password_salt ? String(u.password_salt) : null,
+      failed_attempts: Number(u.failed_attempts ?? 0),
+      locked_until: Number(u.locked_until ?? 0),
+      email: u.email ? String(u.email) : null,
+      xp: Number(u.xp ?? 0),
+      prestige_level: Number(u.prestige_level ?? 0),
+      prestige_points: Number(u.prestige_points ?? 0),
+      name_color: u.name_color ? String(u.name_color) : null,
+    };
+  }
+  return withStore((s) => {
+    const u = s.users.find((x) => x.username === username);
+    if (!u) return null;
+    return {
+      id: u.id,
+      username: u.username,
+      role_level: u.role_level ?? 0,
+      password_hash: (u as any).password_hash ?? null,
+      password_salt: (u as any).password_salt ?? null,
+      failed_attempts: Number((u as any).failed_attempts ?? 0),
+      locked_until: Number((u as any).locked_until ?? 0),
+      email: (u as any).email ?? null,
+      xp: Number((u as any).xp ?? 0),
+      prestige_level: Number((u as any).prestige_level ?? 0),
+      prestige_points: Number((u as any).prestige_points ?? 0),
+      name_color: (u as any).name_color ?? null,
+    };
+  });
+}
+
+export async function addUserXp(userId: number, amount: number) {
+  const uid = Number(userId);
+  const amt = Math.max(0, Math.floor(Number(amount) || 0));
+  if (!Number.isFinite(uid) || uid <= 0 || amt <= 0) return;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    await sql`UPDATE users SET xp = xp + ${amt} WHERE id = ${uid}`;
+    return;
+  }
+  return withStore((s) => {
+    const u = s.users.find((x) => x.id === uid);
+    if (u) u.xp = Number(u.xp ?? 0) + amt;
+  });
+}
+
+export async function getUserXp(userId: number) {
+  const uid = Number(userId);
+  if (!Number.isFinite(uid) || uid <= 0) return 0;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`SELECT xp FROM users WHERE id = ${uid}`) as any[];
+    return Number(rows[0]?.xp ?? 0);
+  }
+  return withStore((s) => Number(s.users.find((x) => x.id === uid)?.xp ?? 0));
+}
+
+export async function registerUserWithPassword(input: {
+  username: string;
+  passwordHash: string;
+  passwordSalt: string;
+  email: string | null;
+}) {
+  const now = Date.now();
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const existing = (await sql`SELECT id FROM users WHERE username = ${input.username}`) as any[];
+    if (existing.length > 0) return null;
+    await sql`
+      INSERT INTO users (username, role_level, created_at, password_hash, password_salt, email)
+      VALUES (${input.username}, 0, ${now}, ${input.passwordHash}, ${input.passwordSalt}, ${input.email})
+    `;
+    const rows = (await sql`
+      SELECT id, username, role_level, prestige_level, prestige_points, name_color
+      FROM users WHERE username = ${input.username}
+    `) as any[];
+    const u = rows[0];
+    await sql`
+      INSERT INTO leaderboard (user_id, profit_total, wager_total, bets, updated_at, active)
+      VALUES (${u.id}, 0, 0, 0, ${now}, TRUE)
+      ON CONFLICT (user_id) DO NOTHING
+    `;
+    return {
+      id: Number(u.id),
+      username: String(u.username),
+      role_level: Number(u.role_level ?? 0),
+      prestige_level: Number(u.prestige_level ?? 0),
+      prestige_points: Number(u.prestige_points ?? 0),
+      name_color: u.name_color ? String(u.name_color) : null,
+    };
+  }
+  return withStore((s) => {
+    if (s.users.find((x) => x.username === input.username)) return null;
+    const user = { id: s.nextUserId++, username: input.username, role_level: 0, created_at: now } as any;
+    user.password_hash = input.passwordHash;
+    user.password_salt = input.passwordSalt;
+    user.email = input.email;
+    user.failed_attempts = 0;
+    user.locked_until = 0;
+    user.prestige_level = 0;
+    user.prestige_points = 0;
+    user.name_color = null;
+    s.users.push(user);
+    if (!s.leaderboard.find((l) => l.user_id === user.id)) {
+      s.leaderboard.push({ user_id: user.id, profit_total: 0, wager_total: 0, bets: 0, updated_at: now, active: true });
+    }
+    return { id: user.id, username: user.username, role_level: 0, prestige_level: 0, prestige_points: 0, name_color: null };
+  });
+}
+
+export async function recordLoginFailure(
+  username: string,
+  maxAttempts: number,
+  lockoutMs: number,
+): Promise<{ failedAttempts: number; lockedUntil: number }> {
+  const now = Date.now();
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`SELECT id, failed_attempts FROM users WHERE username = ${username}`) as any[];
+    const u = rows[0];
+    if (!u) return { failedAttempts: 1, lockedUntil: 0 };
+    const failed = Number(u.failed_attempts ?? 0) + 1;
+    const lockedUntil = failed >= maxAttempts ? now + lockoutMs : 0;
+    await sql`UPDATE users SET failed_attempts = ${failed}, locked_until = ${lockedUntil} WHERE id = ${u.id}`;
+    return { failedAttempts: failed, lockedUntil };
+  }
+  return withStore((s) => {
+    const u = s.users.find((x) => x.username === username);
+    if (!u) return { failedAttempts: 1, lockedUntil: 0 };
+    const failed = Number((u as any).failed_attempts ?? 0) + 1;
+    const lockedUntil = failed >= maxAttempts ? now + lockoutMs : 0;
+    (u as any).failed_attempts = failed;
+    (u as any).locked_until = lockedUntil;
+    return { failedAttempts: failed, lockedUntil };
+  });
+}
+
+export async function resetLoginFailures(userId: number) {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    await sql`UPDATE users SET failed_attempts = 0, locked_until = 0 WHERE id = ${userId}`;
+    return;
+  }
+  return withStore((s) => {
+    const u = s.users.find((x) => x.id === userId);
+    if (u) {
+      (u as any).failed_attempts = 0;
+      (u as any).locked_until = 0;
+    }
+  });
+}
+
+export async function activatePasswordSession(userId: number, token: string) {
+  const now = Date.now();
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    await sql`INSERT INTO sessions (token, user_id, created_at) VALUES (${token}, ${userId}, ${now})`;
+    await sql`UPDATE users SET active_session_token = ${token}, last_seen = ${now}, last_signout = 0 WHERE id = ${userId}`;
+    return;
+  }
+  return withStore((s) => {
+    s.sessions.push({ token, user_id: userId, created_at: now });
+    const u = s.users.find((x) => x.id === userId);
+    if (u) {
+      (u as any).active_session_token = token;
+      (u as any).last_seen = now;
+      (u as any).last_signout = 0;
+    }
+  });
+}
+
+export async function upsertEmail2faCode(userId: number, codeHash: string, expiresAt: number) {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    await sql`
+      INSERT INTO email_2fa_codes (user_id, code_hash, expires_at, attempts)
+      VALUES (${userId}, ${codeHash}, ${expiresAt}, 0)
+      ON CONFLICT (user_id) DO UPDATE SET
+        code_hash = EXCLUDED.code_hash,
+        expires_at = EXCLUDED.expires_at,
+        attempts = 0
+    `;
+    return;
+  }
+  return withStore((s) => {
+    s.email_2fa_codes = s.email_2fa_codes ?? [];
+    let row = s.email_2fa_codes.find((x) => x.user_id === userId);
+    if (!row) {
+      row = { user_id: userId, code_hash: codeHash, expires_at: expiresAt, attempts: 0 };
+      s.email_2fa_codes.push(row);
+    }
+    row.code_hash = codeHash;
+    row.expires_at = expiresAt;
+    row.attempts = 0;
+  });
+}
+
+export async function getEmail2faCode(userId: number) {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`SELECT code_hash, expires_at, attempts FROM email_2fa_codes WHERE user_id = ${userId}`) as any[];
+    const r = rows[0];
+    if (!r) return null;
+    return { code_hash: String(r.code_hash), expires_at: Number(r.expires_at ?? 0), attempts: Number(r.attempts ?? 0) };
+  }
+  return withStore((s) => {
+    const row = (s.email_2fa_codes ?? []).find((x) => x.user_id === userId);
+    return row ? { code_hash: row.code_hash, expires_at: row.expires_at ?? 0, attempts: row.attempts ?? 0 } : null;
+  });
+}
+
+export async function deleteEmail2faCode(userId: number) {
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    await sql`DELETE FROM email_2fa_codes WHERE user_id = ${userId}`;
+    return;
+  }
+  return withStore((s) => {
+    s.email_2fa_codes = (s.email_2fa_codes ?? []).filter((x) => x.user_id !== userId);
+  });
+}
+
 export async function ensureLeaderboardInactivityCutoff(cutoffMs: number) {
   const sql = getSql();
   if (sql) {
@@ -1722,6 +1996,72 @@ export async function listBlackjackTables() {
         updated_at: t.updated_at,
       })),
   );
+}
+
+export async function upsertRoguelikeRoom(code: string, state: any) {
+  const c = String(code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+  if (!c) return;
+  const now = Date.now();
+  const stateJson = JSON.stringify(state ?? {});
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    await sql`
+      INSERT INTO roguelike_rooms (code, state_json, created_at, updated_at)
+      VALUES (${c}, ${stateJson}, ${now}, ${now})
+      ON CONFLICT (code) DO UPDATE SET
+        state_json = EXCLUDED.state_json,
+        updated_at = EXCLUDED.updated_at
+    `;
+    return;
+  }
+  return withStore((s) => {
+    s.roguelike_rooms = s.roguelike_rooms ?? [];
+    let row = s.roguelike_rooms.find((r) => r.code === c);
+    if (!row) {
+      row = { code: c, state: state ?? {}, created_at: now, updated_at: now };
+      s.roguelike_rooms.push(row);
+    }
+    row.state = state ?? {};
+    row.updated_at = now;
+  });
+}
+
+export async function getRoguelikeRoom(code: string) {
+  const c = String(code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+  if (!c) return null;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`SELECT state_json, created_at, updated_at FROM roguelike_rooms WHERE code = ${c}`) as any[];
+    const r = rows[0];
+    if (!r) return null;
+    let state: any = {};
+    try {
+      state = JSON.parse(String(r.state_json ?? "{}"));
+    } catch {
+      state = {};
+    }
+    return { code: c, state, created_at: Number(r.created_at ?? 0), updated_at: Number(r.updated_at ?? 0) };
+  }
+  return withStore((s) => {
+    const row = (s.roguelike_rooms ?? []).find((r) => r.code === c);
+    return row ? { code: c, state: row.state ?? {}, created_at: row.created_at ?? 0, updated_at: row.updated_at ?? 0 } : null;
+  });
+}
+
+export async function deleteRoguelikeRoom(code: string) {
+  const c = String(code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+  if (!c) return;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    await sql`DELETE FROM roguelike_rooms WHERE code = ${c}`;
+    return;
+  }
+  return withStore((s) => {
+    s.roguelike_rooms = (s.roguelike_rooms ?? []).filter((r) => r.code !== c);
+  });
 }
 
 export async function getLeaderboardRows(limit = 50) {

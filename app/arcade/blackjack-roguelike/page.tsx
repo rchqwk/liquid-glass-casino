@@ -2,38 +2,43 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  buildDeckForPreset,
   cardColor,
   CONSUMABLES,
-  coinsForWin,
-  computeHandValue,
   DECK_PRESETS,
-  dealerDraws,
   DIFFICULTIES,
   Difficulty,
   getJoker,
-  handsForRun,
+  getPowerup,
+  handTotal,
   isBlackjack,
   JOKERS,
   JokerId,
   loadMeta,
   MetaState,
   newRun,
-  outcomeOf,
+  POWERUPS,
+  PowerupId,
+  powerupRarityColor,
   recordDiscoveries,
   recordRunEnd,
   recordRoundWin,
-  redrawsForRun,
   saveMeta,
-  scoreHand,
-  targetForRun,
-  ConsumableId,
-  Card,
   RunState,
-  HandOutcome,
+  deal,
+  hit,
+  stand,
+  doubleDown,
+  split,
+  redraw,
+  startNextRound,
+  buyJoker,
+  buyConsumable,
+  buyPowerup,
+  usePowerup,
 } from "./game";
+import MultiplayerBlackjack from "./multiplayer";
 
-type LastResult = { score: number; value: number; label: string; color: string; outcome: HandOutcome } | null;
+type LastResult = { label: string; color: string; score: number } | null;
 
 // Balatro-style joker rarity colors.
 function rarityColor(rarity: "common" | "uncommon" | "rare"): string {
@@ -48,11 +53,13 @@ export default function RoguelikeBlackjackPage() {
   const [preset, setPreset] = useState("standard");
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [menu, setMenu] = useState(true);
-  const [lastResult, setLastResult] = useState<LastResult>(null);
   const [shopJokers, setShopJokers] = useState<JokerId[]>([]);
-  const [shopConsumables, setShopConsumables] = useState<ConsumableId[]>([]);
+  const [shopConsumables, setShopConsumables] = useState<string[]>([]);
+  const [shopPowerups, setShopPowerups] = useState<PowerupId[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [removeMode, setRemoveMode] = useState(false);
+  const [multiplayer, setMultiplayer] = useState(false);
 
   useEffect(() => {
     saveMeta(meta);
@@ -63,195 +70,198 @@ export default function RoguelikeBlackjackPage() {
     window.setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 2200);
   }, []);
 
+  const openShop = useCallback((state: RunState) => {
+    const owned = new Set(state.jokers);
+    const pool = JOKERS.filter((j) => !owned.has(j.id)).map((j) => j.id);
+    setShopJokers([...pool].sort(() => Math.random() - 0.5).slice(0, 3));
+    setShopConsumables(CONSUMABLES.map((c) => c.id));
+    setShopPowerups([...POWERUPS.map((p) => p.id)].sort(() => Math.random() - 0.5).slice(0, 4));
+  }, []);
+
   const startRun = useCallback(
     (deckPreset: string, diff: Difficulty) => {
       setRun(newRun(deckPreset, diff));
       setMenu(false);
-      setLastResult(null);
       setShopJokers([]);
       setShopConsumables([]);
+      setShopPowerups([]);
+      setRemoveMode(false);
     },
     [],
   );
 
-  const openShop = useCallback((state: RunState) => {
-    const owned = new Set(state.jokers);
-    const pool = JOKERS.filter((j) => !owned.has(j.id)).map((j) => j.id);
-    // Random 3 jokers per shop visit.
-    const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, 3);
-    setShopJokers(shuffled);
-    setShopConsumables(CONSUMABLES.map((c) => c.id));
-  }, []);
-
-  const deal = useCallback(() => {
-    if (!run || run.phase !== "playing" || run.playing || run.handsRemaining <= 0) return;
-    let deck = [...run.deck];
-    if (deck.length < 4) deck = buildDeckForPreset(preset).sort(() => Math.random() - 0.5);
-    const hand: Card[] = [deck.shift()!, deck.shift()!];
-    const dealer: Card[] = [deck.shift()!, deck.shift()!];
-    setLastResult(null);
-    setRun({ ...run, deck, hand, dealer, playing: true, handsRemaining: run.handsRemaining - 1 });
-  }, [run, preset]);
-
-  const finishHand = useCallback(
-    (state: RunState, hand: Card[]) => {
-      const playerValue = computeHandValue(hand);
-      const playerBust = playerValue > 21;
-
-      let deck = state.deck;
-      let dealer = state.dealer;
-      let dealerValue = computeHandValue(dealer);
-      let dealerBust = dealerValue > 21;
-
-      // The house only plays out when the player hasn't already busted.
-      if (!playerBust) {
-        const res = dealerDraws(deck, dealer);
-        deck = res.deck;
-        dealer = res.hand;
-        dealerValue = computeHandValue(dealer);
-        dealerBust = dealerValue > 21;
-      }
-
-      const outcome = outcomeOf(playerValue, playerBust, dealerValue, dealerBust);
-      const result = scoreHand(state, hand);
-      const points = outcome === "win" ? result.score : 0;
-
-      const label = playerBust
-        ? "Bust — house wins"
-        : outcome === "win"
-          ? result.blackjack
-            ? "Blackjack! You win"
-            : result.charlie
-              ? "Five-Card Charlie! You win"
-              : `You win · ${playerValue} vs ${dealerValue}`
-          : outcome === "push"
-            ? `Push · ${playerValue} vs ${dealerValue}`
-            : `House wins · ${playerValue} vs ${dealerValue}`;
-      const color = playerBust ? "#ff5d8f" : outcome === "win" ? "#ffd24a" : outcome === "push" ? "#9b8cff" : "#ff5d8f";
-
-      setLastResult({ score: points, value: playerValue, label, color, outcome });
-
-      const roundScore = state.roundScore + points;
-      const next: RunState = { ...state, roundScore, deck, dealer, playing: false, handResult: null };
-
-      if (roundScore >= state.target) {
-        const overkill = roundScore - state.target;
-        const gained = coinsForWin(state.round, overkill);
-        const final: RunState = { ...next, phase: "shop", coins: next.coins + gained };
-        setRun(final);
-        openShop(final);
-        setMeta(recordRoundWin(recordDiscoveries(final, meta), state.round));
-        flash(`Round ${state.round} cleared! +${gained} coins`);
-        return;
-      }
-
-      if (next.handsRemaining <= 0) {
-        const ended: RunState = { ...next, phase: "gameover" };
-        setRun(ended);
-        setMeta(recordRunEnd(recordDiscoveries(ended, meta), state.round));
-        return;
-      }
-
+  // Handles post-action meta tracking (round win / run end / discoveries).
+  const afterAction = useCallback(
+    (next: RunState) => {
       setRun(next);
+      if (next.phase === "shop") {
+        setMeta((m) => recordRoundWin(recordDiscoveries(next, m), next.round));
+        flash(`Round ${next.round} cleared!`);
+        openShop(next);
+      } else if (next.phase === "gameover") {
+        setMeta((m) => recordRunEnd(recordDiscoveries(next, m), next.round));
+      } else {
+        setMeta((m) => recordDiscoveries(next, m));
+      }
     },
-    [meta, openShop, flash],
+    [flash, openShop],
   );
 
-  const hit = useCallback(() => {
-    if (!run || !run.playing || run.phase !== "playing") return;
-    let deck = [...run.deck];
-    if (deck.length === 0) deck = buildDeckForPreset(preset).sort(() => Math.random() - 0.5);
-    const card = deck.shift()!;
-    const hand = [...run.hand, card];
-    const value = computeHandValue(hand);
-
-    if (value > 21) {
-      if (run.jokers.includes("soft_touch")) {
-        const saved = hand.slice(0, -1);
-        flash("Soft Touch saved the bust!");
-        finishHand({ ...run, deck, hand: saved }, saved);
-        return;
-      }
-      finishHand({ ...run, deck, hand }, hand);
-      return;
-    }
-    setRun({ ...run, deck, hand });
-  }, [run, preset, finishHand, flash]);
-
-  const stand = useCallback(() => {
-    if (!run || !run.playing || run.phase !== "playing") return;
-    finishHand(run, run.hand);
-  }, [run, finishHand]);
-
-  const mulligan = useCallback(() => {
-    if (!run || !run.playing || run.redrawsRemaining <= 0) return;
-    let deck = [...run.deck];
-    if (deck.length < 2) deck = buildDeckForPreset(preset).sort(() => Math.random() - 0.5);
-    const hand: Card[] = [deck.shift()!, deck.shift()!];
-    setLastResult(null);
-    flash("Hand redrawn.");
-    setRun({ ...run, deck, hand, redrawsRemaining: run.redrawsRemaining - 1 });
-  }, [run, preset, flash]);
-
-  const startNextRound = useCallback(() => {
-    if (!run || run.phase !== "shop") return;
-    const round = run.round + 1;
-    setRun({
-      ...run,
-      round,
-      target: targetForRun(round, run.difficulty),
-      roundScore: 0,
-      handsRemaining: handsForRun(run),
-      redrawsRemaining: redrawsForRun(run),
-      hand: [],
-      dealer: [],
-      playing: false,
-      phase: "playing",
-    });
-    setLastResult(null);
+  const doDeal = useCallback(() => {
+    if (!run) return;
+    setRun(deal(run));
+    setRemoveMode(false);
   }, [run]);
 
-  const buyJoker = useCallback(
+  const doHit = useCallback(() => {
+    if (!run) return;
+    afterAction(hit(run));
+  }, [run, afterAction]);
+
+  const doStand = useCallback(() => {
+    if (!run) return;
+    afterAction(stand(run));
+  }, [run, afterAction]);
+
+  const doDoubleDown = useCallback(() => {
+    if (!run) return;
+    afterAction(doubleDown(run));
+  }, [run, afterAction]);
+
+  const doSplit = useCallback(() => {
+    if (!run) return;
+    setRun(split(run));
+  }, [run]);
+
+  const doRedraw = useCallback(() => {
+    if (!run) return;
+    setRun(redraw(run));
+    flash("Hand redrawn.");
+  }, [run, flash]);
+
+  const doStartNextRound = useCallback(() => {
+    if (!run || run.phase !== "shop") return;
+    setRun(startNextRound(run));
+    setShopJokers([]);
+    setShopConsumables([]);
+    setShopPowerups([]);
+  }, [run]);
+
+  const doBuyJoker = useCallback(
     (id: JokerId) => {
       if (!run) return;
       const def = getJoker(id);
       if (run.coins < def.cost || run.jokers.includes(id)) return;
-      let deck = run.deck;
-      if (def.onAcquire) {
-        deck = def.onAcquire(deck);
-        if (def.onAcquireMessage) flash(def.onAcquireMessage);
-      }
-      const next = { ...run, coins: run.coins - def.cost, jokers: [...run.jokers, id], deck };
+      const next = buyJoker(run, id);
       setRun(next);
-      setMeta(recordDiscoveries(next, meta));
+      setMeta((m) => recordDiscoveries(next, m));
+      if (def.onAcquireMessage) flash(def.onAcquireMessage);
       flash(`Bought ${def.name}`);
     },
-    [run, meta, flash],
+    [run, flash],
   );
 
-  const buyConsumable = useCallback(
-    (id: ConsumableId) => {
+  const doBuyConsumable = useCallback(
+    (id: string) => {
       if (!run) return;
-      const def = CONSUMABLES.find((c) => c.id === id)!;
-      if (run.coins < def.cost) return;
-      const { deck, message } = def.apply(run.deck);
-      flash(message);
-      setRun({ ...run, coins: run.coins - def.cost, deck });
+      const def = CONSUMABLES.find((c) => c.id === id);
+      if (!def || run.coins < def.cost) return;
+      const next = buyConsumable(run, def.id);
+      setRun(next);
+      flash("Deck updated.");
     },
     [run, flash],
+  );
+
+  const doBuyPowerup = useCallback(
+    (id: PowerupId) => {
+      if (!run) return;
+      const def = getPowerup(id);
+      if (run.coins < def.cost) return;
+      const next = buyPowerup(run, id);
+      setRun(next);
+      setMeta((m) => recordDiscoveries(next, m));
+      flash(`Bought ${def.name}`);
+    },
+    [run, flash],
+  );
+
+  const usePw = useCallback(
+    (id: PowerupId, cardIndex?: number) => {
+      if (!run) return;
+      if (id === "remove_card_self" && cardIndex == null) {
+        setRemoveMode(true);
+        flash("Click a card in your hand to remove it.");
+        return;
+      }
+      const res = usePowerup(run, id, { cardIndex });
+      if ("error" in res) {
+        flash(res.error);
+        return;
+      }
+      setRun(res.state);
+      setRemoveMode(false);
+      flash(res.message);
+    },
+    [run, flash],
+  );
+
+  const onCardClick = useCallback(
+    (i: number) => {
+      if (removeMode) usePw("remove_card_self", i);
+    },
+    [removeMode, usePw],
   );
 
   const restart = useCallback(() => {
     setRun(null);
     setMenu(true);
-    setLastResult(null);
+    setRemoveMode(false);
   }, []);
 
   const progress = run ? Math.min(100, Math.round((run.roundScore / run.target) * 100)) : 0;
-
   const ownedJokers = useMemo(() => (run ? run.jokers.map(getJoker) : []), [run]);
-  const handValue = run && run.hand.length > 0 ? computeHandValue(run.hand) : 0;
-  const blackjackNow = run && run.playing && run.hand.length === 2 && isBlackjack(run.hand);
+
+  const handValue = run && run.hand.length > 0 ? handTotal(run.hand, run.handBonus) : 0;
+  const blackjackNow = run && run.playing && run.hand.length === 2 && run.handBonus === 0 && isBlackjack(run.hand);
+  const canDoubleDown = !!run && run.playing && run.hand.length === 2 && run.coins >= 2;
+  const canSplit =
+    !!run &&
+    run.playing &&
+    run.hand.length === 2 &&
+    !run.splitHand &&
+    run.coins >= 2 &&
+    (run.freeSplit || run.hand[0]!.rank === run.hand[1]!.rank);
+
+  const ownedPowerups = useMemo(() => {
+    if (!run) return [];
+    return (Object.keys(run.powerups) as PowerupId[]).filter((id) => (run.powerups[id] ?? 0) > 0).map((id) => ({ def: getPowerup(id), count: run.powerups[id] ?? 0 }));
+  }, [run]);
+
+  const lastResult: LastResult = useMemo(() => {
+    if (!run || run.lastOutcome == null || !run.handResult) return null;
+    const r = run.handResult;
+    const o = run.lastOutcome;
+    const label = r.bust
+      ? "Bust — house wins"
+      : o === "win"
+        ? r.blackjack
+          ? "Blackjack! You win"
+          : r.charlie
+            ? "Five-Card Charlie! You win"
+            : `You win · ${r.value} vs ${run.lastDealerTotal}`
+        : o === "push"
+          ? `Push · ${r.value} vs ${run.lastDealerTotal}`
+          : `House wins · ${r.value} vs ${run.lastDealerTotal}`;
+    const color = r.bust ? "#ff5d8f" : o === "win" ? "#ffd24a" : o === "push" ? "#9b8cff" : "#ff5d8f";
+    return { label, color, score: o === "win" ? r.score : 0 };
+  }, [run]);
+
+  const showHouseTotal = !!run && run.dealerDone && run.dealer.length > 0;
+
+  if (multiplayer) {
+    return <MultiplayerBlackjack onBack={() => setMultiplayer(false)} />;
+  }
 
   return (
     <div className="bjr-root" style={{ minHeight: "100dvh", width: "100%", padding: 24, fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -261,7 +271,7 @@ export default function RoguelikeBlackjackPage() {
         <div className="bjr-menu">
           <div className="bjr-logo">LIQUID GLASS ARCADE</div>
           <div className="bjr-subtitle">Roguelike Blackjack</div>
-          <p className="bjr-muted">Beat the round target by playing blackjack hands. Spend your winnings on jokers and deck edits. Go as far as you can.</p>
+          <p className="bjr-muted">Beat the round target by playing blackjack hands. Spend your winnings on jokers, deck edits and powerups. Go as far as you can.</p>
 
           <div className="bjr-section-title">Choose your deck</div>
           <div className="bjr-decks">
@@ -285,11 +295,7 @@ export default function RoguelikeBlackjackPage() {
           <div className="bjr-section-title">Difficulty</div>
           <div className="bjr-decks">
             {DIFFICULTIES.map((d) => (
-              <button
-                key={d.id}
-                className={`bjr-deck ${difficulty === d.id ? "bjr-deck-active" : ""}`}
-                onClick={() => setDifficulty(d.id)}
-              >
+              <button key={d.id} className={`bjr-deck ${difficulty === d.id ? "bjr-deck-active" : ""}`} onClick={() => setDifficulty(d.id)}>
                 <div className="bjr-deck-name">{d.name}</div>
                 <div className="bjr-deck-desc">{d.desc}</div>
               </button>
@@ -298,6 +304,7 @@ export default function RoguelikeBlackjackPage() {
 
           <div className="bjr-menu-row">
             <button className="bjr-btn bjr-btn-primary" onClick={() => startRun(preset, difficulty)}>Start Run</button>
+            <button className="bjr-btn bjr-btn-secondary" onClick={() => setMultiplayer(true)}>Multiplayer</button>
             <button className="bjr-btn bjr-btn-ghost" onClick={() => setGalleryOpen((v) => !v)}>Collection</button>
           </div>
 
@@ -315,6 +322,15 @@ export default function RoguelikeBlackjackPage() {
                   <div key={j.id} className="bjr-gallery-item" style={{ opacity: meta.discoveredJokers.includes(j.id) ? 1 : 0.3, borderColor: meta.discoveredJokers.includes(j.id) ? rarityColor(j.rarity) : "rgba(255,255,255,.1)" }}>
                     <div className="bjr-gallery-name">{meta.discoveredJokers.includes(j.id) ? j.name : "???"}</div>
                     <div className="bjr-gallery-desc">{meta.discoveredJokers.includes(j.id) ? j.desc : "Not yet discovered"}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="bjr-section-title">Discovered powerups</div>
+              <div className="bjr-gallery-grid">
+                {POWERUPS.map((p) => (
+                  <div key={p.id} className="bjr-gallery-item" style={{ opacity: meta.discoveredPowerups.includes(p.id) ? 1 : 0.3, borderColor: meta.discoveredPowerups.includes(p.id) ? powerupRarityColor(p.rarity) : "rgba(255,255,255,.1)" }}>
+                    <div className="bjr-gallery-name">{meta.discoveredPowerups.includes(p.id) ? p.name : "???"}</div>
+                    <div className="bjr-gallery-desc">{meta.discoveredPowerups.includes(p.id) ? p.desc : "Not yet discovered"}</div>
                   </div>
                 ))}
               </div>
@@ -369,7 +385,7 @@ export default function RoguelikeBlackjackPage() {
                     <div className="bjr-dealer-label">House</div>
                     <div className="bjr-hand">
                       {run.dealer.map((card, i) => {
-                        const hidden = run.playing && i === 1;
+                        const hidden = run.playing && i === 1 && !run.dealerDone;
                         return (
                           <div key={card.id} className={`bjr-card${hidden ? " bjr-card-hidden" : ""}`} style={{ color: hidden ? undefined : cardColor(card), animationDelay: `${i * 60}ms` }}>
                             {hidden ? (
@@ -384,25 +400,39 @@ export default function RoguelikeBlackjackPage() {
                         );
                       })}
                     </div>
-                    {!run.playing && run.dealer.length > 0 ? (
-                      <div className="bjr-dealer-value">House total: {computeHandValue(run.dealer)}</div>
-                    ) : null}
+                    {showHouseTotal ? <div className="bjr-dealer-value">House total: {run.lastDealerTotal}</div> : null}
                   </div>
+                ) : null}
+
+                {run.splitHand ? (
+                  <div className="bjr-split-banner">{run.splitActive ? "Playing hand 2 of 2" : "Playing hand 1 of 2"}</div>
+                ) : null}
+
+                {run.stake > 0 ? <div className="bjr-stake-banner">Wager: {run.stake} coins</div> : null}
+
+                {run.peekCard ? (
+                  <div className="bjr-peek">Next card: {run.peekCard.rank}{run.peekCard.suit}</div>
                 ) : null}
 
                 {run.hand.length > 0 ? (
                   <>
                     <div className="bjr-hand-value" style={{ color: handValue > 21 ? "#ff5d8f" : blackjackNow ? "#ffd24a" : "#eaf6ff" }}>
-                      {run.playing ? (blackjackNow ? "Blackjack!" : handValue) : ""}
+                      {run.playing ? (blackjackNow ? "Blackjack!" : handValue + (run.handBonus !== 0 ? ` (${run.handBonus >= 0 ? "+" : ""}${run.handBonus})` : "")) : ""}
                     </div>
                     <div className="bjr-hand">
                       {run.hand.map((card, i) => (
-                        <div key={card.id} className="bjr-card" style={{ color: cardColor(card), animationDelay: `${i * 60}ms` }}>
+                        <div
+                          key={card.id}
+                          className={`bjr-card${removeMode ? " bjr-card-removable" : ""}`}
+                          style={{ color: cardColor(card), animationDelay: `${i * 60}ms` }}
+                          onClick={() => onCardClick(i)}
+                        >
                           <span className="bjr-card-rank">{card.rank}</span>
                           <span className="bjr-card-suit">{card.suit}</span>
                         </div>
                       ))}
                     </div>
+                    {removeMode ? <div className="bjr-remove-hint">Tap a card to remove it</div> : null}
                   </>
                 ) : (
                   <div className="bjr-empty">Press Deal to draw your hand</div>
@@ -410,22 +440,49 @@ export default function RoguelikeBlackjackPage() {
 
                 {lastResult ? (
                   <div className="bjr-result" style={{ color: lastResult.color }}>
-                    {lastResult.label} · +{lastResult.score}
+                    {lastResult.label}
+                    {lastResult.score > 0 ? ` · +${lastResult.score}` : ""}
                   </div>
                 ) : null}
 
                 <div className="bjr-actions">
                   {!run.playing ? (
-                    <button className="bjr-btn bjr-btn-primary" disabled={run.handsRemaining <= 0} onClick={deal}>Deal</button>
+                    <button className="bjr-btn bjr-btn-primary" disabled={run.handsRemaining <= 0} onClick={doDeal}>Deal</button>
                   ) : (
                     <>
-                      <button className="bjr-btn bjr-btn-primary" onClick={hit}>Hit</button>
-                      <button className="bjr-btn bjr-btn-secondary" onClick={stand}>Stand</button>
-                      <button className="bjr-btn bjr-btn-ghost" disabled={run.redrawsRemaining <= 0} onClick={mulligan}>Redraw ({run.redrawsRemaining})</button>
+                      <button className="bjr-btn bjr-btn-primary" onClick={doHit}>Hit</button>
+                      <button className="bjr-btn bjr-btn-secondary" onClick={doStand}>Stand</button>
+                      {canDoubleDown ? (
+                        <button className="bjr-btn bjr-btn-doubledown" onClick={doDoubleDown}>Double Down</button>
+                      ) : null}
+                      {canSplit ? (
+                        <button className="bjr-btn bjr-btn-split" onClick={doSplit}>Split</button>
+                      ) : null}
+                      <button className="bjr-btn bjr-btn-ghost" disabled={run.redrawsRemaining <= 0} onClick={doRedraw}>Redraw ({run.redrawsRemaining})</button>
                     </>
                   )}
                 </div>
               </div>
+
+              {ownedPowerups.length > 0 ? (
+                <div className="bjr-powerups">
+                  <div className="bjr-section-title">Powerups</div>
+                  <div className="bjr-powerup-list">
+                    {ownedPowerups.map(({ def, count }) => (
+                      <button
+                        key={def.id}
+                        className="bjr-powerup-chip"
+                        title={def.desc}
+                        style={{ borderColor: powerupRarityColor(def.rarity) }}
+                        onClick={() => usePw(def.id)}
+                      >
+                        <b>{def.name}</b>
+                        <span className="bjr-powerup-count">×{count}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="bjr-jokers">
                 <div className="bjr-section-title">Jokers ({ownedJokers.length})</div>
@@ -452,9 +509,8 @@ export default function RoguelikeBlackjackPage() {
               <div className="bjr-shop-grid">
                 {shopJokers.map((id) => {
                   const j = getJoker(id);
-                  const canAfford = run.coins >= j.cost;
                   return (
-                    <button key={id} className="bjr-shop-item" disabled={!canAfford} onClick={() => buyJoker(id)} style={{ borderColor: rarityColor(j.rarity) }}>
+                    <button key={id} className="bjr-shop-item" disabled={run.coins < j.cost} onClick={() => doBuyJoker(id)} style={{ borderColor: rarityColor(j.rarity) }}>
                       <div className="bjr-shop-name">{j.name}</div>
                       <div className="bjr-shop-desc">{j.desc}</div>
                       <div className="bjr-shop-cost">{j.cost} coins</div>
@@ -468,9 +524,8 @@ export default function RoguelikeBlackjackPage() {
               <div className="bjr-shop-grid">
                 {shopConsumables.map((id) => {
                   const c = CONSUMABLES.find((x) => x.id === id)!;
-                  const canAfford = run.coins >= c.cost;
                   return (
-                    <button key={id} className="bjr-shop-item" disabled={!canAfford} onClick={() => buyConsumable(id)}>
+                    <button key={id} className="bjr-shop-item" disabled={run.coins < c.cost} onClick={() => doBuyConsumable(id)}>
                       <div className="bjr-shop-name">{c.name}</div>
                       <div className="bjr-shop-desc">{c.desc}</div>
                       <div className="bjr-shop-cost">{c.cost} coins</div>
@@ -479,8 +534,22 @@ export default function RoguelikeBlackjackPage() {
                 })}
               </div>
 
+              <div className="bjr-section-title">Powerups</div>
+              <div className="bjr-shop-grid">
+                {shopPowerups.map((id) => {
+                  const p = getPowerup(id);
+                  return (
+                    <button key={id} className="bjr-shop-item" disabled={run.coins < p.cost} onClick={() => doBuyPowerup(id)} style={{ borderColor: powerupRarityColor(p.rarity) }}>
+                      <div className="bjr-shop-name">{p.name}</div>
+                      <div className="bjr-shop-desc">{p.desc}</div>
+                      <div className="bjr-shop-cost">{p.cost} coins</div>
+                    </button>
+                  );
+                })}
+              </div>
+
               <div className="bjr-actions">
-                <button className="bjr-btn bjr-btn-primary" onClick={startNextRound}>Start Round {run.round + 1}</button>
+                <button className="bjr-btn bjr-btn-primary" onClick={doStartNextRound}>Start Round {run.round + 1}</button>
               </div>
             </div>
           ) : (
@@ -531,6 +600,8 @@ const bjrStyles = `
   .bjr-btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
   .bjr-btn-secondary { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.15); }
   .bjr-btn-ghost { background: transparent; color: rgba(255,255,255,.8); border: 1px solid rgba(255,255,255,.15); }
+  .bjr-btn-doubledown { background: linear-gradient(90deg, #ffd24a, #ff9d4a); color: #2a1605; box-shadow: 0 6px 22px rgba(255,158,58,.35); }
+  .bjr-btn-split { background: linear-gradient(90deg, #4de3c1, #38bdf8); color: #03231a; box-shadow: 0 6px 22px rgba(56,189,248,.35); }
   .bjr-stats { display: flex; gap: 18px; margin-top: 22px; font-size: 13px; color: rgba(255,255,255,.6); flex-wrap: wrap; }
   .bjr-stats b { color: #fff; }
   .bjr-hud { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 12px; }
@@ -550,6 +621,8 @@ const bjrStyles = `
   .bjr-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,.14) 0%, transparent 42%); pointer-events: none; }
   .bjr-card-rank { font-size: 34px; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
   .bjr-card-suit { font-size: 34px; line-height: 1; filter: drop-shadow(0 0 6px rgba(255,255,255,.22)); }
+  .bjr-card-removable { cursor: pointer; border-color: rgba(255,93,143,.7) !important; box-shadow: 0 0 0 2px rgba(255,93,143,.4), 0 12px 34px rgba(0,0,0,.55); }
+  .bjr-card-removable:hover { transform: translateY(-4px); }
   .bjr-dealer { display: flex; flex-direction: column; align-items: center; gap: 8px; }
   .bjr-dealer-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.5); }
   .bjr-dealer-value { font-size: 13px; color: rgba(255,255,255,.7); }
@@ -559,6 +632,15 @@ const bjrStyles = `
   .bjr-empty { color: rgba(255,255,255,.5); font-size: 15px; }
   .bjr-result { font-size: 20px; font-weight: 800; }
   .bjr-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+  .bjr-split-banner { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #4de3c1; }
+  .bjr-stake-banner { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #ffd24a; }
+  .bjr-peek { font-size: 13px; color: #9b8cff; }
+  .bjr-remove-hint { font-size: 12px; color: #ff5d8f; }
+  .bjr-powerups { margin-top: 22px; }
+  .bjr-powerup-list { display: flex; gap: 10px; flex-wrap: wrap; }
+  .bjr-powerup-chip { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.18); border-radius: 14px; padding: 10px 14px; font-size: 13px; color: #fff; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: .15s; }
+  .bjr-powerup-chip:hover { background: rgba(255,255,255,.1); transform: translateY(-1px); }
+  .bjr-powerup-count { font-weight: 900; color: #ffd24a; }
   .bjr-jokers { margin-top: 22px; }
   .bjr-joker-list { display: flex; gap: 10px; flex-wrap: wrap; }
   .bjr-joker-chip { background: rgba(168,85,247,.12); border: 1px solid rgba(168,85,247,.35); border-radius: 14px; padding: 10px 14px; font-size: 13px; max-width: 240px; }

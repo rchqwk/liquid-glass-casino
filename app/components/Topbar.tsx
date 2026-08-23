@@ -388,6 +388,9 @@ export function Topbar() {
                   <Link className="nn-btn nn-btn-ghost nn-btn-sm" href="/casino/prestige-shop">
                     Prestige Shop
                   </Link>
+                  <Link className="nn-btn nn-btn-ghost nn-btn-sm" href="/account">
+                    Account
+                  </Link>
                   <Link className="nn-btn nn-btn-secondary nn-btn-sm" href="/casino/profile">
                     {loading ? "…" : user ? `@${user.username}` : "Sign in"}
                   </Link>
