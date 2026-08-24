@@ -224,10 +224,11 @@ export default function RoguelikeBlackjackPage() {
 
   const handValue = run && run.hand.length > 0 ? handTotal(run.hand, run.handBonus) : 0;
   const blackjackNow = run && run.playing && run.hand.length === 2 && run.handBonus === 0 && isBlackjack(run.hand);
-  const canDoubleDown = !!run && run.playing && run.hand.length === 2 && run.coins >= 2;
+  const canDoubleDown = !!run && run.playing && !run.pendingBust && run.hand.length === 2 && run.coins > 0;
   const canSplit =
     !!run &&
     run.playing &&
+    !run.pendingBust &&
     run.hand.length === 2 &&
     !run.splitHand &&
     run.coins >= 2 &&
@@ -410,6 +411,10 @@ export default function RoguelikeBlackjackPage() {
 
                 {run.stake > 0 ? <div className="bjr-stake-banner">Wager: {run.stake} coins</div> : null}
 
+                {run.pendingBust ? (
+                  <div className="bjr-bust-banner">Busted! Use a save powerup below — or accept the loss.</div>
+                ) : null}
+
                 {run.peekCard ? (
                   <div className="bjr-peek">Next card: {run.peekCard.rank}{run.peekCard.suit}</div>
                 ) : null}
@@ -448,6 +453,8 @@ export default function RoguelikeBlackjackPage() {
                 <div className="bjr-actions">
                   {!run.playing ? (
                     <button className="bjr-btn bjr-btn-primary" disabled={run.handsRemaining <= 0} onClick={doDeal}>Deal</button>
+                  ) : run.pendingBust ? (
+                    <button className="bjr-btn bjr-btn-danger" onClick={doStand}>Accept loss</button>
                   ) : (
                     <>
                       <button className="bjr-btn bjr-btn-primary" onClick={doHit}>Hit</button>
@@ -634,6 +641,8 @@ const bjrStyles = `
   .bjr-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
   .bjr-split-banner { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #4de3c1; }
   .bjr-stake-banner { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #ffd24a; }
+  .bjr-bust-banner { font-size: 14px; font-weight: 700; color: #ff5d8f; background: rgba(255,93,143,.1); border: 1px solid rgba(255,93,143,.45); border-radius: 12px; padding: 10px 16px; text-align: center; animation: bjrPop .18s ease; }
+  .bjr-btn-danger { background: linear-gradient(90deg, #ff5d8f, #ff3d6e); color: #2a0510; box-shadow: 0 6px 22px rgba(255,93,143,.35); }
   .bjr-peek { font-size: 13px; color: #9b8cff; }
   .bjr-remove-hint { font-size: 12px; color: #ff5d8f; }
   .bjr-powerups { margin-top: 22px; }

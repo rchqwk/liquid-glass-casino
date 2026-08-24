@@ -138,6 +138,7 @@ export interface RunState {
   coins: number;
   stake: number; // current wager (double down / split)
   doubleDownArmed: boolean;
+  pendingBust: boolean; // hand busted, awaiting a save powerup or an accepted loss
   wagerMult: number; // score multiplier from a risky play (double down = 2, split = 1.5)
   handBonus: number; // bonus/penalty points on the active player hand
   dealerBonus: number; // bonus/penalty points on the dealer
@@ -419,6 +420,22 @@ export function powerupRarityColor(rarity: PowerupRarity): string {
   return "rgba(255,255,255,.22)";
 }
 
+// Powerups that can rescue a busted hand (reduce the total or replace the hand).
+export const SAVE_POWERUP_IDS: PowerupId[] = [
+  "sub1_self",
+  "sub2_self",
+  "sub5_self",
+  "sub10_self",
+  "remove_random_self",
+  "remove_card_self",
+  "mythic_copy_hands",
+];
+
+// True when the player has an unused save powerup charge that could rescue a bust.
+export function hasSavePowerup(state: RunState): boolean {
+  return SAVE_POWERUP_IDS.some((id) => (state.powerups[id] ?? 0) > 0 && !state.usedThisRound.includes(id));
+}
+
 // Applies a powerup to the current state. Returns new state + message, or an error.
 export function usePowerup(
   state: RunState,
@@ -549,6 +566,13 @@ export function usePowerup(
   s.powerups = { ...s.powerups, [id]: count - 1 };
   s.usedThisRound = [...s.usedThisRound, id];
   s.log = [...s.log, message];
+
+  // If a pending bust was rescued (total back to 21 or under), let the hand continue.
+  if (s.pendingBust && handTotal(s.hand, s.handBonus) <= 21) {
+    s.pendingBust = false;
+    s.log = [...s.log, "Bust saved!"];
+  }
+
   return { state: s, message };
 }
 
@@ -677,6 +701,7 @@ function finishHandState(state: RunState, handCards: Card[]): RunState {
 
   const next: RunState = {
     ...state,
+    hand: handCards, // persist the final hand (double down / bust draw an extra card)
     deck,
     dealer,
     dealerDone: true,
@@ -687,6 +712,7 @@ function finishHandState(state: RunState, handCards: Card[]): RunState {
     handBonus: 0,
     peekCard: null,
     doubleDownArmed: false,
+    pendingBust: false,
     stake: state.splitHand ? state.stake : 0,
     lastOutcome: outcome,
     lastDealerTotal: dealerTotal,
@@ -745,6 +771,7 @@ export function newRun(preset: string, difficulty: Difficulty = "medium"): RunSt
     coins: cfg.startCoins,
     stake: 0,
     doubleDownArmed: false,
+    pendingBust: false,
     wagerMult: 1,
     handBonus: 0,
     dealerBonus: 0,
@@ -776,6 +803,7 @@ function resetHandFlags(state: RunState): RunState {
     dealerDone: false,
     stake: 0,
     doubleDownArmed: false,
+    pendingBust: false,
     wagerMult: 1,
     lastOutcome: null,
     lastDealerTotal: 0,
@@ -800,7 +828,7 @@ export function deal(state: RunState): RunState {
 }
 
 export function hit(state: RunState): RunState {
-  if (!state.playing) return state;
+  if (!state.playing || state.pendingBust) return state;
   let deck = [...state.deck];
   if (deck.length === 0) deck = shuffle(buildStandardDeck());
   const card = deck.shift()!;
@@ -810,6 +838,16 @@ export function hit(state: RunState): RunState {
     if (state.jokers.includes("soft_touch")) {
       const saved = hand.slice(0, -1);
       return finishHandState({ ...state, deck, log: [...state.log, "Soft Touch saved the bust."] }, saved);
+    }
+    // If a save powerup can rescue this, pause instead of auto-losing the hand.
+    if (hasSavePowerup(state)) {
+      return {
+        ...state,
+        deck,
+        hand,
+        pendingBust: true,
+        log: [...state.log, "Busted! Use a save powerup or stand to accept the loss."],
+      };
     }
     return finishHandState({ ...state, deck }, hand);
   }
@@ -822,7 +860,7 @@ export function stand(state: RunState): RunState {
 }
 
 export function doubleDown(state: RunState): RunState {
-  if (!state.playing || state.hand.length !== 2) return state;
+  if (!state.playing || state.pendingBust || state.hand.length !== 2 || state.coins <= 0) return state;
   const stake = Math.max(1, Math.floor(state.coins / 2));
   let deck = [...state.deck];
   if (deck.length === 0) deck = shuffle(buildStandardDeck());
@@ -832,7 +870,7 @@ export function doubleDown(state: RunState): RunState {
 }
 
 export function split(state: RunState): RunState {
-  if (!state.playing || state.hand.length !== 2) return state;
+  if (!state.playing || state.pendingBust || state.hand.length !== 2 || state.coins <= 0) return state;
   const [a, b] = state.hand;
   if (!state.freeSplit && a!.rank !== b!.rank) return state;
   const stake = Math.max(1, Math.floor(state.coins / 2));
@@ -856,7 +894,7 @@ export function split(state: RunState): RunState {
 }
 
 export function redraw(state: RunState): RunState {
-  if (!state.playing || state.redrawsRemaining <= 0) return state;
+  if (!state.playing || state.pendingBust || state.redrawsRemaining <= 0) return state;
   let deck = [...state.deck];
   if (deck.length < 2) deck = shuffle(buildStandardDeck());
   const hand: Card[] = [deck.shift()!, deck.shift()!];

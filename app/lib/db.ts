@@ -1440,6 +1440,59 @@ export async function getUserAuthRow(username: string) {
   });
 }
 
+export async function getUserByEmail(email: string) {
+  const e = String(email ?? "").trim().toLowerCase().slice(0, 200);
+  if (!e) return null;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = (await sql`
+      SELECT id, username, role_level, password_hash, password_salt, passcode_hash, passcode_salt, failed_attempts, locked_until, email, xp,
+             prestige_level, prestige_points, name_color
+      FROM users WHERE email = ${e}
+      ORDER BY id ASC LIMIT 1
+    `) as any[];
+    const u = rows[0];
+    if (!u) return null;
+    return {
+      id: Number(u.id),
+      username: String(u.username),
+      role_level: Number(u.role_level ?? 0),
+      password_hash: u.password_hash ? String(u.password_hash) : null,
+      password_salt: u.password_salt ? String(u.password_salt) : null,
+      passcode_hash: u.passcode_hash ? String(u.passcode_hash) : null,
+      passcode_salt: u.passcode_salt ? String(u.passcode_salt) : null,
+      failed_attempts: Number(u.failed_attempts ?? 0),
+      locked_until: Number(u.locked_until ?? 0),
+      email: u.email ? String(u.email) : null,
+      xp: Number(u.xp ?? 0),
+      prestige_level: Number(u.prestige_level ?? 0),
+      prestige_points: Number(u.prestige_points ?? 0),
+      name_color: u.name_color ? String(u.name_color) : null,
+    };
+  }
+  return withStore((s) => {
+    const u = s.users.find((x) => ((x as any).email ?? "").toLowerCase() === e);
+    if (!u) return null;
+    return {
+      id: u.id,
+      username: u.username,
+      role_level: u.role_level ?? 0,
+      password_hash: (u as any).password_hash ?? null,
+      password_salt: (u as any).password_salt ?? null,
+      passcode_hash: u.passcode_hash ?? null,
+      passcode_salt: u.passcode_salt ?? null,
+      failed_attempts: Number((u as any).failed_attempts ?? 0),
+      locked_until: Number((u as any).locked_until ?? 0),
+      email: (u as any).email ?? null,
+      xp: Number(u.xp ?? 0),
+      prestige_level: Number(u.prestige_level ?? 0),
+      prestige_points: Number(u.prestige_points ?? 0),
+      name_color: (u as any).name_color ?? null,
+    };
+  });
+}
+
 export async function addUserXp(userId: number, amount: number) {
   const uid = Number(userId);
   const amt = Math.max(0, Math.floor(Number(amount) || 0));

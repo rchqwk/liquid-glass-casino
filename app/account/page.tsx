@@ -6,7 +6,7 @@ type UserView = { id: number; username: string; role_level: number; prestige_lev
 type CredType = "password" | "passcode";
 
 export default function AccountPage() {
-  const [mode, setMode] = useState<"login" | "register" | "claim">("login");
+  const [mode, setMode] = useState<"login" | "register" | "claim" | "email">("login");
   const [credType, setCredType] = useState<CredType>("password");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -111,6 +111,30 @@ export default function AccountPage() {
     }
   };
 
+  const sendEmailCode = async () => {
+    const r = await post("/api/auth/email/request", { email });
+    if (r.ok) {
+      setCodeSent(true);
+      setDevCode(r.data.devCode ?? null);
+      setError(null);
+    } else {
+      setError(r.data.error ?? "Could not send code.");
+    }
+  };
+
+  const verifyEmailCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const r = await post("/api/auth/email/verify", { email, code });
+    if (r.ok) {
+      setUser(r.data.user);
+      setLockedUntil(null);
+      setCodeSent(false);
+      setCode("");
+    } else {
+      setError(r.data.error ?? "Incorrect code.");
+    }
+  };
+
   const reset = () => {
     setUser(null);
     setUsername("");
@@ -188,46 +212,72 @@ export default function AccountPage() {
           </>
         ) : (
           <>
-            <div style={{ display: "flex", gap: 8, margin: "16px 0" }}>
+            <div style={{ display: "flex", gap: 8, margin: "16px 0", flexWrap: "wrap" }}>
               <button style={mode === "login" ? primary : ghost} onClick={() => setMode("login")}>Login</button>
               <button style={mode === "register" ? primary : ghost} onClick={() => setMode("register")}>Register</button>
+              <button style={mode === "email" ? primary : ghost} onClick={() => setMode("email")}>Email</button>
               <button style={mode === "claim" ? primary : ghost} onClick={() => setMode("claim")}>Claim account</button>
             </div>
 
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <button style={credType === "password" ? primary : ghost} onClick={() => setCredType("password")}>Password</button>
-              <button style={credType === "passcode" ? primary : ghost} onClick={() => setCredType("passcode")}>6-digit passcode</button>
-            </div>
+            {mode === "email" ? (
+              <>
+                <p style={muted}>Sign in with a 6-digit code sent to your email — no password needed.</p>
+                <label style={label}>Email</label>
+                <input style={input} type="email" value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} />
 
-            <form onSubmit={submit}>
-              <label style={label}>Username</label>
-              <input style={input} value={username} maxLength={24} placeholder="username" onChange={(e) => setUsername(e.target.value)} />
+                {!codeSent ? (
+                  <button style={{ ...primary, width: "100%" }} onClick={sendEmailCode} disabled={busy}>Send sign-in code</button>
+                ) : (
+                  <form onSubmit={verifyEmailCode}>
+                    <label style={label}>6-digit code</label>
+                    <input style={{ ...input, letterSpacing: ".4em", fontSize: 20, textAlign: "center" }} inputMode="numeric" maxLength={6} value={code} placeholder="••••••" onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
+                    {devCode ? <p style={muted}>Dev code: <b style={{ color: "#ffd24a" }}>{devCode}</b></p> : null}
+                    <button style={{ ...primary, width: "100%" }} type="submit" disabled={busy}>Verify & sign in</button>
+                  </form>
+                )}
 
-              {credType === "passcode" ? (
-                <>
-                  <label style={label}>Passcode (6 digits)</label>
-                  <input style={{ ...input, letterSpacing: ".4em", fontSize: 20, textAlign: "center" }} inputMode="numeric" maxLength={6} value={passcode} placeholder="••••••" onChange={(e) => setPasscode(e.target.value.replace(/\D/g, ""))} />
-                </>
-              ) : (
-                <>
-                  <label style={label}>Password</label>
-                  <input style={input} type="password" value={password} placeholder="••••••" onChange={(e) => setPassword(e.target.value)} />
-                </>
-              )}
+                {codeSent ? (
+                  <button style={{ ...ghost, width: "100%" }} onClick={() => { setCodeSent(false); setCode(""); }}>Use a different email</button>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <button style={credType === "password" ? primary : ghost} onClick={() => setCredType("password")}>Password</button>
+                  <button style={credType === "passcode" ? primary : ghost} onClick={() => setCredType("passcode")}>6-digit passcode</button>
+                </div>
 
-              {mode !== "login" ? (
-                <>
-                  <label style={label}>Email (for account recovery)</label>
-                  <input style={input} type="email" value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} />
-                </>
-              ) : null}
+                <form onSubmit={submit}>
+                  <label style={label}>Username</label>
+                  <input style={input} value={username} maxLength={24} placeholder="username" onChange={(e) => setUsername(e.target.value)} />
 
-              {showClaim ? <p style={muted}>If your account has progress but no credential yet, set one here to secure it.</p> : null}
+                  {credType === "passcode" ? (
+                    <>
+                      <label style={label}>Passcode (6 digits)</label>
+                      <input style={{ ...input, letterSpacing: ".4em", fontSize: 20, textAlign: "center" }} inputMode="numeric" maxLength={6} value={passcode} placeholder="••••••" onChange={(e) => setPasscode(e.target.value.replace(/\D/g, ""))} />
+                    </>
+                  ) : (
+                    <>
+                      <label style={label}>Password</label>
+                      <input style={input} type="password" value={password} placeholder="••••••" onChange={(e) => setPassword(e.target.value)} />
+                    </>
+                  )}
 
-              <button style={{ ...primary, width: "100%", marginTop: 16 }} type="submit" disabled={busy}>
-                {mode === "login" ? "Sign in" : mode === "claim" ? "Secure account" : "Create account"}
-              </button>
-            </form>
+                  {mode !== "login" ? (
+                    <>
+                      <label style={label}>Email (for account recovery)</label>
+                      <input style={input} type="email" value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} />
+                    </>
+                  ) : null}
+
+                  {showClaim ? <p style={muted}>If your account has progress but no credential yet, set one here to secure it.</p> : null}
+
+                  <button style={{ ...primary, width: "100%", marginTop: 16 }} type="submit" disabled={busy}>
+                    {mode === "login" ? "Sign in" : mode === "claim" ? "Secure account" : "Create account"}
+                  </button>
+                </form>
+              </>
+            )}
           </>
         )}
 
