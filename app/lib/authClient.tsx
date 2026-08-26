@@ -62,8 +62,13 @@ type AuthContextValue = {
     username: string,
   ) => Promise<
     | { ok: true; inactivePrompt?: boolean }
-    | { ok: false; error: string; requiresAccount?: boolean }
+    | { ok: false; error: string; requiresAccount?: boolean; requiresClaim?: boolean }
   >;
+  signInWithCredential: (
+    username: string,
+    credential: string,
+    kind: "password" | "passcode",
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   signOut: () => Promise<void>;
   reportResult: (input: { game: string; profit: number; wager: number; baseWager?: number; balance?: number }) => Promise<void>;
 };
@@ -296,13 +301,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             | { user: UserWithRole; inactivePrompt?: boolean; session_token?: string }
             | { error: string; requiresAuth?: boolean; requiresClaim?: boolean };
           if (!res.ok) {
-            const requiresAccount = "requiresAuth" in data && data.requiresAuth === true
-              ? true
-              : "requiresClaim" in data && data.requiresClaim === true;
+            const requiresAuth = "requiresAuth" in data && data.requiresAuth === true;
+            const requiresClaim = "requiresClaim" in data && data.requiresClaim === true;
             return {
               ok: false,
               error: "error" in data ? data.error : "Sign-in failed",
-              requiresAccount,
+              requiresAccount: requiresAuth || requiresClaim,
+              requiresClaim,
             };
           }
           // Persist session token for environments where cookies may be blocked (iOS web).
@@ -318,6 +323,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setSessionExpired(false);
           }
           return { ok: true, inactivePrompt: "inactivePrompt" in data ? data.inactivePrompt : undefined };
+        } catch {
+          return { ok: false, error: "Network error" };
+        }
+      },
+      signInWithCredential: async (username, credential, kind) => {
+        try {
+          const body = kind === "passcode" ? { username, passcode: credential } : { username, password: credential };
+          const res = await fetchWithDevice("/api/auth/login", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = (await res.json()) as
+            | { user: UserWithRole; session_token?: string }
+            | { error: string; lockedUntil?: number; needs2fa?: boolean };
+          if (!res.ok) {
+            const err = "error" in data ? data.error : "Sign-in failed";
+            if (res.status === 423 && "needs2fa" in data && data.needs2fa) {
+              return { ok: false, error: err };
+            }
+            return { ok: false, error: err };
+          }
+          if ("session_token" in data && data.session_token) {
+            try {
+              localStorage.setItem("lgc.session", String(data.session_token));
+            } catch {
+              // ignore
+            }
+          }
+          if ("user" in data) {
+            setUser(data.user);
+            setSessionExpired(false);
+          }
+          return { ok: true };
         } catch {
           return { ok: false, error: "Network error" };
         }

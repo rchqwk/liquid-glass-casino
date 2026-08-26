@@ -64,5 +64,6 @@ export async function POST(req: Request) {
       name_color: row.name_color,
       xp: row.xp,
     },
+    session_token: token,
   });
 }

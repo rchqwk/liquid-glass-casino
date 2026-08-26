@@ -180,7 +180,21 @@ export default function AccountPage() {
               <div style={statValue}>{user.prestige_points}</div>
             </div>
           </div>
-          <button style={primary} onClick={signOut}>Sign out</button>
+          <div style={{ display: "flex", gap: 10, margin: "16px 0 12px", flexWrap: "wrap" }}>
+            <a
+              href="/casino/blackjack-v2"
+              style={{ ...primary, flex: 1, minWidth: 140, display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}
+            >
+              Play games
+            </a>
+            <a
+              href="/arcade/blackjack-roguelike"
+              style={{ ...ghost, flex: 1, minWidth: 140, display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}
+            >
+              Roguelike Blackjack
+            </a>
+          </div>
+          <button style={{ ...ghost, width: "100%" }} onClick={signOut}>Sign out</button>
         </div>
       </div>
     );

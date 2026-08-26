@@ -5,12 +5,15 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "../lib/authClient";
 
 export function SignInGate({ children }: { children: React.ReactNode }) {
-  const { user, loading, signIn, discordMode, discordError, retryDiscord, sessionExpired } = useAuth();
+  const { user, loading, signIn, signInWithCredential, discordMode, discordError, retryDiscord, sessionExpired } = useAuth();
   const pathname = usePathname();
   const [username, setUsername] = useState("");
+  const [credential, setCredential] = useState("");
+  const [credKind, setCredKind] = useState<"password" | "passcode">("password");
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [needsAccount, setNeedsAccount] = useState(false);
+  const [needsClaim, setNeedsClaim] = useState(false);
   const [discordUrl, setDiscordUrl] = useState<string | null>(null);
   const [discordElapsed, setDiscordElapsed] = useState(0);
 
@@ -177,6 +180,35 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                     autoFocus
                   />
 
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      className={credKind === "password" ? "rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white" : "rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/60 hover:bg-white/10"}
+                      onClick={() => setCredKind("password")}
+                    >
+                      Password
+                    </button>
+                    <button
+                      type="button"
+                      className={credKind === "passcode" ? "rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white" : "rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/60 hover:bg-white/10"}
+                      onClick={() => setCredKind("passcode")}
+                    >
+                      6-digit passcode
+                    </button>
+                  </div>
+
+                  <label className="mt-3 block text-xs font-medium text-white/70">{credKind === "passcode" ? "Passcode" : "Password"}</label>
+                  <input
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:border-white/20"
+                    value={credential}
+                    onChange={(e) => setCredential(credKind === "passcode" ? e.target.value.replace(/\D/g, "") : e.target.value)}
+                    placeholder={credKind === "passcode" ? "••••••" : "••••••••"}
+                    type={credKind === "passcode" ? "text" : "password"}
+                    inputMode={credKind === "passcode" ? "numeric" : undefined}
+                    maxLength={credKind === "passcode" ? 6 : undefined}
+                  />
+                  <p className="mt-1 text-[11px] text-white/40">Optional — leave blank for a quick username sign-in.</p>
+
                   <button
                     type="button"
                     className="mt-4 glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/90 transition hover:bg-white/10 disabled:opacity-40"
@@ -184,12 +216,19 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                     onClick={async () => {
                       setMsg(null);
                       setNeedsAccount(false);
+                      setNeedsClaim(false);
                       setBusy(true);
                       try {
-                        const res = await signIn(username);
+                        const hasCredential = credential.trim().length > 0;
+                        const res = hasCredential
+                          ? await signInWithCredential(username.trim(), credential, credKind)
+                          : await signIn(username);
                         if (!res.ok) {
                           setMsg(res.error);
-                          if (res.requiresAccount) setNeedsAccount(true);
+                          if ("requiresAccount" in res && res.requiresAccount) {
+                            setNeedsAccount(true);
+                            setNeedsClaim(("requiresClaim" in res && res.requiresClaim) === true);
+                          }
                         }
                       } finally {
                         setBusy(false);
@@ -200,12 +239,16 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                   </button>
 
                   {needsAccount ? (
-                    <a
-                      className="mt-3 inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
-                      href="/account"
-                    >
-                      Enter password / passcode
-                    </a>
+                    needsClaim ? (
+                      <a
+                        className="mt-3 inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                        href="/account"
+                      >
+                        Set a password / passcode
+                      </a>
+                    ) : (
+                      <p className="mt-3 text-sm leading-5 text-amber-200">Enter your password or passcode above to sign in.</p>
+                    )
                   ) : null}
 
                   <p className="mt-3 text-[11px] leading-5 text-white/55">
