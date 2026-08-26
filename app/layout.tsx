@@ -51,6 +51,9 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  verification: {
+    google: "NXQQxe2zGtmyUbM2NdN9_MwjJrIxG9gPEAtblPuiywo",
+  },
 };
 
 // Disable pinch-zoom and double-tap-to-zoom on mobile for a fixed, game-like viewport.
