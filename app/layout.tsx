@@ -15,9 +15,42 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Liquid Glass Arcade",
+  metadataBase: new URL("https://rchqwk.com"),
+  title: {
+    default: "Liquid Glass Arcade — Free Skill Games & Card Games Online",
+    template: "%s | Liquid Glass Arcade",
+  },
   description:
-    "A token-based arcade with a Liquid Glass UI and provably fair RNG. Play skill games, win tickets, and unlock prizes.",
+    "Liquid Glass Arcade is a free online arcade of skill-based card games and puzzles. Play Roguelike Blackjack and more for free — no real money, no download.",
+  applicationName: "Liquid Glass Arcade",
+  keywords: [
+    "roguelike blackjack",
+    "blackjack roguelike",
+    "free card games",
+    "deckbuilding card game",
+    "online blackjack game",
+    "free blackjack",
+    "skill games",
+    "arcade games",
+  ],
+  openGraph: {
+    title: "Liquid Glass Arcade — Free Skill Games & Card Games Online",
+    description:
+      "A free online arcade of skill-based card games. Play Roguelike Blackjack and more for free — no real money, no download.",
+    url: "https://rchqwk.com",
+    siteName: "Liquid Glass Arcade",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Liquid Glass Arcade — Free Skill Games & Card Games Online",
+    description:
+      "Free online card games. Play Roguelike Blackjack and more — no real money, no download.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 // Disable pinch-zoom and double-tap-to-zoom on mobile for a fixed, game-like viewport.
@@ -48,6 +81,19 @@ export default function RootLayout({
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3256641731859297"
           crossOrigin="anonymous"
         />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: "Liquid Glass Arcade",
+              url: "https://rchqwk.com",
+              description:
+                "A free online arcade of skill-based card games. Play Roguelike Blackjack and more for free — no real money, no download.",
+            }),
+          }}
+        />
         {/* iOS Safari ignores user-scalable=no, so block multi-touch pinch/gesture zoom in JS. */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){
           var block = function(e){ if (e.touches && e.touches.length > 1) e.preventDefault(); };
@@ -68,7 +114,7 @@ export default function RootLayout({
         </div>
         <footer className="border-t border-white/5 bg-black/30 px-4 py-4 text-xs text-white/50">
           <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3">
-            <div>© {new Date().getFullYear()} Liquid Glass Casino</div>
+            <div>© {new Date().getFullYear()} Liquid Glass Arcade</div>
             <div className="flex items-center gap-4">
               <Link className="hover:text-white/80" href="/privacy">
                 Privacy Policy

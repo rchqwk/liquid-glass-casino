@@ -271,8 +271,8 @@ export default function RoguelikeBlackjackPage() {
       {menu ? (
         <div className="bjr-menu">
           <div className="bjr-logo">LIQUID GLASS ARCADE</div>
-          <div className="bjr-subtitle">Roguelike Blackjack</div>
-          <p className="bjr-muted">Beat the round target by playing blackjack hands. Spend your winnings on jokers, deck edits and powerups. Go as far as you can.</p>
+          <h1 className="bjr-subtitle">Roguelike Blackjack</h1>
+          <p className="bjr-muted">Roguelike Blackjack is a free single-player deckbuilding card game. Beat each round target by playing blackjack hands, then spend your coins on jokers, deck edits and powerups. Free to play with virtual coins only — no real money, no download.</p>
 
           <div className="bjr-section-title">Choose your deck</div>
           <div className="bjr-decks">
@@ -590,7 +590,7 @@ const bjrStyles = `
     mix-blend-mode: overlay;
   }
   .bjr-logo { font-size: 38px; font-weight: 900; letter-spacing: .14em; color: #fff; text-shadow: 2px 0 0 rgba(255,60,90,.55), -2px 0 0 rgba(60,200,255,.55), 0 0 28px rgba(168,85,247,.7); }
-  .bjr-subtitle { margin-top: 4px; color: rgba(255,255,255,.7); font-size: 16px; letter-spacing: .08em; }
+  .bjr-subtitle { margin: 4px 0 0; color: rgba(255,255,255,.7); font-size: 16px; letter-spacing: .08em; }
   .bjr-muted { color: rgba(255,255,255,.55); font-size: 13px; line-height: 1.6; }
   .bjr-section-title { margin: 18px 0 10px; font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.75); }
   .bjr-menu, .bjr-game { max-width: 820px; margin: 0 auto; position: relative; z-index: 1; }
