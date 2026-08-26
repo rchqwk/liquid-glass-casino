@@ -331,6 +331,7 @@ export type PlayerSeat = {
   lastSeenAt: number;
   missedRounds: number;
   skipThisRound: boolean;
+  ready: boolean;
   inventory: Inventory;
 
   // round state
@@ -560,8 +561,12 @@ export function tickTable(state: TableState, now: number): TableState {
 
   // Clean dead spectators (no-op for MVP)
 
-  if (s.phase === "betting" && now >= s.bettingEndsAt) {
-    return startRound(s, now);
+  if (s.phase === "betting") {
+    const seated = (s.seats ?? []).filter((p) => p != null);
+    const allReady = seated.length > 0 && seated.every((p) => p!.ready === true);
+    if (allReady || now >= s.bettingEndsAt) {
+      return startRound(s, now);
+    }
   }
 
   if (s.phase === "player_turns") {
@@ -887,6 +892,31 @@ export function applyClearBet(state: TableState, userId: number, now: number): {
   p.lastSeenAt = now;
   s.lastActivityAt = now;
   s.updatedAt = now;
+  return { state: s };
+}
+
+export function applyReady(state: TableState, userId: number, now: number): { state: TableState; error?: string } {
+  const s = tickTable(state, now);
+  if (s.phase !== "betting") return { state: s, error: "You can only ready up during betting." };
+  const seatIdx = s.seats.findIndex((p) => p?.userId === userId);
+  if (seatIdx < 0) return { state: s, error: "You are not seated at this table." };
+  const p = s.seats[seatIdx]!;
+  normalizeHandsForSeat(p);
+  p.ready = true;
+  // Ready with no bet means "sit this hand out" — treat it like a skip so it doesn't count as a miss.
+  if ((p.hands?.[0]?.bet ?? 0) <= 0) {
+    p.hands[0]!.bet = 0;
+    p.hands[0]!.nonces = [];
+    p.skipThisRound = true;
+  }
+  p.lastSeenAt = now;
+  s.lastActivityAt = now;
+  s.updatedAt = now;
+  // If everyone seated is ready, deal immediately instead of waiting for the betting timer.
+  const seated = (s.seats ?? []).filter((x) => x != null);
+  if (seated.length > 0 && seated.every((x) => x!.ready === true)) {
+    return { state: startRound(s, now) };
+  }
   return { state: s };
 }
 

@@ -63,6 +63,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       lastSeenAt: now,
       missedRounds: 0,
       skipThisRound: false,
+      ready: false,
       inventory: inv,
       bet: 0,
       cards: [],

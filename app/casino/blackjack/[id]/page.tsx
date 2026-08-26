@@ -2074,6 +2074,15 @@ export function BlackjackTablePageClient({
                             >
                               Sit out hand
                             </button>
+                            <button
+                              type="button"
+                              disabled={betPending || !!((mySeat as any)?.ready)}
+                              className={`glass-soft rounded-2xl px-4 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-40 ${(mySeat as any)?.ready ? "border border-emerald-300/25 bg-emerald-500/10 text-emerald-100" : "text-white/90"}`}
+                              onClick={() => post("action", { type: "ready" })}
+                              title="Ready up — start the hand as soon as everyone is ready"
+                            >
+                              {(mySeat as any)?.ready ? "Ready ✓" : "Ready"}
+                            </button>
                           </div>
                           <div className="mt-3 text-[11px] text-white/60">
                             Bonus points: <span className="font-mono text-white/80">{bonusPointsBalance}</span>{" "}
@@ -2185,8 +2194,17 @@ export function BlackjackTablePageClient({
                             }}
                           >
                             Skip round
-                          </button>
-                        </div>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={betPending || !!((mySeat as any)?.ready)}
+                              className={`glass-soft rounded-2xl px-4 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-40 ${(mySeat as any)?.ready ? "border border-emerald-300/25 bg-emerald-500/10 text-emerald-100" : "text-white/90"}`}
+                              onClick={() => post("action", { type: "ready" })}
+                              title="Ready up — start the hand as soon as everyone is ready"
+                            >
+                              {(mySeat as any)?.ready ? "Ready ✓" : "Ready"}
+                            </button>
+                          </div>
 
                         <div className="mt-3 text-[11px] text-white/60">
                           Bonus points: <span className="font-mono text-white/80">{bonusPointsBalance}</span>{" "}
@@ -3117,14 +3135,25 @@ export function BlackjackTablePageClient({
                         {myHasLockedStake ? "Stake locked for this hand. Clear it to sit out or change stake." : "Set your stake before the deal."}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
-                      onClick={() => setHControlsOpen(true)}
-                      title="Open full controls"
-                    >
-                      More
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={betPending || !!((mySeat as any)?.ready)}
+                        className={`glass-soft rounded-2xl px-3 py-2 text-xs font-semibold hover:bg-white/10 disabled:opacity-40 ${(mySeat as any)?.ready ? "border border-emerald-300/25 bg-emerald-500/10 text-emerald-100" : "text-white/85"}`}
+                        onClick={() => post("action", { type: "ready" })}
+                        title="Ready up — start the hand as soon as everyone is ready"
+                      >
+                        {(mySeat as any)?.ready ? "Ready ✓" : "Ready"}
+                      </button>
+                      <button
+                        type="button"
+                        className="glass-soft rounded-2xl px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+                        onClick={() => setHControlsOpen(true)}
+                        title="Open full controls"
+                      >
+                        More
+                      </button>
+                    </div>
                   </div>
                   {myHasLockedStake ? (
                     <div className="mt-3 flex flex-wrap items-end gap-2">

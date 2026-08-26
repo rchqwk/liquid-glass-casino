@@ -94,6 +94,7 @@ export function startBlackjackBetting(state: TableState, now: number) {
     if (!p) continue;
     p.inventory = normalizeInventory(p.inventory);
     p.skipThisRound = false;
+    p.ready = false;
     normalizeHandsForSeat(p);
     const carry = Number(p.carryBetNext ?? 0) || 0;
     p.hands = [

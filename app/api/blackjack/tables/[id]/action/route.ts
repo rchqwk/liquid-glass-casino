@@ -4,6 +4,7 @@ import { getBlackjackTable } from "../../../../../lib/db";
 import {
   applyExtendTurnTimer,
   applyPlayerAction,
+  applyReady,
   applySpecial,
   applyVoteSkipTurn,
   tickTable,
@@ -20,7 +21,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const body = (await req.json().catch(() => null)) as
     | {
-        type?: "hit" | "stand" | "double_down" | "split" | "special" | "vote_skip" | "extend_timer";
+        type?: "hit" | "stand" | "double_down" | "split" | "special" | "vote_skip" | "extend_timer" | "ready";
         specialId?: string;
         targetUserId?: number | null;
         cardIndex?: number | null;
@@ -43,6 +44,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     res = applyVoteSkipTurn(base, user.id, now);
   } else if (body?.type === "extend_timer") {
     res = applyExtendTurnTimer(base, user.id, now);
+  } else if (body?.type === "ready") {
+    res = applyReady(base, user.id, now);
   } else if (body?.type === "special") {
     res = applySpecial(
       base,
