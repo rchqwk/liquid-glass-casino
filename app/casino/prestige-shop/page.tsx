@@ -74,17 +74,20 @@ export default function PrestigeShopPage() {
     if (busy) return;
     setBusy(true);
     setMsg(null);
+    const pendingKey=`prestige-bond-${user?.id}-${currency}`;
+    const requestId=sessionStorage.getItem(pendingKey) || crypto.randomUUID();
+    sessionStorage.setItem(pendingKey,requestId);
     try {
       const res = await fetch("/api/prestige-shop/buy", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ item: "bond", currency }),
+        body: JSON.stringify({ item: "bond", currency, requestId }),
       });
       const j = (await res.json().catch(() => ({}))) as any;
       if (!res.ok) throw new Error(j?.error ?? "Failed");
-      await refresh();
-      await loadBp();
+      sessionStorage.removeItem(pendingKey);
       setMsg("Bought Bond.");
+      await Promise.allSettled([refresh(),loadBp()]);
     } catch (e: any) {
       setMsg(String(e?.message ?? "Failed"));
     } finally {

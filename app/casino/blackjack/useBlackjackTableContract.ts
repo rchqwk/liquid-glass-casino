@@ -42,6 +42,7 @@ export function useBlackjackTableContract<TState>(tableId: string | null, refres
   const [tableMeta, setTableMeta] = useState<BlackjackTableMeta | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const stateRef = useRef<TState | null>(null);
+  const pendingActions=useRef(new Map<string,string>());
   const tableMetaRef = useRef<BlackjackTableMeta | null>(null);
 
   useEffect(() => {
@@ -157,13 +158,18 @@ export function useBlackjackTableContract<TState>(tableId: string | null, refres
         setErr("Invalid table id");
         return { ok: false as const };
       }
+      const payload=body ? JSON.stringify(body) : "{}";
+      const signature=`${tableId}:${path}:${payload}`;
+      const requestId=pendingActions.current.get(signature) || crypto.randomUUID();
+      pendingActions.current.set(signature,requestId);
       try {
         const res = await fetch(`/api/blackjack/tables/${tableId}/${path}`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: body ? JSON.stringify(body) : "{}",
+          headers: { "content-type": "application/json", "Idempotency-Key": requestId },
+          body: payload,
         });
         const data = (await res.json().catch(() => ({}))) as BlackjackTablePayload<TState>;
+        if(res.status<500 && res.status!==409 && res.status!==429)pendingActions.current.delete(signature);
         if (!res.ok) setErr(data?.error ?? fallbackError);
         if (data?.state) applyTablePayload(data);
         return { ok: !!res.ok, data };

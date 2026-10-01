@@ -1,6 +1,7 @@
+import { BlackjackConflict, retryBlackjack } from "../../../lib/blackjackStatePersistence";
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../lib/authServer";
-import { getBlackjackInventory, getBlackjackTable, upsertBlackjackInventory } from "../../../lib/db";
+import { getBlackjackInventory, getBlackjackTable, compareAndSetBlackjackInventory } from "../../../lib/db";
 import { tickTable, SPECIALS } from "../../../lib/blackjackMultiplayer";
 import { ensureInventory, unopenedBoxCount, type InventoryCategoryId } from "../../../lib/blackjackInventory";
 import { saveBlackjackTableState, syncUserBlackjackInventoryIntoTables } from "../../../lib/blackjackStatePersistence";
@@ -47,7 +48,7 @@ export async function GET(req: Request) {
   });
 }
 
-export async function POST(req: Request) {
+async function POSTImpl(req: Request) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = (await req.json().catch(() => null)) as { boxId?: string; all?: boolean; tableId?: string } | null;
@@ -55,7 +56,8 @@ export async function POST(req: Request) {
   const openAll = body?.all === true;
   const tableId = body?.tableId ? String(body.tableId) : null;
 
-  const inv = ensureInventory((await getBlackjackInventory(user.id)) ?? null);
+  const original = await getBlackjackInventory(user.id);
+  const inv = ensureInventory(structuredClone(original));
   const boxes = inv.boxes ?? [];
   const openedRewards: Array<{ id: string; rarity: string }> = [];
   let openedBoxesCount = 0;
@@ -121,11 +123,11 @@ export async function POST(req: Request) {
     openedBoxesCount = 1;
   }
 
-  await upsertBlackjackInventory(user.id, inv);
+  if(!await compareAndSetBlackjackInventory(user.id, original, inv))throw new BlackjackConflict();
 
   // IMPORTANT: keep active table state inventories in sync.
   // Otherwise, the next table poll tick can overwrite the DB inventory with the stale table copy.
-  await syncUserBlackjackInventoryIntoTables(user.id, inv, tableId);
+  // Active tables load the canonical inventory and compare it atomically before saving.
 
   if (!openAll) {
     const box = openedBox;
@@ -152,3 +154,5 @@ export async function POST(req: Request) {
     rewards: openedRewards,
   });
 }
+
+export async function POST(req:Request){return retryBlackjack(()=>POSTImpl(req.clone()));}

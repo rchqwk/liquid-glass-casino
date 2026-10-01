@@ -28,6 +28,7 @@ export const SUPPORT: Record<SupportId, { name: string; desc: string }> = {
 };
 
 export interface RoomPlayer {
+  capabilityHash?: string; // private server-side guest seat credential
   playerId: string;
   username: string;
   userId: number | null; // linked account (for XP persistence), null if anonymous

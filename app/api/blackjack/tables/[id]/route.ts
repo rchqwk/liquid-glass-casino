@@ -1,3 +1,4 @@
+import { retryBlackjack } from "../../../../lib/blackjackStatePersistence";
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../lib/authServer";
 import { getBlackjackTable, upsertBlackjackTable } from "../../../../lib/db";
@@ -8,7 +9,7 @@ import { blackjackTableJsonResponse } from "../../../../lib/blackjackTableContra
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
+async function GETImpl(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
@@ -41,3 +42,5 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
   return blackjackTableJsonResponse(next, user.id);
 }
+
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) { return retryBlackjack(() => GETImpl(req.clone(), ctx)); }

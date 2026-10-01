@@ -3,7 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import "server-only";
 import { neon } from "@neondatabase/serverless";
-import { defaultInventory } from "./blackjackInventory";
+import { defaultInventory, ensureInventory } from "./blackjackInventory";
 
 export type AuthedUser = { id: number; username: string };
 export type AuthedUserWithRole = {
@@ -99,6 +99,8 @@ type Store = {
     inventory: any;
     updated_at: number;
   }>;
+  prestige_purchases?: Array<{user_id:number;request_id:string;currency:string;inventory:any}>;
+  blackjack_request_receipts?: Array<{table_id:string;user_id:number;key:string;fingerprint:string;status:number;body:string}>;
   config: Record<string, { value: string; updated_at: number }>;
   nextAnnouncementId?: number;
   announcements?: Array<{ id: number; ts: number; message: string }>;
@@ -147,8 +149,8 @@ const STORE_PATH = (() => {
     !!process.env.POSTGRES_URL ||
     !!process.env.NEON_DATABASE_URL;
   if (hasDb) return path.join(process.cwd(), "data.json");
-  if (process.env.VERCEL) return path.join("/tmp", "lgc-data.json");
-  return path.join(process.cwd(), "data.json");
+  if (process.env.VERCEL) throw new Error("Durable database configuration is required");
+  return process.env.LGC_STORE_PATH || path.join(process.cwd(), "data.json");
 })();
 
 function defaultStore(): Store {
@@ -193,34 +195,18 @@ function loadStore(): Store {
 }
 
 function saveStore(store: Store) {
-  inMemoryStore = store;
-  try {
-    fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
-  } catch {
-    // If the filesystem is read-only, skip persistence (serverless fallback).
-  }
+  const temp=STORE_PATH+"."+crypto.randomUUID()+".tmp";
+  try { fs.writeFileSync(temp,JSON.stringify(store,null,2),"utf8");fs.renameSync(temp,STORE_PATH);inMemoryStore=store; }
+  catch(error){try{fs.unlinkSync(temp);}catch{}throw error;}
 }
-
-// Simple in-process mutex for dev / single-instance usage.
-let locked = false;
-const queue: Array<() => void> = [];
+let storeTail: Promise<unknown> = Promise.resolve();
 async function withLock<T>(fn: () => T | Promise<T>): Promise<T> {
-  if (locked) {
-    await new Promise<void>((resolve) => queue.push(resolve));
-  }
-  locked = true;
-  try {
-    return await fn();
-  } finally {
-    locked = false;
-    const next = queue.shift();
-    if (next) next();
-  }
+  const result=storeTail.catch(()=>{}).then(fn);storeTail=result;return result;
 }
 
 export async function withStore<T>(fn: (s: Store) => T | Promise<T>): Promise<T> {
   return withLock(async () => {
-    const store = loadStore();
+    const store = structuredClone(loadStore());
     const out = await fn(store);
     saveStore(store);
     return out;
@@ -412,6 +398,8 @@ async function ensureSchema() {
       attempts INT NOT NULL DEFAULT 0
     )
   `;
+  await sql`CREATE TABLE IF NOT EXISTS prestige_purchases (user_id INT NOT NULL REFERENCES users(id), request_id TEXT NOT NULL, currency TEXT NOT NULL, inventory_json TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, request_id))`;
+  await sql`CREATE TABLE IF NOT EXISTS blackjack_request_receipts (table_id TEXT NOT NULL, user_id INT NOT NULL, request_key TEXT NOT NULL, fingerprint TEXT NOT NULL, status INT NOT NULL, body TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY(table_id,user_id,request_key))`;
   schemaReady = true;
 }
 
@@ -1321,11 +1309,8 @@ export async function spendPrestigePoints(input: { userId: number; cost: number 
   if (!Number.isFinite(cost) || cost <= 0) return null;
   if (sql) {
     await ensureSchema();
-    const rows =
-      (await sql`SELECT prestige_points FROM users WHERE id = ${uid}`) as any[];
-    const cur = Number(rows[0]?.prestige_points ?? 0);
-    if (cur < cost) throw new Error("Not enough prestige points.");
-    await sql`UPDATE users SET prestige_points = prestige_points - ${cost}, last_seen = ${now} WHERE id = ${uid}`;
+    const debit = await sql`UPDATE users SET prestige_points = prestige_points - ${cost}, last_seen = ${now} WHERE id = ${uid} AND prestige_points >= ${cost} RETURNING id`;
+    if (!debit.length) throw new Error("Not enough prestige points.");
     const rows2 =
       (await sql`SELECT id, username, role_level, prestige_level, prestige_points, name_color FROM users WHERE id = ${uid}`) as any[];
     const u = rows2[0] ?? null;
@@ -1596,6 +1581,24 @@ export async function hasUserProgress(userId: number): Promise<boolean> {
       }
     }
     return false;
+  });
+}
+
+// Migration is a compare-and-set: concurrent claims cannot replace a credential.
+export async function claimUserCredential(userId: number, fields: { password_hash?: string; password_salt?: string; passcode_hash?: string; passcode_salt?: string }): Promise<boolean> {
+  const uid = Number(userId);
+  if (!Number.isSafeInteger(uid) || uid <= 0) return false;
+  const sql = getSql();
+  if (sql) {
+    await ensureSchema();
+    const rows = await sql`UPDATE users SET password_hash = ${fields.password_hash ?? null}, password_salt = ${fields.password_salt ?? null}, passcode_hash = ${fields.passcode_hash ?? null}, passcode_salt = ${fields.passcode_salt ?? null}
+      WHERE id = ${uid} AND password_hash IS NULL AND password_salt IS NULL AND passcode_hash IS NULL AND passcode_salt IS NULL RETURNING id`;
+    return rows.length === 1;
+  }
+  return withStore(s => {
+    const u = s.users.find(x => x.id === uid) as any;
+    if (!u || u.password_hash || u.password_salt || u.passcode_hash || u.passcode_salt) return false;
+    Object.assign(u, fields); return true;
   });
 }
 
@@ -2067,7 +2070,7 @@ export async function getBlackjackInventory(userId: number) {
   }
   return withStore((s) => {
     const row = (s.blackjack_inventories ?? []).find((r) => r.user_id === uid);
-    return row?.inventory ?? null;
+    return row ? structuredClone(row.inventory) : null;
   });
 }
 
@@ -2123,7 +2126,7 @@ export async function getBlackjackTable(id: string) {
   if (sql) {
     await ensureSchema();
     const rows =
-      (await sql`SELECT id, public, name, state_json, created_at, updated_at FROM blackjack_tables WHERE id = ${tid}`) as any[];
+      (await sql`SELECT t.*, COALESCE((SELECT jsonb_object_agg(i.user_id, i.inventory_json) FROM blackjack_inventories i WHERE i.user_id IN (SELECT (seat->>'userId')::int FROM jsonb_array_elements(t.state_json::jsonb->'seats') seat WHERE seat <> 'null'::jsonb)), '{}'::jsonb) AS inventories FROM blackjack_tables t WHERE t.id = ${tid}`) as any[];
     const r = rows[0];
     if (!r) return null;
     let state: any = {};
@@ -2132,16 +2135,20 @@ export async function getBlackjackTable(id: string) {
     } catch {
       state = {};
     }
+    const sourceInventories:Record<string,string> = r.inventories || {};
+    for(const seat of state.seats || [])if(seat && sourceInventories[seat.userId])seat.inventory=JSON.parse(sourceInventories[seat.userId]);
     return {
       id: String(r.id),
       public: !!r.public,
       name: String(r.name),
+      sourceInventories,
       state,
+      sourceStateJson: String(r.state_json ?? "{}"),
       created_at: Number(r.created_at ?? Date.now()),
       updated_at: Number(r.updated_at ?? Date.now()),
     };
   }
-  return withStore((s) => (s.blackjack_tables ?? []).find((t) => t.id === tid) ?? null);
+  return withStore((s) => { const row=(s.blackjack_tables ?? []).find((t) => t.id === tid); if(!row)return null;const next=structuredClone(row);const sourceInventories:Record<string,string>={};for(const seat of next.state.seats || [])if(seat){const inv=(s.blackjack_inventories || []).find(i=>i.user_id===seat.userId);if(inv){sourceInventories[seat.userId]=JSON.stringify(inv.inventory);seat.inventory=structuredClone(inv.inventory);}}return {...next,sourceInventories,sourceStateJson:JSON.stringify(row.state)}; });
 }
 
 export async function listBlackjackTables() {
@@ -2671,4 +2678,83 @@ export async function setConfig(partial: Partial<GameConfig>) {
     s.config.slotsPayoutScale = { value: String(next.slotsPayoutScale), updated_at: now };
     return next;
   });
+}
+
+// Compare-and-set and inventory persistence are one PostgreSQL statement/transaction.
+export async function commitBlackjackState(meta: {id:string;public:boolean;name:string;created_at:number;sourceStateJson?:string;sourceInventories?:Record<string,string>}, state: any, receipt?:{userId:number;key:string;fingerprint:string;status:number;body:string}): Promise<boolean> {
+  const sql=getSql(), now=Number(state.updatedAt || Date.now());
+  const inventories=new Map<number,any>();
+  for(const seat of state.seats || [])if(seat)inventories.set(seat.userId,seat.inventory);
+  for(const ev of state.evictedInventories || [])inventories.set(ev.userId,ev.inventory);
+  state.evictedInventories=[];
+  const rowsJson=JSON.stringify([...inventories].map(([user_id,inventory])=>({user_id,inventory_json:JSON.stringify(inventory),expected_json:meta.sourceInventories?.[user_id] || JSON.stringify(inventory)})));
+  const stateJson=JSON.stringify(state);
+  if(sql){
+    await ensureSchema();
+    for(const uid of [...inventories.keys()].sort((a,b)=>a-b))await sql`INSERT INTO blackjack_inventories (user_id,inventory_json,updated_at) VALUES (${uid},${JSON.stringify(defaultInventory())},${now}) ON CONFLICT(user_id) DO NOTHING`;
+    const rows=meta.sourceStateJson === undefined
+      ? await sql`WITH locked AS MATERIALIZED (SELECT i.user_id FROM blackjack_inventories i JOIN jsonb_to_recordset(${rowsJson}::jsonb) AS x(user_id int, expected_json text) ON x.user_id=i.user_id WHERE i.inventory_json::jsonb=x.expected_json::jsonb ORDER BY i.user_id FOR UPDATE OF i), ready AS (SELECT count(*)=${inventories.size} AS ok FROM locked), changed AS (INSERT INTO blackjack_tables (id,public,name,state_json,created_at,updated_at) SELECT ${meta.id},${meta.public},${meta.name},${stateJson},${meta.created_at},${now} FROM ready WHERE ok ON CONFLICT(id) DO NOTHING RETURNING id), inventory AS (INSERT INTO blackjack_inventories (user_id,inventory_json,updated_at) SELECT x.user_id,x.inventory_json,${now} FROM jsonb_to_recordset(${rowsJson}::jsonb) AS x(user_id int,inventory_json text) WHERE EXISTS(SELECT 1 FROM changed) ON CONFLICT(user_id) DO UPDATE SET inventory_json=EXCLUDED.inventory_json,updated_at=EXCLUDED.updated_at RETURNING user_id) , receipt AS (INSERT INTO blackjack_request_receipts (table_id,user_id,request_key,fingerprint,status,body,created_at) SELECT id,${receipt?.userId ?? 0},${receipt?.key ?? ""},${receipt?.fingerprint ?? ""},${receipt?.status ?? 200},${receipt?.body ?? ""},${now} FROM changed WHERE ${!!receipt} RETURNING table_id) SELECT id, (SELECT count(*) FROM inventory) AS inventory_count, (SELECT count(*) FROM receipt) AS receipt_count FROM changed`
+      : await sql`WITH locked AS MATERIALIZED (SELECT i.user_id FROM blackjack_inventories i JOIN jsonb_to_recordset(${rowsJson}::jsonb) AS x(user_id int, expected_json text) ON x.user_id=i.user_id WHERE i.inventory_json::jsonb=x.expected_json::jsonb ORDER BY i.user_id FOR UPDATE OF i), ready AS (SELECT count(*)=${inventories.size} AS ok FROM locked), changed AS (UPDATE blackjack_tables SET public=${meta.public},name=${meta.name},state_json=${stateJson},updated_at=${now} WHERE id=${meta.id} AND state_json=${meta.sourceStateJson} AND (SELECT ok FROM ready) RETURNING id), inventory AS (INSERT INTO blackjack_inventories (user_id,inventory_json,updated_at) SELECT x.user_id,x.inventory_json,${now} FROM jsonb_to_recordset(${rowsJson}::jsonb) AS x(user_id int,inventory_json text) WHERE EXISTS(SELECT 1 FROM changed) ON CONFLICT(user_id) DO UPDATE SET inventory_json=EXCLUDED.inventory_json,updated_at=EXCLUDED.updated_at RETURNING user_id) , receipt AS (INSERT INTO blackjack_request_receipts (table_id,user_id,request_key,fingerprint,status,body,created_at) SELECT id,${receipt?.userId ?? 0},${receipt?.key ?? ""},${receipt?.fingerprint ?? ""},${receipt?.status ?? 200},${receipt?.body ?? ""},${now} FROM changed WHERE ${!!receipt} RETURNING table_id) SELECT id, (SELECT count(*) FROM inventory) AS inventory_count, (SELECT count(*) FROM receipt) AS receipt_count FROM changed`;
+    return rows.length===1;
+  }
+  return withStore(s=>{
+    s.blackjack_tables ||= [];s.blackjack_inventories ||= [];
+    const row=s.blackjack_tables.find(t=>t.id===meta.id);
+    if(meta.sourceStateJson===undefined ? !!row : !row || JSON.stringify(row.state)!==meta.sourceStateJson)return false;
+    if(receipt && (s.blackjack_request_receipts||[]).some(r=>r.table_id===meta.id&&r.user_id===receipt.userId&&r.key===receipt.key))return false;
+    for(const [uid,inventory] of inventories){const current=s.blackjack_inventories.find(i=>i.user_id===uid)?.inventory || defaultInventory();const expected=JSON.parse(meta.sourceInventories?.[uid] || JSON.stringify(inventory));if(JSON.stringify(current)!==JSON.stringify(expected))return false;}
+    const next={id:meta.id,public:meta.public,name:meta.name,state:structuredClone(state),created_at:meta.created_at,updated_at:now};
+    if(row)Object.assign(row,next);else s.blackjack_tables.push(next);
+    for(const [uid,inventory] of inventories){const old=s.blackjack_inventories.find(i=>i.user_id===uid);const value={user_id:uid,inventory:structuredClone(inventory),updated_at:now};if(old)Object.assign(old,value);else s.blackjack_inventories.push(value);}
+    if(receipt){s.blackjack_request_receipts ||= [];s.blackjack_request_receipts.push({table_id:meta.id,user_id:receipt.userId,key:receipt.key,fingerprint:receipt.fingerprint,status:receipt.status,body:receipt.body});}
+    return true;
+  });
+}
+
+export async function purchasePrestigeBond(userId:number,currency:"pp"|"bp",requestId:string) {
+  const sql=getSql(),now=Date.now();
+  if(sql){
+    await ensureSchema();
+    for(let attempt=0;attempt<5;attempt++){
+      const previous=await sql`SELECT currency,inventory_json FROM prestige_purchases WHERE user_id=${userId} AND request_id=${requestId}`;
+      if(previous[0]){if(previous[0].currency!==currency)throw new Error("Request ID already used for a different purchase.");return JSON.parse(String(previous[0].inventory_json));}
+      await sql`INSERT INTO blackjack_inventories (user_id,inventory_json,updated_at) VALUES (${userId},${JSON.stringify(defaultInventory())},${now}) ON CONFLICT(user_id) DO NOTHING`;
+      const current=await sql`SELECT inventory_json FROM blackjack_inventories WHERE user_id=${userId}`;
+      const expected=String(current[0].inventory_json),inv=ensureInventory(JSON.parse(expected));
+      if(currency==="bp" && inv.bonusPoints<50)throw new Error("Not enough bonus points.");
+      if(currency==="bp")inv.bonusPoints-=50;
+      inv.bond ||= {owned:0,active:null};inv.bond.owned+=1;
+      const next=JSON.stringify(inv),cost=currency==="pp"?1:0;
+      const rows=await sql`WITH eligible AS (SELECT u.id FROM users u JOIN blackjack_inventories i ON i.user_id=u.id WHERE u.id=${userId} AND u.prestige_points>=${cost} AND i.inventory_json=${expected} FOR UPDATE OF u,i), receipt AS (INSERT INTO prestige_purchases (user_id,request_id,currency,inventory_json,created_at) SELECT id,${requestId},${currency},${next},${now} FROM eligible ON CONFLICT(user_id,request_id) DO NOTHING RETURNING user_id), debit AS (UPDATE users SET prestige_points=prestige_points-${cost} WHERE id IN(SELECT user_id FROM receipt) RETURNING id), inventory AS (UPDATE blackjack_inventories SET inventory_json=${next},updated_at=${now} WHERE user_id IN(SELECT id FROM debit) RETURNING inventory_json) SELECT inventory_json FROM inventory`;
+      if(rows[0])return JSON.parse(String(rows[0].inventory_json));
+      const users=await sql`SELECT prestige_points FROM users WHERE id=${userId}`;
+      if(!users[0] || Number(users[0].prestige_points)<cost)throw new Error("Not enough prestige points.");
+    }
+    throw new Error("Purchase conflicted; retry with the same request ID.");
+  }
+  return withStore(s=>{
+    s.prestige_purchases ||= [];
+    const previous=s.prestige_purchases.find(p=>p.user_id===userId&&p.request_id===requestId);
+    if(previous){if(previous.currency!==currency)throw new Error("Request ID already used for a different purchase.");return structuredClone(previous.inventory);}
+    const user=s.users.find(u=>u.id===userId);if(!user)throw new Error("Account not found.");
+    s.blackjack_inventories ||= [];let row=s.blackjack_inventories.find(i=>i.user_id===userId);
+    const inv=ensureInventory(structuredClone(row?.inventory||defaultInventory()));
+    if(currency==="pp"){if(Number(user.prestige_points||0)<1)throw new Error("Not enough prestige points.");user.prestige_points=Number(user.prestige_points)-1;}
+    else {if(inv.bonusPoints<50)throw new Error("Not enough bonus points.");inv.bonusPoints-=50;}
+    inv.bond ||= {owned:0,active:null};inv.bond.owned+=1;
+    if(row){row.inventory=inv;row.updated_at=now;}else s.blackjack_inventories.push({user_id:userId,inventory:inv,updated_at:now});
+    s.prestige_purchases.push({user_id:userId,request_id:requestId,currency,inventory:structuredClone(inv)});
+    return inv;
+  });
+}
+
+export async function getBlackjackRequestReceipt(tableId:string,userId:number,key:string){
+  const sql=getSql();if(sql){await ensureSchema();const rows=await sql`SELECT fingerprint,status,body FROM blackjack_request_receipts WHERE table_id=${tableId} AND user_id=${userId} AND request_key=${key}`;return rows[0] as {fingerprint:string;status:number;body:string}|undefined;}
+  return withStore(s=>(s.blackjack_request_receipts||[]).find(r=>r.table_id===tableId&&r.user_id===userId&&r.key===key));
+}
+
+export async function compareAndSetBlackjackInventory(userId:number, expected:any, inventory:any):Promise<boolean>{
+ const sql=getSql(),before=JSON.stringify(expected || defaultInventory()),next=JSON.stringify(inventory),now=Date.now();
+ if(sql){await ensureSchema();await sql`INSERT INTO blackjack_inventories (user_id,inventory_json,updated_at) VALUES (${userId},${JSON.stringify(defaultInventory())},${now}) ON CONFLICT(user_id) DO NOTHING`;const rows=await sql`UPDATE blackjack_inventories SET inventory_json=${next},updated_at=${now} WHERE user_id=${userId} AND inventory_json::jsonb=${before}::jsonb RETURNING user_id`;return rows.length===1;}
+ return withStore(s=>{s.blackjack_inventories ||= [];const row=s.blackjack_inventories.find(i=>i.user_id===userId);if(JSON.stringify(row?.inventory || defaultInventory())!==before)return false;if(row){row.inventory=structuredClone(inventory);row.updated_at=now;}else s.blackjack_inventories.push({user_id:userId,inventory:structuredClone(inventory),updated_at:now});return true;});
 }

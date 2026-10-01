@@ -1,3 +1,5 @@
+import { blackjackRequest } from "../../../../../lib/blackjackOperation";
+import { retryBlackjack } from "../../../../../lib/blackjackStatePersistence";
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackTable, upsertBlackjackInventory } from "../../../../../lib/db";
@@ -10,7 +12,7 @@ import { blackjackTableJsonResponse } from "../../../../../lib/blackjackTableCon
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(_: Request, ctx: { params: Promise<{ id: string }> }) {
+async function POSTImpl(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
@@ -30,7 +32,8 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
     if (p?.userId === user.id) {
       // Return any placed collectibles back to inventory so they don't stay "stuck" as placed after leaving.
       const inv = returnPlacedCollectiblesToInventory(p.inventory, state.decorations as any, now);
-      await upsertBlackjackInventory(user.id, inv);
+      state.evictedInventories ||= [];
+      state.evictedInventories.push({userId:user.id,inventory:inv});
       state.seats[i] = null;
     }
   }
@@ -41,3 +44,5 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
   await saveBlackjackTableState(t, state);
   return blackjackTableJsonResponse(state, user.id);
 }
+
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) { return blackjackRequest(req,(await ctx.params).id,() => POSTImpl(req.clone(), ctx)); }
