@@ -10,7 +10,7 @@ import {
   type Card,
   type HandOutcome,
 } from "../arcade/blackjack-roguelike/game";
-import { getRoguelikeRoom, upsertRoguelikeRoom, addUserXp } from "./db";
+import { getRoguelikeRoom, upsertRoguelikeRoom, addUserXp, commitRoguelikeRoom } from "./db";
 
 export const MAX_PLAYERS = 4;
 export const MAX_ROUNDS = 10;
@@ -28,6 +28,7 @@ export const SUPPORT: Record<SupportId, { name: string; desc: string }> = {
 };
 
 export interface RoomPlayer {
+  lastSeenAt?: number;
   capabilityHash?: string; // private server-side guest seat credential
   playerId: string;
   username: string;
@@ -53,6 +54,7 @@ export interface XpAward {
 }
 
 export interface RoguelikeRoom {
+  discordChannelId?: string;
   code: string;
   hostId: string;
   mode: RoomMode;
@@ -128,7 +130,10 @@ export function joinRoom(room: RoguelikeRoom, playerId: string, username: string
   if (room.players.length >= MAX_PLAYERS) {
     return { room, error: "Room is full." };
   }
-  room.players.push(newPlayer(playerId, username, userId));
+  const player = newPlayer(playerId, username, userId);
+  // A late arrival waits for the next deal instead of blocking the current hand.
+  if (room.phase === "playing") player.done = true;
+  room.players.push(player);
   room.updatedAt = Date.now();
   return { room };
 }
@@ -138,6 +143,7 @@ export function leaveRoom(room: RoguelikeRoom, playerId: string): RoguelikeRoom 
   if (room.hostId === playerId && room.players.length > 0) {
     room.hostId = room.players[0]!.playerId;
   }
+  if (room.players.length > 0) tryReveal(room);
   room.updatedAt = Date.now();
   return room;
 }
@@ -448,4 +454,20 @@ export async function loadRoom(code: string): Promise<RoguelikeRoom | null> {
 
 export async function saveRoom(room: RoguelikeRoom): Promise<void> {
   await upsertRoguelikeRoom(room.code, room);
+}
+
+export class RoomError extends Error {
+  constructor(message: string, public status = 409) { super(message); }
+}
+
+export async function updateRoom(code: string, change: (room: RoguelikeRoom | null) => Promise<RoguelikeRoom>): Promise<RoguelikeRoom> {
+  code = code.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+  if (!code) throw new RoomError("Room code required.", 400);
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const row = await getRoguelikeRoom(code);
+    const expected = row ? JSON.stringify(row.state) : null;
+    const next = await change(row ? structuredClone(row.state) as RoguelikeRoom : null);
+    if (await commitRoguelikeRoom(code, next, expected)) return next;
+  }
+  throw new RoomError("The room is busy. Please retry.");
 }

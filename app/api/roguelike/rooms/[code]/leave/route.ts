@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { leaveRoom, loadRoom, saveRoom } from "../../../../../lib/roguelikeRoom";
+import { leaveRoom, persistRoomXp, updateRoom, RoomError } from "../../../../../lib/roguelikeRoom";
 
 import { ownsSeat } from "../../../../../lib/roguelikeAuthority";
 
@@ -12,10 +12,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ code: string }
   const body = (await req.json().catch(() => null)) as { playerId?: string } | null;
   const playerId = String(body?.playerId ?? "").slice(0, 64);
 
-  const room = await loadRoom(code);
-  if (!room) return NextResponse.json({ error: "Room not found." }, { status: 404 });
-  if (!await ownsSeat(room, playerId)) return NextResponse.json({ error: "Seat ownership required." }, { status: 403 });
-
-  await saveRoom(leaveRoom(room, playerId));
-  return NextResponse.json({ ok: true });
+  try {
+    let awardXp = false;
+    const next = await updateRoom(code, async room => {
+      awardXp = false;
+      if (!room) throw new RoomError("Room not found.", 404);
+      if (!await ownsSeat(room, playerId)) throw new RoomError("Seat ownership required.", 403);
+      const wasEnded = room.runEnded;
+      leaveRoom(room, playerId);
+      awardXp = !wasEnded && room.runEnded && !!room.xp;
+      return room;
+    });
+    if (awardXp) await persistRoomXp(next);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not leave room." }, { status: error instanceof RoomError ? error.status : 500 });
+  }
 }

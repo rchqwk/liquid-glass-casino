@@ -7,6 +7,7 @@ import { SkinProvider } from "./lib/skin";
 import { UiLayoutProvider } from "./lib/uiLayout";
 import { UiScaleProvider } from "./lib/uiScale";
 import { ZoneProvider } from "./lib/client/ui/zone";
+import { DiscordActivityRouter } from "./components/DiscordActivityRouter";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -15,7 +16,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <UiLayoutProvider>
           <UiScaleProvider>
             <AuthProvider>
-              <WalletProvider>{children}</WalletProvider>
+              <WalletProvider><DiscordActivityRouter />{children}</WalletProvider>
             </AuthProvider>
           </UiScaleProvider>
         </UiLayoutProvider>

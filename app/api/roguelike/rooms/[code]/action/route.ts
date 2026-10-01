@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import {
   applyAction,
   dealRoom,
-  loadRoom,
+  updateRoom,
+  RoomError,
   nextRound,
   persistRoomXp,
   resetRoom,
   roomView,
-  saveRoom,
   type RoomAction,
   type SupportId,
 } from "../../../../../lib/roguelikeRoom";
@@ -32,44 +32,32 @@ export async function POST(req: Request, ctx: { params: Promise<{ code: string }
   const action = String(body?.action ?? "");
   if (!playerId) return NextResponse.json({ error: "playerId required." }, { status: 400 });
 
-  const room = await loadRoom(code);
-  if (!room) return NextResponse.json({ error: "Room not found." }, { status: 404 });
-  if (!await ownsSeat(room, playerId)) return NextResponse.json({ error: "Seat ownership required." }, { status: 403 });
-
-  if (action === "deal") {
-    if (room.phase === "lobby" || room.phase === "reveal") {
-      await saveRoom(dealRoom(room));
-      return NextResponse.json({ room: roomView(room, playerId) });
-    }
-    return NextResponse.json({ error: "Cannot deal now." }, { status: 409 });
+  let awardXp = false;
+  try {
+    const next = await updateRoom(code, async room => {
+      awardXp = false;
+      if (!room) throw new RoomError("Room not found.", 404);
+      if (!await ownsSeat(room, playerId)) throw new RoomError("Seat ownership required.", 403);
+      if (action === "deal" || action === "next" || action === "reset") {
+        if (room.hostId !== playerId) throw new RoomError("Only the host can advance or reset the run.", 403);
+        if (action === "reset") return resetRoom(room);
+        if (action === "deal" && (room.phase === "lobby" || room.phase === "reveal") && !room.runEnded) return dealRoom(room);
+        if (action === "next" && room.phase === "reveal" && !room.runEnded) return nextRound(room);
+        throw new RoomError("Cannot advance the round yet.");
+      }
+      if (!ACTIONS.includes(action as RoomAction)) throw new RoomError("Unknown action.", 400);
+      const wasEnded = room.runEnded;
+      const result = applyAction(room, playerId, action as RoomAction, {
+        targetId: body?.targetId ? String(body.targetId).slice(0, 64) : undefined,
+        supportId: body?.supportId ? String(body.supportId) as SupportId : undefined,
+      });
+      if (result.error) throw new RoomError(result.error);
+      awardXp = !wasEnded && result.room.runEnded && !!result.room.xp;
+      return result.room;
+    });
+    if (awardXp) await persistRoomXp(next);
+    return NextResponse.json({ room: roomView(next, playerId) });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update room." }, { status: error instanceof RoomError ? error.status : 500 });
   }
-
-  if (action === "next") {
-    if (room.phase === "reveal") {
-      await saveRoom(nextRound(room));
-      return NextResponse.json({ room: roomView(room, playerId) });
-    }
-    return NextResponse.json({ error: "Cannot start next round yet." }, { status: 409 });
-  }
-
-  if (action === "reset") {
-    if (room.hostId !== playerId) return NextResponse.json({ error: "Only the host can reset the run." }, { status: 403 });
-    await saveRoom(resetRoom(room));
-    return NextResponse.json({ room: roomView(room, playerId) });
-  }
-
-  if (!ACTIONS.includes(action as RoomAction)) {
-    return NextResponse.json({ error: "Unknown action." }, { status: 400 });
-  }
-
-  const { room: next, error } = applyAction(room, playerId, action as RoomAction, {
-    targetId: body?.targetId ? String(body.targetId).slice(0, 64) : undefined,
-    supportId: body?.supportId ? (String(body.supportId) as SupportId) : undefined,
-  });
-  if (error) return NextResponse.json({ error }, { status: 409 });
-  if (next.runEnded && next.xp) {
-    await persistRoomXp(next);
-  }
-  await saveRoom(next);
-  return NextResponse.json({ room: roomView(next, playerId) });
 }
