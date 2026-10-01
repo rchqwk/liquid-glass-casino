@@ -20,6 +20,12 @@ The transport hook shares identical in-flight requests, preserves uncertain requ
 
 Mobile zoom is enabled. AdSense runs after hydration; the server-rendered publisher meta tag preserves the supported ownership-verification method described in [Google's documentation](https://support.google.com/adsense/answer/12169212?hl=en).
 
+## Discord sign-in recovery
+
+`discordClient` keeps one Embedded App SDK per document and coalesces single-use OAuth code exchanges across callback remounts. AuthProvider routes unauthenticated Activities to the entry page, which owns authorization. Embedded navigation uses the Next router instead of reloading the Activity iframe. SDK handshake/authorization and HTTP token exchange waits are bounded; desktop and mobile can recover through browser pairing. Pairing stops on expiry. OAuth fallback requires a user click and never redirects automatically into a sign-in loop.
+
+The root callback awaits Next.js search parameters, supports browser-pairing completion, and preserves the registered redirect URI across the apex/www redirect. Return paths cannot point to another origin or re-enter the auth route. Run `npm run test:discord-auth`; verify a fresh real Discord Activity separately before claiming live end-to-end OAuth success.
+
 ## Rollback
 
 Keep the previous production deployment URL/ID before promoting the new build. Roll back the deployment if hosted checks fail; do not remove account-ownership or atomic-transaction repairs. Compatible classic/V2 routes and invite handling remain in place.

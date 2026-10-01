@@ -1,5 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useAuth } from "../../../lib/authClient";
+import { getDiscordSdk, withDiscordTimeout, exchangeDiscordCode, discordReturnPath } from "../../../lib/discordClient";
 import { useEffect, useMemo, useState } from "react";
 
 type Stage =
@@ -19,6 +22,8 @@ const CANONICAL_REDIRECT_URI = "https://rchqwk.com/casino/blackjack-v2/discord";
 const TABLE_BASE = "/casino/blackjack-v2";
 
 export default function DiscordV2EntryPage() {
+  const router = useRouter();
+  const { refresh } = useAuth();
   const [stage, setStage] = useState<Stage>("init");
   const [err, setErr] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -67,7 +72,7 @@ export default function DiscordV2EntryPage() {
   }, [oauthStateFromQuery]);
 
   // If we initiated OAuth ourselves we store the channel id in `state`.
-  const channelId = channelIdFromQuery ?? (mobileAuthCode ? null : oauthStateFromQuery);
+  const channelId = channelIdFromQuery ?? (!mobileAuthCode && /^\d{15,22}$/.test(oauthStateFromQuery ?? "") ? oauthStateFromQuery : null);
 
   const isMobile = useMemo(() => {
     try {
@@ -84,13 +89,13 @@ export default function DiscordV2EntryPage() {
   }, []);
 
   // ─────────────────────────────────────────────────────────────
-  // Mobile pairing code creation (only after SDK path is exhausted)
+  // Browser pairing code creation (only after SDK path is exhausted)
   // ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isMobile) return;
+    if (!isMobile && !hasFrameId) return;
     if (oauthCodeFromQuery) return;
     if (mobileAuth) return;
-    if (stage !== "awaiting_oauth" && stage !== "error") return;
+    if (stage !== "awaiting_oauth") return;
     let cancelled = false;
     (async () => {
       try {
@@ -119,19 +124,28 @@ export default function DiscordV2EntryPage() {
     return () => {
       cancelled = true;
     };
-  }, [isMobile, oauthCodeFromQuery, mobileAuth, channelId, stage]);
+  }, [isMobile, hasFrameId, oauthCodeFromQuery, mobileAuth, channelId, stage]);
 
   // ─────────────────────────────────────────────────────────────
   // Mobile pairing poll: wait for the code to be used on another device
   // ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isMobile) return;
+    if (!isMobile && !hasFrameId) return;
     if (!mobileAuth?.token) return;
     if (oauthCodeFromQuery) return;
     let cancelled = false;
+    let pending = false;
     const poll = async () => {
+      if (pending || cancelled) return;
+      if (Date.now() >= mobileAuth.expiresAt) {
+        setMobileAuth(null);
+        setStage("error");
+        setErr("Pairing expired. Restart the Activity to get a fresh code.");
+        return;
+      }
+      pending = true;
       try {
-        const res = await fetch(`/api/discord/mobile-auth?token=${encodeURIComponent(mobileAuth.token)}`, { cache: "no-store" });
+        const res = await fetch(`/api/discord/mobile-auth?token=${encodeURIComponent(mobileAuth.token)}`, { cache: "no-store", signal: AbortSignal.timeout(10000) });
         const data = (await res.json().catch(() => ({}))) as any;
         if (!res.ok) return;
         if (cancelled) return;
@@ -144,10 +158,13 @@ export default function DiscordV2EntryPage() {
           addLog("Pairing completed, session stored");
           setStage("redirecting");
           const nextChannelId = String(data?.channelId ?? mobileAuth.channelId ?? "").trim();
-          window.location.replace(nextChannelId ? `${TABLE_BASE}/${encodeURIComponent(nextChannelId)}` : TABLE_BASE);
+          await refresh();
+          router.replace(nextChannelId ? `${TABLE_BASE}/${encodeURIComponent(nextChannelId)}` : TABLE_BASE);
         }
       } catch {
         // ignore transient poll failures
+      } finally {
+        pending = false;
       }
     };
     void poll();
@@ -156,7 +173,7 @@ export default function DiscordV2EntryPage() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [isMobile, mobileAuth, oauthCodeFromQuery]);
+  }, [isMobile, hasFrameId, mobileAuth, oauthCodeFromQuery]);
 
   const persistSession = (token: string | null | undefined) => {
     if (!token) return;
@@ -173,11 +190,12 @@ export default function DiscordV2EntryPage() {
     const ensureRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(targetChannelId)}/ensure`, { method: "POST" });
     const ensureJson = (await ensureRes.json().catch(() => ({}))) as any;
     if (!ensureRes.ok) throw new Error(ensureJson?.error ?? "Failed to create/join table.");
-    await fetch(`/api/blackjack/tables/${encodeURIComponent(targetChannelId)}/join`, {
+    const joinRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(targetChannelId)}/join`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ spectate: false }),
     });
+    if (!joinRes.ok) throw new Error("Could not join the table. Please retry.");
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -196,13 +214,7 @@ export default function DiscordV2EntryPage() {
         if (oauthCodeFromQuery) {
           addLog("PATH 1: OAuth callback");
           setStage("logging_in");
-          const loginRes = await fetch("/api/discord/login", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ code: oauthCodeFromQuery, redirectUri, mobileAuthCode }),
-          });
-          const loginJson = (await loginRes.json().catch(() => ({}))) as any;
-          if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
+          const loginJson = await exchangeDiscordCode(oauthCodeFromQuery, redirectUri, mobileAuthCode);
           persistSession(loginJson?.session_token);
           addLog("Login OK (OAuth)");
 
@@ -215,7 +227,8 @@ export default function DiscordV2EntryPage() {
           if (channelId) await joinTableFlow(channelId);
           if (cancelled) return;
           setStage("redirecting");
-          window.location.replace(channelId ? `${TABLE_BASE}/${encodeURIComponent(channelId)}` : TABLE_BASE);
+          await refresh();
+          router.replace(channelId ? `${TABLE_BASE}/${encodeURIComponent(channelId)}` : discordReturnPath(oauthStateFromQuery));
           return;
         }
 
@@ -223,23 +236,11 @@ export default function DiscordV2EntryPage() {
         if (hasFrameId) {
           addLog("PATH 2: Embedded App SDK");
           try {
-            let DiscordSDK: any;
-            try {
-              const sdkModule = await import("@discord/embedded-app-sdk");
-              DiscordSDK = sdkModule.DiscordSDK;
-            } catch (importErr: any) {
-              throw new Error(`Failed to load Discord SDK: ${importErr?.message ?? "Unknown error"}`);
-            }
-            if (!DiscordSDK) throw new Error("DiscordSDK not found in module");
-            addLog("SDK imported");
-            const discordSdk = new DiscordSDK(clientId);
+            const discordSdk = await getDiscordSdk(clientId);
+            addLog("Shared SDK loaded");
             addLog("Waiting for SDK ready…");
-            await Promise.race([
-              discordSdk.ready(),
-              new Promise((_, reject) =>
-                window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), isMobile ? 10000 : 20000),
-              ),
-            ]);
+            await withDiscordTimeout(discordSdk.ready(), "Discord client handshake timed out. Use browser pairing below.", isMobile ? 10000 : 12000);
+            if (cancelled) return;
             addLog("SDK ready");
 
             const sdkChannelId = (discordSdk as any).channelId as string | undefined;
@@ -250,31 +251,25 @@ export default function DiscordV2EntryPage() {
             }
 
             setStage("authorizing");
-            const authz = await (discordSdk as any).commands.authorize({
+            const authz = await withDiscordTimeout(discordSdk.commands.authorize({
               client_id: clientId,
               response_type: "code",
               prompt: "none",
               scope: ["identify", "rpc.activities.write"],
-            });
+            }), "Discord authorization timed out. Use browser pairing below.");
             const sdkCode = String(authz?.code ?? "");
             if (!sdkCode) throw new Error("Discord authorize did not return a code.");
             addLog("Got SDK auth code");
 
             setStage("logging_in");
-            const loginRes = await fetch("/api/discord/login", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ code: sdkCode, redirectUri }),
-            });
-            const loginJson = (await loginRes.json().catch(() => ({}))) as any;
-            if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
+            const loginJson = await exchangeDiscordCode(sdkCode, redirectUri);
             persistSession(loginJson?.session_token);
             addLog("Login OK (SDK)");
 
             const accessToken = String(loginJson?.access_token ?? "");
             if (accessToken) {
               try {
-                await (discordSdk as any).commands.authenticate({ access_token: accessToken });
+                await withDiscordTimeout(discordSdk.commands.authenticate({ access_token: accessToken }), "Discord authentication timed out.");
                 addLog("authenticate() OK");
               } catch (authErr: any) {
                 addLog(`authenticate() failed: ${authErr?.message ?? "unknown"}`);
@@ -284,15 +279,15 @@ export default function DiscordV2EntryPage() {
             await joinTableFlow(effectiveChannelId);
             if (cancelled) return;
             setStage("redirecting");
-            window.location.replace(`${TABLE_BASE}/${encodeURIComponent(effectiveChannelId)}`);
+            await refresh();
+            router.replace(`${TABLE_BASE}/${encodeURIComponent(effectiveChannelId)}`);
             return;
           } catch (sdkErr: any) {
             const msg = String(sdkErr?.message ?? "");
             addLog(`SDK error: ${msg}`);
             if (cancelled) return;
-            // Mobile webviews are unreliable with the Embedded SDK — fall through to
-            // pairing on ANY SDK failure. On desktop only timeouts fall through.
-            if (!isMobile && !msg.includes("handshake timed out") && !msg.includes("frame_id")) throw sdkErr;
+            // A failed Activity handshake must stop here, without reloading its iframe.
+            setErr(msg);
             // Fall through to fallback path
           }
         }
@@ -315,7 +310,7 @@ export default function DiscordV2EntryPage() {
 
   const oauthAuthorizeUrl = useMemo(() => {
     if (!clientId) return null;
-    const state = channelId ?? "";
+    const state = channelId ? `${TABLE_BASE}/${encodeURIComponent(channelId)}` : TABLE_BASE;
     const url = new URL("https://discord.com/oauth2/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("response_type", "code");
@@ -325,28 +320,9 @@ export default function DiscordV2EntryPage() {
     return url.toString();
   }, [clientId, redirectUri, channelId]);
 
-  // Desktop: auto-redirect to OAuth once when in the fallback state.
-  useEffect(() => {
-    if (isMobile) return;
-    if (oauthCodeFromQuery) return;
-    if (!oauthAuthorizeUrl) return;
-    if (stage !== "awaiting_oauth") return;
-    try {
-      const key = "lgc.discord.oauthAutoRedirected";
-      if (sessionStorage.getItem(key) === "1") return;
-      sessionStorage.setItem(key, "1");
-      const t = window.setTimeout(() => {
-        window.location.href = oauthAuthorizeUrl;
-      }, 700);
-      return () => window.clearTimeout(t);
-    } catch {
-      // ignore
-    }
-  }, [stage, oauthCodeFromQuery, oauthAuthorizeUrl, isMobile]);
-
   const mobileLinkUrl = useMemo(() => {
     if (typeof window === "undefined") return "/discord/mobile";
-    return `${window.location.origin}/discord/mobile`;
+    return "https://rchqwk.com/discord/mobile";
   }, []);
 
   const progress = useMemo(() => {
@@ -363,14 +339,14 @@ export default function DiscordV2EntryPage() {
 
   const stageLabel = useMemo(() => {
     if (stage === "init") return "Connecting to Discord…";
-    if (stage === "awaiting_oauth") return isMobile ? "Mobile pairing" : "Authorize with Discord to continue…";
+    if (stage === "awaiting_oauth") return hasFrameId || isMobile ? "Continue with browser pairing" : "Continue with Discord to sign in";
     if (stage === "authorizing") return "Authorizing…";
     if (stage === "logging_in") return "Signing you in…";
     if (stage === "ensuring_table") return "Creating / joining table…";
     if (stage === "redirecting") return "Loading table…";
     if (stage === "linked") return "Discord sign-in completed.";
     return "Error";
-  }, [stage, isMobile]);
+  }, [stage, isMobile, hasFrameId]);
 
   return (
     <div
@@ -422,9 +398,9 @@ export default function DiscordV2EntryPage() {
           </div>
         ) : null}
 
-        {isMobile && stage === "awaiting_oauth" && mobileAuth ? (
+        {stage === "awaiting_oauth" && mobileAuth ? (
           <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80">
-            <div className="font-semibold text-white">Mobile pairing code</div>
+            <div className="font-semibold text-white">Browser pairing code</div>
             <div className="mt-3 font-mono text-2xl tracking-widest text-neon-cyan">{mobileAuth.code}</div>
             <div className="mt-3 text-xs text-white/60">
               Open <span className="font-mono text-neon-magenta">{mobileLinkUrl}</span> in your browser, enter the code
@@ -433,6 +409,8 @@ export default function DiscordV2EntryPage() {
           </div>
         ) : null}
 
+        {stage === "awaiting_oauth" && !hasFrameId && !isMobile && oauthAuthorizeUrl ? <a className="casino-button casino-primary mt-4" href={oauthAuthorizeUrl}>Continue with Discord</a> : null}
+        {stage === "awaiting_oauth" && hasFrameId ? <p className="casino-muted mt-4 text-sm">The Discord connection did not finish. Open rchqwk.com/discord/mobile in your browser and enter the pairing code. This page will continue when linked.</p> : null}
         {stage === "error" ? (
           <div className="mt-4 flex flex-col gap-2">
             <button
@@ -445,6 +423,7 @@ export default function DiscordV2EntryPage() {
                   // ignore
                 }
                 const target = channelId ? `${TABLE_BASE}/${encodeURIComponent(channelId)}` : TABLE_BASE;
+                // Username mode intentionally leaves SDK auth and reinitializes the provider.
                 window.location.replace(target);
               }}
             >

@@ -1,17 +1,19 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 // Legacy entry path. The canonical Discord OAuth entry lives at
 // /casino/blackjack-v2/discord (matches the registered redirect URI).
 // Preserve the full query string (frame_id, channel_id, code, state, ...).
 export default function DiscordLegacyEntryRedirect() {
+  const router = useRouter();
   useEffect(() => {
     try {
       const search = window.location.search || "";
-      window.location.replace(`/casino/blackjack-v2/discord${search}`);
+      router.replace(`/casino/blackjack-v2/discord${search}`);
     } catch {
-      window.location.replace("/casino/blackjack-v2/discord");
+      router.replace("/casino/blackjack-v2/discord");
     }
   }, []);
 
