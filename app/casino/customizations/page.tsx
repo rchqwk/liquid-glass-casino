@@ -170,12 +170,12 @@ export default function CustomizationsPage() {
           <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
             <div className="text-sm font-semibold text-white">UI scale</div>
             <div className="mt-1 text-xs text-white/60">
-              Scales the floating horizontal HUD and menus. Default is <span className="font-mono text-white/80">150%</span> because it reads better
-              in Discord Activities.
+              Scales the floating horizontal HUD and menus. Default is <span className="font-mono text-white/80">100%</span>.
+              Choose 75% or 85% for a smaller HUD in Discord Activities.
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              {[100, 125, 150, 175].map((scale) => (
+              {[75, 85, 100, 125, 150, 175].map((scale) => (
                 <button
                   key={scale}
                   type="button"
@@ -184,7 +184,7 @@ export default function CustomizationsPage() {
                       ? "border-fuchsia-300/25 bg-fuchsia-500/10 text-fuchsia-100"
                       : "border-white/10 bg-white/5 text-white/70 hover:text-white"
                   }`}
-                  onClick={() => setUiScale(scale as 100 | 125 | 150 | 175)}
+                  onClick={() => setUiScale(scale as 75 | 85 | 100 | 125 | 150 | 175)}
                 >
                   {scale}%
                 </button>

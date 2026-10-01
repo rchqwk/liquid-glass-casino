@@ -11,6 +11,7 @@ import { useWallet } from "../../../lib/wallet";
 import { useAuth } from "../../../lib/authClient";
 import { useUiLayout } from "../../../lib/uiLayout";
 import { useUiScale } from "../../../lib/uiScale";
+import { FloatingHudSize } from "../../../components/casino/FloatingHudSize";
 import { blackjackJoinCodeFromTable } from "../../../lib/blackjackJoinCode";
 import { BlackjackChatPanel } from "../blackjackChatPanel";
 import { blackjackCollectibleLabel, BlackjackCollectiblesPanel, BlackjackTableEditInventory } from "../blackjackCollectiblesPanel";
@@ -427,9 +428,9 @@ export function BlackjackTablePageClient({
   const horizontalMode = showV2Shell && uiLayout === "horizontal";
   const horizontalUiScale = uiScale / 100;
   const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const horizontalLiveControlsScale = uiScale === 150 ? 1 : horizontalUiScale;
+  const horizontalLiveControlsScale = horizontalUiScale;
   const horizontalPowerupsWindow = horizontalMode && showV2Shell;
-  const horizontalPowerupsScale = 1;
+  const horizontalPowerupsScale = horizontalUiScale;
   const horizontalStakeDockScale = isMobileViewport ? 1 : horizontalUiScale;
   const v2HeaderVisible = !!state;
   const classicHeaderVisible = !!(state && (mySeat || isSpectator) && topbarOpen);
@@ -1082,7 +1083,7 @@ export function BlackjackTablePageClient({
 
   return (
     <div className="casino-table-page flex flex-col gap-4" inert={wagerActionPending}>
-      <div className="casino-table-session"><span role="status">{wagerActionPending ? "Reserving stake and confirming action…" : pendingCount > 0 ? "Submitting action…" : connected ? "Connected · Table synced" : "Reconnecting · Actions paused"}</span>{!connected ? <button className="casino-button casino-secondary" type="button" onClick={() => void fetchTable()}>Reconnect</button> : null}<Link href="/casino/blackjack/rules">Rules & payouts</Link></div>
+      <div className="casino-table-session"><span role="status">{wagerActionPending ? "Reserving stake and confirming action…" : pendingCount > 0 ? "Submitting action…" : connected ? "Connected · Table synced" : "Reconnecting · Actions paused"}</span>{!connected ? <button className="casino-button casino-secondary" type="button" onClick={() => void fetchTable()}>Reconnect</button> : null}{horizontalMode ? <FloatingHudSize /> : null}<Link href="/casino/blackjack/rules">Rules & payouts</Link></div>
       {err ? <div className="casino-error" role="alert">{err}</div> : null}
       {actionError ? <div className="casino-error" role="alert">{actionError}</div> : null}
       <CasinoDialog open={leaveOpen} onClose={() => setLeaveOpen(false)} title="Leave this table?">

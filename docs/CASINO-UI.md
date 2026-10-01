@@ -8,6 +8,8 @@ The Blackjack lobby is shared by classic/V2 entry points. Guests can browse publ
 
 On desktop (above 900px), your hand and the dealer share the front row, with a bounded, keyboard-focusable player region beneath. Standard round controls occupy a sticky 320px sidebar, including on 1024px laptops. Mobile keeps the player's hand first and the full player list in normal page flow. The main Double/Split controls use the guarded server wallet reservation, await its nonce, and cancel rejected table actions through the existing wallet flow.
 
+In-game chrome is compact on desktop and short Discord windows: smaller card faces, panel padding, header and mouse controls, with a 290px standard sidebar. Phone buttons retain 44px minimum height. Floating HUD scale defaults to 100%, with 75% and 85% choices available at the table in horizontal mode and in Customizations. Explicit stored preferences are preserved; floating action, stake and power-up menus use the selected scale consistently.
+
 The transport hook shares identical in-flight requests, preserves uncertain request IDs in session storage across refreshes, scopes them to the actor/table/payload digest, and treats incomplete acknowledgements as unconfirmed. Only request IDs are persisted; credentials and action payloads are not stored. Keep the server ownership, receipts, and table/inventory compare-and-set protections intact.
 
 ## Verification

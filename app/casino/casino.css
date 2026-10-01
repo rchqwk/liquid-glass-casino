@@ -101,6 +101,8 @@
 .casino-inventory-links { display: grid; gap: 12px; }
 .casino-table-session { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; font-size: 12px; color: var(--casino-muted); }
 .casino-table-session strong { color: var(--casino-accent); }
+.casino-hud-size { display: inline-flex; align-items: center; gap: 8px; color: var(--casino-muted); font-size: 11px; }
+.casino-hud-size select { border: 1px solid var(--casino-border); border-radius: 8px; padding: 4px 8px; color: var(--casino-text); }
 .casino-table-grid { align-items: start; }
 .casino-table-grid > * { min-width: 0; }
 .casino-table-controls { max-height: 75dvh; overflow: auto; scrollbar-width: thin; }
@@ -188,4 +190,54 @@ html[data-lgc-skin="cartoon"] .casino-shell { --casino-panel: #1c2240; --casino-
 }
 @media (prefers-reduced-motion: reduce) {
   .casino-shell *, .casino-shell *::before, .casino-shell *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* Dense game chrome; browse pages and phone touch targets keep their normal sizes. */
+@media (min-width: 901px), (min-width: 600px) and (max-height: 700px) {
+  .casino-shell--table .casino-header__row { padding-block: 6px; gap: 12px; }
+  .casino-shell--table .casino-main { padding: 10px 16px 24px; }
+  .casino-table-page { gap: 10px; }
+  .casino-table-header { padding: 10px 14px !important; }
+  .casino-table-header h1 { font-size: 18px; line-height: 1.2; }
+  .casino-table-status { padding: 8px 12px !important; }
+  .casino-table-surface, .casino-table-controls { padding: 12px !important; border-radius: 16px; }
+  .casino-table-surface > div:first-child h2, .casino-table-controls h2 { font-size: 16px; }
+  .casino-table-surface > div:first-child p { display: none; }
+  .casino-responsive-felt { padding: 12px; border-radius: 18px; }
+  .casino-table-focus { gap: 10px; }
+  .casino-seat { padding: 10px; border-radius: 12px; }
+  .casino-seat-heading { margin-bottom: 8px; font-size: 11px; }
+  .casino-shell--table .nn-card-playing { width: 52px; height: 74px; }
+  .casino-shell--table .casino-seat-grid .nn-card-playing { width: 38px; height: 54px; }
+  .casino-shell--table .casino-seat-grid .nn-card-rank-top { top: 3px; left: 4px; font-size: 11px; line-height: 1; }
+  .casino-shell--table .casino-seat-grid .nn-card-rank-bottom { bottom: 3px; right: 4px; font-size: 11px; line-height: 1; }
+  .casino-shell--table .casino-seat-grid :is(.nn-card-suit-top, .nn-card-suit-bottom) { font-size: 8px; }
+  .casino-shell--table .casino-seat-grid .nn-card-suit-center { font-size: 18px; }
+  .casino-dealer { padding: 8px; }
+  .casino-dealer__cards { gap: 6px; margin-top: 8px; }
+  .casino-opponents { margin-top: 12px; }
+  .casino-seat-grid { gap: 8px; margin-top: 8px; }
+  .casino-open-seats { margin-top: 10px; }
+  .casino-turn-bar { top: 64px; }
+  .casino-turn-bar > .nn-card { padding: 8px 12px; }
+  .casino-table-grid--desktop { grid-template-columns: minmax(0, 1fr) 290px; }
+  .casino-table-grid--desktop .casino-table-controls { top: 70px; max-height: calc(100dvh - 90px); }
+}
+@media (pointer: fine) and (min-width: 600px) {
+  .casino-shell--table :is(button, input:not([type="checkbox"]):not([type="radio"]), select, .casino-nav a, summary) { min-height: 34px; }
+  .casino-shell--table .casino-button { padding: 7px 12px; font-size: 12px; }
+  .casino-shell--table .casino-turn-bar summary { min-height: 34px; }
+}
+@media (min-width: 600px) and (max-width: 900px) and (max-height: 700px) {
+  .casino-shell--table .casino-header__row { flex-wrap: nowrap; padding-inline: 12px; gap: 8px; }
+  .casino-shell--table .casino-brand small { display: none; }
+  .casino-shell--table .casino-brand { font-size: 11px; gap: 6px; }
+  .casino-shell--table .casino-brand__mark { width: 26px; height: 26px; }
+  .casino-shell--table .casino-nav { order: 0; width: auto; gap: 0; }
+  .casino-shell--table .casino-nav a, .casino-shell--table .casino-nav > button { padding-inline: 6px; font-size: 11px; }
+  .casino-shell--table .casino-profile-link { max-width: 70px; font-size: 10px; }
+  .casino-shell--table .casino-balance { padding: 4px 6px; font-size: 11px; }
+  .casino-shell--table .casino-header__account { gap: 6px; }
+  .casino-table-focus--seated { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .casino-turn-bar { top: 64px; }
 }
