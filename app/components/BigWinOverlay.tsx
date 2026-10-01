@@ -46,7 +46,7 @@ function durationFor(x: number) {
   return Math.min(14000, base + Math.max(extra, logExtra));
 }
 
-export function BigWinOverlay() {
+export function BigWinOverlay({ compact = false }: { compact?: boolean }) {
   const { balance } = useWallet();
   const [active, setActive] = useState<BigWinDetail | null>(null);
   const [shownProfit, setShownProfit] = useState(0);
@@ -204,7 +204,7 @@ export function BigWinOverlay() {
       </div>
 
       {/* Center alert for mega+ that stays until higher level or next spin */}
-      {centerMode ? (
+      {centerMode && !compact ? (
         <div className="absolute inset-0 flex items-center justify-center px-4">
           <div className="bigwin-center glass glass-shine w-full max-w-md rounded-3xl border border-white/15 p-6 text-center">
             <div className="bigwin-title text-2xl font-bold tracking-wide text-white">

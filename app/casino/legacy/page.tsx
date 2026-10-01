@@ -3,8 +3,8 @@ import { GamesGallery } from "../GamesGallery";
 export default function LegacyCasinoPage() {
   return (
     <GamesGallery
-      title="Legacy Casino"
-      description="Slots, roulette, dice, poker, and the older side modes stay here while Blackjack becomes the main product."
+      title="Find your next game"
+      description="Explore slots, roulette, dice, poker, and card adventures. Your next round starts here."
     />
   );
 }

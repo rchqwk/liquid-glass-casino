@@ -14,6 +14,8 @@ type GameCard = {
 type StatRow = { gameId: string; wagerTotal: number; bets: number };
 
 const GAMES: GameCard[] = [
+  { gameId: "blackjack", title: "Live Blackjack", desc: "A social table for up to 10 players, with power-ups and spectators.", href: "/casino/blackjack-v2", tag: "MULTIPLAYER" },
+  { gameId: "blackjack-roguelike", title: "Roguelike Blackjack", desc: "A card adventure with a different challenge every run.", href: "/arcade/blackjack-roguelike", tag: "CARD ADVENTURE" },
   {
     gameId: "slots",
     title: "EMOJI Hold and Win",
@@ -45,8 +47,8 @@ function money(n: number) {
 }
 
 export function GamesGallery({
-  title = "Legacy Casino",
-  description = "The original side modes now live here as legacy games and minigames.",
+  title = "All games",
+  description = "Explore the arcade.",
 }: {
   title?: string;
   description?: string;
@@ -112,7 +114,7 @@ export function GamesGallery({
     <div className="flex flex-col gap-6">
       <div className="glass glass-shine rounded-3xl p-6">
         <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold tracking-wide text-white/70">
-          LEGACY CASINO
+          THE ARCADE
         </div>
         <h2 className="mt-3 text-xl font-semibold text-white">{title}</h2>
         <p className="mt-2 text-sm leading-6 text-white/70">
@@ -148,12 +150,12 @@ export function GamesGallery({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {sorted.map((c) => (
           <Link
             key={c.href}
             href={c.href}
-            className="glass-soft glass-shine rounded-3xl p-5 transition hover:bg-white/10"
+            className="casino-game-card glass-soft glass-shine rounded-3xl p-5 transition hover:bg-white/10"
           >
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-base font-semibold text-white">{c.title}</h3>

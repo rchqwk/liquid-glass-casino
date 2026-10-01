@@ -1,5 +1,7 @@
 "use client";
 
+import { CasinoDialog } from "../../components/casino/CasinoDialog";
+
 import Link from "next/link";
 
 export function BlackjackInviteModal({
@@ -22,13 +24,13 @@ export function BlackjackInviteModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
-      <div className="glass glass-shine w-full max-w-[620px] rounded-3xl border border-white/10 p-6">
+    <CasinoDialog open={open} onClose={onClose} title="Share table" showHeading={false}>
+      <div>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-white">{experience === "v2" ? "Share table" : "Invite players"}</div>
             <div className="mt-1 text-xs text-white/60">
-              {experience === "v2" ? "Send this V2 table link so someone can jump straight into the surface:" : "Share this link to join the room:"}
+              {experience === "v2" ? "Send this link to invite someone to your table:" : "Share this link to join the room:"}
             </div>
           </div>
           <button type="button" className="rounded-2xl px-3 py-2 text-xs text-white/70 hover:text-white" onClick={onClose}>
@@ -66,7 +68,7 @@ export function BlackjackInviteModal({
           </div>
         </div>
       </div>
-    </div>
+    </CasinoDialog>
   );
 }
 
@@ -100,13 +102,13 @@ export function BlackjackTableHeader({
   if (!visible) return null;
 
   return (
-    <div className="glass glass-shine rounded-3xl p-6">
+    <div className="casino-table-header glass glass-shine rounded-3xl p-6" title={"Table " + tableId}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold text-white">{tableName || (experience === "v2" ? "Blackjack Table" : "Blackjack Table")}</h2>
+          <h1 className="text-xl font-semibold text-white">{tableName || (experience === "v2" ? "Blackjack Table" : "Blackjack Table")}</h1>
           <p className="mt-1 text-sm text-white/60">
-            {experience === "v2" ? "Surface" : "Table"}: <span className="font-mono">{tableId || "-"}</span> • Round <span className="font-mono">{round || "-"}</span> • Phase{" "}
-            <span className="font-mono">{phase || "-"}</span>
+            Round <span className="font-mono">{round || "-"}</span> • Phase{" "}
+            <span className="font-mono">{phase.replaceAll("_", " ") || "-"}</span>
           </p>
           {joinCode ? (
             <p className="mt-1 text-xs text-cyan-100/80">
@@ -116,7 +118,7 @@ export function BlackjackTableHeader({
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={lobbyHref} className="glass-soft rounded-2xl px-3 py-2 text-xs text-white/80 hover:bg-white/10">
-            {experience === "v2" ? "Back to V2 lobby" : "Back to lobby"}
+            {experience === "v2" ? "Back to lobby" : "Back to lobby"}
           </Link>
           {showInvite ? (
             <button
@@ -147,6 +149,7 @@ export function BlackjackTurnActionBar({
   canSplit,
   extendUsed,
   busted,
+  busy = false,
   onHit,
   onStand,
   onDoubleDown,
@@ -162,6 +165,7 @@ export function BlackjackTurnActionBar({
   canSplit: boolean;
   extendUsed: boolean;
   busted: boolean;
+  busy?: boolean;
   onHit: () => void;
   onStand: () => void;
   onDoubleDown: () => void;
@@ -172,7 +176,7 @@ export function BlackjackTurnActionBar({
   if (!visible) return null;
 
   return (
-    <div className="sticky top-3 z-[60]">
+    <div className="casino-turn-bar">
       <div className="nn-card nn-fade-in-up p-4" style={{ borderColor: "rgba(0,255,136,0.3)", boxShadow: "0 0 30px var(--neon-green-glow)" }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm font-semibold text-white">
@@ -188,42 +192,43 @@ export function BlackjackTurnActionBar({
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" className="nn-btn nn-btn-primary nn-btn-md" onClick={onHit} disabled={busted}>
+          <button type="button" className="nn-btn nn-btn-primary nn-btn-md" onClick={onHit} disabled={busted || busy}>
             Hit
           </button>
-          <button type="button" className="nn-btn nn-btn-secondary nn-btn-md" onClick={onStand}>
+          <button type="button" className="nn-btn nn-btn-secondary nn-btn-md" onClick={onStand} disabled={busy}>
             Stand
           </button>
           <button
             type="button"
             className="nn-btn nn-btn-secondary nn-btn-md"
             onClick={onDoubleDown}
-            disabled={!canDoubleDown}
+            disabled={!canDoubleDown || busy}
             title="Double your bet, draw one card, and stand"
           >
-            DD
+            Double
           </button>
           <button
             type="button"
             className="nn-btn nn-btn-secondary nn-btn-md"
             onClick={onSplit}
-            disabled={!canSplit}
+            disabled={!canSplit || busy}
             title="Split (up to 4 hands). If your cards don't match, requires FREE_SPLIT."
           >
             Split
           </button>
-          <button type="button" className="nn-btn nn-btn-ghost nn-btn-md" onClick={onVoteSkip} title="Skip the remaining turn timer">
+          <details className="basis-full"><summary className="casino-muted cursor-pointer py-2 text-xs">More turn options</summary><div className="flex flex-wrap gap-2">
+          <button type="button" className="nn-btn nn-btn-ghost nn-btn-md" onClick={onVoteSkip} disabled={busy} title="Skip the remaining turn timer">
             Vote skip
           </button>
           <button
             type="button"
             className="nn-btn nn-btn-ghost nn-btn-md"
             onClick={onExtend}
-            disabled={extendUsed}
+            disabled={extendUsed || busy}
             title="Extend your turn timer once"
           >
             Extend timer
-          </button>
+          </button></div></details>
         </div>
       </div>
     </div>
@@ -262,55 +267,14 @@ export function BlackjackV2StatusStrip({
   if (!visible) return null;
 
   return (
-    <div className="nn-card nn-fade-in p-4" style={{ borderColor: "rgba(0,245,255,0.15)" }}>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-white/45">Round state</div>
-            <div className="mt-1 text-sm font-semibold text-neon-cyan">{phase || "-"}</div>
-          </div>
-          <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-white/45">{timerLabel || "Timer"}</div>
-            <div className="mt-1 text-sm font-semibold text-white">
-              {typeof timerSeconds === "number" ? `${timerSeconds}s` : "Live"}
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-white/45">Seats filled</div>
-            <div className="mt-1 text-sm font-semibold text-white">{seatCount}/10</div>
-          </div>
-          <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-white/45">Watching live</div>
-            <div className="mt-1 text-sm font-semibold text-white">{spectatorCount}</div>
-          </div>
-        </div>
-
+    <div className="casino-table-status casino-panel">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3 text-xs"><span className="casino-tag">{phase.replaceAll("_", " ")}</span><span>{timerLabel} <strong className="font-mono text-white">{typeof timerSeconds === "number" ? timerSeconds + "s" : "Live"}</strong></span><span className="casino-muted">{seatCount}/10 seats · {spectatorCount} watching</span></div>
         <div className="flex flex-wrap gap-2">
-          {isMyTurn ? (
-            <button
-              type="button"
-              className="nn-btn nn-btn-success nn-btn-sm"
-              onClick={onOpenControls}
-            >
-              Open turn controls
-            </button>
-          ) : null}
-          <button type="button" className="nn-btn nn-btn-secondary nn-btn-sm relative" onClick={onOpenChat}>
-            Open chat
-            {unreadChat > 0 ? (
-              <span className="ml-1 rounded-full bg-fuchsia-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                {Math.min(99, unreadChat)}
-              </span>
-            ) : null}
-          </button>
-          <button type="button" className="nn-btn nn-btn-secondary nn-btn-sm" onClick={onOpenCollectibles}>
-            Felt items
-          </button>
-          {isHost ? (
-            <button type="button" className="nn-btn nn-btn-gold nn-btn-sm" onClick={onOpenHost}>
-              Host tools
-            </button>
-          ) : null}
+          {isMyTurn ? <button type="button" className="casino-button casino-primary" onClick={onOpenControls}>Your controls</button> : null}
+          <button type="button" className="casino-button casino-secondary" onClick={onOpenChat}>Chat{unreadChat > 0 ? " · " + Math.min(99, unreadChat) : ""}</button>
+          <button type="button" className="casino-button casino-secondary" onClick={onOpenCollectibles}>Decorations</button>
+          {isHost ? <button type="button" className="casino-button casino-secondary" onClick={onOpenHost}>Host tools</button> : null}
         </div>
       </div>
     </div>

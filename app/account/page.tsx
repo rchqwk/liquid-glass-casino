@@ -1,11 +1,15 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useAuth } from "../lib/authClient";
 import { useEffect, useState } from "react";
 
 type UserView = { id: number; username: string; role_level: number; prestige_level: number; prestige_points: number; name_color: string | null; xp?: number };
 type CredType = "password" | "passcode";
 
 export default function AccountPage() {
+  const router = useRouter();
+  const { refresh } = useAuth();
   const [mode, setMode] = useState<"login" | "register" | "claim" | "email">("login");
   const [credType, setCredType] = useState<CredType>("password");
   const [username, setUsername] = useState("");
@@ -43,6 +47,12 @@ export default function AccountPage() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
+      if (res.ok && data.session_token) {
+        try { localStorage.setItem("lgc.session", data.session_token); } catch { /* cookie session remains available */ }
+        await refresh();
+        const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+        if (returnTo?.startsWith("/casino/")) router.push(returnTo);
+      }
       return { ok: res.ok, status: res.status, data };
     } catch {
       setError("Network error.");

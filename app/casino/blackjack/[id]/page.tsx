@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { CasinoDialog } from "../../../components/casino/CasinoDialog";
+import { BlackjackResponsiveTable } from "../BlackjackResponsiveTable";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
@@ -50,9 +52,10 @@ export function BlackjackTablePageClient({
   const safeTableId = tableId && tableId !== "undefined" ? tableId : null;
   const rpLastRef = useRef<string>("");
   const [tick, setTick] = useState(0);
-  const { state, setState, tableMeta, err, setErr, applyTablePayload, requestTableRoute } =
-    useBlackjackTableContract<BJState>(safeTableId);
+  const { state, setState, tableMeta, err, setErr, applyTablePayload, requestTableRoute, connected, pendingCount, fetchTable, actionError } =
+    useBlackjackTableContract<BJState>(safeTableId, undefined, user?.id);
   const stateRef = useRef<BJState | null>(null);
+  const [leaveOpen, setLeaveOpen] = useState(false);
   const [betAmount, setBetAmount] = useState(10);
   const [allIn, setAllIn] = useState(false);
   const [ppAmount, setPpAmount] = useState(0);
@@ -431,7 +434,7 @@ export function BlackjackTablePageClient({
   const horizontalPowerupsWindow = horizontalMode && showV2Shell;
   const horizontalPowerupsScale = 1;
   const horizontalStakeDockScale = isMobileViewport ? 1 : horizontalUiScale;
-  const v2HeaderVisible = !!(state && topbarOpen);
+  const v2HeaderVisible = !!state;
   const classicHeaderVisible = !!(state && (mySeat || isSpectator) && topbarOpen);
   const [hControlsOpen, setHControlsOpen] = useState(false);
   const [hMenuOpen, setHMenuOpen] = useState(false);
@@ -442,7 +445,7 @@ export function BlackjackTablePageClient({
   const canUseDealerSpecial = state?.phase === "dealer_window";
   const canUseAnytimeSpecial =
     state?.phase === "player_turns" || state?.phase === "dealer" || state?.phase === "dealer_window";
-  const fullHeightFeltMode = showV2Shell && !topbarOpen && tableView === "table";
+  const fullHeightFeltMode = false;
   const horizontalApplicablePowerups: Array<[string, number]> = (() => {
     if (!horizontalShowLiveDock || !state?.meInventory) return [];
 
@@ -980,7 +983,7 @@ export function BlackjackTablePageClient({
   useEffect(() => {
     const onInvite = () => setInviteOpen(true);
     const onLeave = () => {
-      void post("leave");
+      setLeaveOpen(true);
     };
     try {
       window.addEventListener("lgc:blackjackInvite", onInvite as any);
@@ -1080,7 +1083,14 @@ export function BlackjackTablePageClient({
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="casino-table-page flex flex-col gap-4">
+      <div className="casino-table-session"><span role="status">{pendingCount > 0 ? "Submitting action…" : connected ? "Connected · Table synced" : "Reconnecting · Actions paused"}</span>{!connected ? <button className="casino-button casino-secondary" type="button" onClick={() => void fetchTable()}>Reconnect</button> : null}<Link href="/casino/blackjack/rules">Rules & payouts</Link></div>
+      {err ? <div className="casino-error" role="alert">{err}</div> : null}
+      {actionError ? <div className="casino-error" role="alert">{actionError}</div> : null}
+      <CasinoDialog open={leaveOpen} onClose={() => setLeaveOpen(false)} title="Leave this table?">
+        <p className="casino-muted text-sm leading-6">You will give up your seat. Any committed stake remains subject to the current round rules; leaving is not a refund.</p>
+        <div className="mt-5 flex flex-wrap gap-3"><button type="button" className="casino-button casino-secondary" onClick={() => setLeaveOpen(false)}>Keep my seat</button><button type="button" className="casino-button casino-primary" disabled={pendingCount > 0 || !connected} onClick={async () => { const result = await post("leave"); if (result?.ok) setLeaveOpen(false); }}>Leave table</button></div>
+      </CasinoDialog>
       {powerupToasts.length ? (
         <div className="pointer-events-none fixed top-24 left-1/2 z-[90] w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 space-y-2">
           {powerupToasts.map((t) => (
@@ -1811,10 +1821,10 @@ export function BlackjackTablePageClient({
         onOpenChat={() => setChatOpen(true)}
         onOpenCollectibles={() => setCollectiblesOpen(true)}
         onOpenHost={() => setHostOpen(true)}
-        onOpenControls={() => scrollToSection(roundControlsRef.current)}
+        onOpenControls={() => { if (horizontalMode) setHControlsOpen(true); else scrollToSection(roundControlsRef.current); }}
       />
       <BlackjackV2OverviewPanel
-        visible={showV2Shell && v2HeaderVisible}
+        visible={showV2Shell && v2HeaderVisible && !mySeat}
         seated={!!mySeat}
         spectating={!!isSpectator}
         phase={String(state?.phase ?? "-")}
@@ -1833,7 +1843,7 @@ export function BlackjackTablePageClient({
         }}
       />
       <BlackjackV2FloatingTimer
-        visible={showV2Shell && !!state}
+        visible={false}
         label={
           state?.phase === "betting"
             ? "Betting window"
@@ -1867,12 +1877,13 @@ export function BlackjackTablePageClient({
         showInvite={!discordMode}
         onOpenInvite={() => setInviteOpen(true)}
         onLeave={() => {
-          void post("leave");
+          setLeaveOpen(true);
         }}
       />
 
       <BlackjackTurnActionBar
-        visible={!!(!showV2Shell && state && mySeat && isMyTurn)}
+        visible={!!(state && mySeat && isMyTurn && !horizontalMode)}
+        busy={pendingCount > 0 || !connected}
         myHandIndex={myHandIndex}
         myHandCount={myHandCount}
         turnLeft={turnLeft}
@@ -1922,17 +1933,17 @@ export function BlackjackTablePageClient({
                   href={lobbyHref}
                   className="glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/85 hover:bg-white/10"
                 >
-                  {showV2Shell ? "Return to V2 lobby" : "Return to lobby"}
+                  {showV2Shell ? "Return to lobby" : "Return to lobby"}
                 </Link>
               </div>
 
             </>
           ) : (
-            showV2Shell ? "Loading V2 table surface…" : "Loading…"
+            showV2Shell ? "Connecting to your table…" : "Loading…"
           )}
         </div>
       ) : (
-        <div className={`grid grid-cols-1 gap-4 ${!horizontalMode ? (showV2Shell ? "xl:grid-cols-[minmax(0,1.15fr)_360px]" : "lg:grid-cols-[360px_1fr]") : ""}`}>
+        <div className={`casino-table-grid grid grid-cols-1 gap-4 ${!horizontalMode ? (showV2Shell ? "xl:grid-cols-[minmax(0,1.15fr)_360px]" : "lg:grid-cols-[360px_1fr]") : ""}`}>
           {horizontalMode && hControlsOpen ? (
             <button
               type="button"
@@ -1948,7 +1959,7 @@ export function BlackjackTablePageClient({
                 ? hControlsOpen
                   ? "fixed left-1/2 top-1/2 z-[84] w-[min(460px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 glass-soft glass-shine rounded-3xl p-5"
                   : "hidden"
-                : `glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "order-2 xl:order-2" : ""}`
+                : `casino-table-controls glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "order-2 xl:order-2" : ""}`
             }
             style={
               horizontalMode && hControlsOpen
@@ -1958,16 +1969,18 @@ export function BlackjackTablePageClient({
                   }
                 : undefined
             }
+            inert={pendingCount > 0 || !connected}
+            aria-busy={pendingCount > 0}
             data-tour="bj-round-controls"
           >
             {showV2Shell ? (
               <BlackjackV2SectionHeader
                 eyebrow={horizontalPowerupsWindow ? "Powerups" : "Controls"}
-                title={horizontalPowerupsWindow ? "Cards, boosts, and bonds" : "Betting, inventory, and round tools"}
+                title={horizontalPowerupsWindow ? "Cards, boosts, and bonds" : "Your round"}
                 subtitle={
                   horizontalPowerupsWindow
                     ? "Use only your card effects, boosts, and bond actions from this focused window."
-                    : "Manage wagers, side bets, powerups, bonds, and host options from one control rail."
+                    : "Place your stake here. Cards, boosts, and bonds are available below."
                 }
               />
             ) : null}
@@ -2877,7 +2890,7 @@ export function BlackjackTablePageClient({
                     setTableView("table");
                   }}
                 >
-                  {showV2Shell ? "Live felt" : "Table"}
+                  {showV2Shell ? "Table" : "Table"}
                 </button>
                 <button
                   type="button"
@@ -2891,7 +2904,7 @@ export function BlackjackTablePageClient({
                     setTableView("list");
                   }}
                 >
-                  {showV2Shell ? "Seat rail" : "List"}
+                  {showV2Shell ? "Seat list" : "List"}
                 </button>
               </div>
             </div>
@@ -2944,6 +2957,8 @@ export function BlackjackTablePageClient({
                     />
                   ))}
                 </div>
+              ) : showV2Shell ? (
+                <div className="mt-3"><BlackjackResponsiveTable state={state} currentUserId={user?.id ?? null} nameColor={user?.name_color ?? null} prestige={Number(user?.prestige_level ?? 0)} turnSeat={myTurnSeat ?? -1} feltRef={feltRef} editMode={tableEditMode} onDrag={setDragId} onPickup={id => { void postCollectible({ action: "pickup", decorationId: id }); }} /></div>
               ) : (
                 <div className="mt-3">
                   <div className={`relative mx-auto w-full max-w-[640px] ${isMobile ? "origin-top scale-[0.88]" : ""}`}>
@@ -3490,7 +3505,7 @@ export function BlackjackTablePageClient({
                       className="glass-soft rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-500/15"
                       onClick={() => {
                         setHMenuOpen(false);
-                        void post("leave");
+                        setLeaveOpen(true);
                       }}
                     >
                       Exit table

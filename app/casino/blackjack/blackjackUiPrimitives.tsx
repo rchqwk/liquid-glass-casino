@@ -172,6 +172,8 @@ export function CardView({ idx, hidden, dealing, winning }: { idx: number; hidde
   if (idx < 0 || hidden) {
     return (
       <div
+        role="img"
+        aria-label="Face-down card"
         className={`nn-card-playing nn-card-back ${dealing ? "nn-card-dealing" : ""}`}
         style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}
       />
@@ -180,8 +182,11 @@ export function CardView({ idx, hidden, dealing, winning }: { idx: number; hidde
   const c = cardFromIndex(idx);
   const isRed = c.suit === "♥" || c.suit === "♦";
   const colorClass = isRed ? "nn-card-red" : "nn-card-black";
+  const suitName = { "♠": "spades", "♥": "hearts", "♦": "diamonds", "♣": "clubs" }[c.suit];
   return (
     <div
+      role="img"
+      aria-label={`${c.rank} of ${suitName}`}
       className={`nn-card-playing ${colorClass} ${dealing ? "nn-card-dealing" : ""} ${winning ? "nn-card-winning" : ""}`}
     >
       <div className="nn-card-rank-top">
