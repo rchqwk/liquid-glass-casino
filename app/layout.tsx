@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import Script from "next/script";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -56,13 +57,10 @@ export const metadata: Metadata = {
   },
 };
 
-// Disable pinch-zoom and double-tap-to-zoom on mobile for a fixed, game-like viewport.
+// Keep mobile zoom available for readable cards and accessible controls.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  minimumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
 };
 
@@ -77,13 +75,8 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
-        {/* Google AdSense. Raw tag in <head> so the AdSense verification crawler sees it in the
-            server-rendered HTML — next/script with afterInteractive only injects it client-side. */}
-        <script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3256641731859297"
-          crossOrigin="anonymous"
-        />
+        {/* Keep ownership verification in server HTML; load the ad runtime after hydration. */}
+        <meta name="google-adsense-account" content="ca-pub-3256641731859297" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -97,13 +90,6 @@ export default function RootLayout({
             }),
           }}
         />
-        {/* iOS Safari ignores user-scalable=no, so block multi-touch pinch/gesture zoom in JS. */}
-        <script dangerouslySetInnerHTML={{ __html: `(function(){
-          var block = function(e){ if (e.touches && e.touches.length > 1) e.preventDefault(); };
-          document.addEventListener('touchmove', block, { passive: false });
-          document.addEventListener('gesturestart', function(e){ e.preventDefault(); });
-          document.addEventListener('dblclick', function(e){ e.preventDefault(); });
-        })();` }} />
         <style>{`
           html, body, button, a, input, [role="button"] {
             touch-action: manipulation;
@@ -112,6 +98,7 @@ export default function RootLayout({
         `}</style>
       </head>
       <body className="min-h-full flex flex-col">
+        <Script id="adsense-runtime" strategy="afterInteractive" src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3256641731859297" crossOrigin="anonymous" />
         <div className="flex-1">
           <Providers>{children}</Providers>
         </div>

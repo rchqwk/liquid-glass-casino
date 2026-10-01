@@ -1,12 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
+import { CasinoDialog } from "./casino/CasinoDialog";
 import { useAuth } from "../lib/authClient";
 
 export function SignInGate({ children }: { children: React.ReactNode }) {
   const { user, loading, signIn, signInWithCredential, discordMode, discordError, retryDiscord, sessionExpired } = useAuth();
   const pathname = usePathname();
+  const [requested, setRequested] = useState(false);
+  useEffect(() => { const request = () => setRequested(true); window.addEventListener("lgc:signIn", request); return () => window.removeEventListener("lgc:signIn", request); }, []);
   const [username, setUsername] = useState("");
   const [credential, setCredential] = useState("");
   const [credKind, setCredKind] = useState<"password" | "passcode">("password");
@@ -18,6 +22,8 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   const [discordElapsed, setDiscordElapsed] = useState(0);
 
   const isAllowed = useMemo(() => {
+    if (process.env.NODE_ENV === "development" && pathname === "/casino/ui-preview") return true;
+    if (["/casino", "/casino/blackjack-v2", "/casino/blackjack", "/casino/legacy", "/casino/games"].includes(pathname)) return true;
     // Always allow the dedicated profile page so users can manage sign-in/out.
     if (pathname === "/casino/profile") return true;
     // Allow tutorial / docs pages without forcing sign-in (useful for first-time visitors).
@@ -31,13 +37,12 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
     return false;
   }, [pathname]);
 
-  const blocked = !isAllowed && !loading && !user;
+  const blocked = (!isAllowed || requested) && !loading && !user;
 
   // If Discord sign-in is taking too long, offer a temporary username fallback.
   useEffect(() => {
     if (!blocked) return;
     if (!discordMode) return;
-    setDiscordElapsed(0);
     const id = window.setInterval(() => setDiscordElapsed((s) => s + 1), 1000);
     return () => window.clearInterval(id);
   }, [blocked, discordMode]);
@@ -79,6 +84,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
         "scope",
         "activities.write activities.invites.write activities.read identify",
       );
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- OAuth needs the browser origin and session return path.
       setDiscordUrl(url.toString());
       return;
     }
@@ -100,13 +106,11 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative">
-      {children}
+      <div inert={blocked}>{children}</div>
 
       {blocked ? (
-        <div className="absolute inset-0 z-30">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative flex h-full w-full items-center justify-center p-4">
-            <div className="glass glass-shine w-full max-w-md rounded-3xl p-6">
+        <CasinoDialog open={blocked} onClose={() => setRequested(false)} dismissible={isAllowed} title="Sign in to play">
+          <div className="max-w-md mx-auto">
               {discordMode ? (
                 <>
                   <h3 className="text-lg font-semibold text-white">Signing in with Discord…</h3>
@@ -148,9 +152,9 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                 </>
               ) : (
                 <>
-                  <h3 className="text-lg font-semibold text-white">Sign in to play</h3>
+                  <p className="text-sm font-semibold text-white">Keep your seat and progress together.</p>
                   <p className="mt-2 text-sm leading-6 text-white/70">
-                    Choose a username to start playing. Quick sign-in for token tables.
+                    New here? Create a username profile. Returning players should use their password, passcode, or Discord account.
                   </p>
 
                   {sessionExpired ? (
@@ -171,9 +175,11 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                     </>
                   ) : null}
 
-                  <label className="mt-4 block text-xs font-medium text-white/70">Username</label>
+                  <label htmlFor="casino-auth-username" className="mt-4 block text-xs font-medium text-white/70">Username</label>
                   <input
                     className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:border-white/20"
+                    id="casino-auth-username"
+                    autoComplete="username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="e.g. tim"
@@ -197,17 +203,19 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                     </button>
                   </div>
 
-                  <label className="mt-3 block text-xs font-medium text-white/70">{credKind === "passcode" ? "Passcode" : "Password"}</label>
+                  <label htmlFor="casino-auth-credential" className="mt-3 block text-xs font-medium text-white/70">{credKind === "passcode" ? "Passcode" : "Password"}</label>
                   <input
                     className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:border-white/20"
+                    id="casino-auth-credential"
+                    autoComplete="current-password"
                     value={credential}
                     onChange={(e) => setCredential(credKind === "passcode" ? e.target.value.replace(/\D/g, "") : e.target.value)}
                     placeholder={credKind === "passcode" ? "••••••" : "••••••••"}
-                    type={credKind === "passcode" ? "text" : "password"}
+                    type="password"
                     inputMode={credKind === "passcode" ? "numeric" : undefined}
                     maxLength={credKind === "passcode" ? 6 : undefined}
                   />
-                  <p className="mt-1 text-[11px] text-white/40">Optional — leave blank for a quick username sign-in.</p>
+                  <p className="mt-1 text-[11px] text-white/40">A blank credential creates a new profile only. Existing accounts require proof of ownership.</p>
 
                   <button
                     type="button"
@@ -229,8 +237,11 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                             setNeedsAccount(true);
                             setNeedsClaim(("requiresClaim" in res && res.requiresClaim) === true);
                           }
+                        } else {
+                          setRequested(false);
+                          setCredential("");
                         }
-                      } finally {
+                      } catch { setMsg("Sign-in could not complete. Check your connection and retry."); } finally {
                         setBusy(false);
                       }
                     }}
@@ -242,9 +253,9 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                     needsClaim ? (
                       <a
                         className="mt-3 inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
-                        href="/account"
+                        href={"/account?returnTo=" + encodeURIComponent(typeof window === "undefined" ? pathname : window.location.pathname + window.location.search)}
                       >
-                        Set a password / passcode
+                        Recover or secure your account
                       </a>
                     ) : (
                       <p className="mt-3 text-sm leading-5 text-amber-200">Enter your password or passcode above to sign in.</p>
@@ -257,9 +268,9 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                   {msg ? <p className="mt-3 text-sm text-rose-200">{msg}</p> : null}
                 </>
               )}
-            </div>
+            {!isAllowed ? <Link className="casino-button casino-secondary mt-4" href="/casino/blackjack-v2">Back to lobby</Link> : null}
           </div>
-        </div>
+        </CasinoDialog>
       ) : null}
     </div>
   );

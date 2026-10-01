@@ -1,5 +1,7 @@
 "use client";
 
+import { CasinoDialog } from "../../components/casino/CasinoDialog";
+
 import { getBlackjackChatNameClass } from "./blackjackSeatViews";
 
 type RoomChatMessage = {
@@ -68,8 +70,8 @@ export function BlackjackChatPanel({
   };
 
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
-      <div className="glass glass-shine w-full max-w-[720px] rounded-3xl border border-white/10 p-6">
+    <CasinoDialog open={open} onClose={onClose} title="Table chat" showHeading={false}>
+      <div>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-white">{experience === "v2" ? "Live chat" : "Chat"}</div>
@@ -160,7 +162,7 @@ export function BlackjackChatPanel({
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                (e.currentTarget as any).blur?.();
+                e.currentTarget.blur();
                 void sendCurrentMessage();
               }
             }}
@@ -175,6 +177,6 @@ export function BlackjackChatPanel({
           </button>
         </div>
       </div>
-    </div>
+    </CasinoDialog>
   );
 }

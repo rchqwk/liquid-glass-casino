@@ -1,452 +1,174 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/authClient";
 import { getBlackjackTableIdFromPayload } from "./useBlackjackTableContract";
 
-type TableRow = {
-  id: string;
-  name: string;
-  phase: string;
-  round: number;
-  seatsFilled: number;
-  spectators: number;
-  bettingEndsAt: number;
-};
+type TableRow = { id: string; name: string; phase: string; round: number; seatsFilled: number; spectators: number; bettingEndsAt: number };
+type LobbyStatus = "loading" | "ready" | "stale" | "error";
+const phaseLabels: Record<string, string> = { betting: "Taking bets", player_turns: "Players' turns", dealer: "Dealer's turn", dealer_window: "Dealer response", settling: "Settling round" };
 
 export function BlackjackLobbyClient({ variant = "v2" }: { variant?: "v2" | "classic" }) {
+  const router = useRouter();
   const { user, loading: authLoading, discordMode } = useAuth();
   const [tables, setTables] = useState<TableRow[]>([]);
   const [name, setName] = useState("Blackjack Table");
   const [isPublic, setIsPublic] = useState(true);
   const [joinCode, setJoinCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [joinLoading, setJoinLoading] = useState(false);
-  const [tick, setTick] = useState(0);
-  const [autoJoining, setAutoJoining] = useState(false);
+  const [pending, setPending] = useState<"create" | "join" | "discord" | null>(null);
+  const [status, setStatus] = useState<LobbyStatus>("loading");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [now, setNow] = useState(0);
+  const busy = useRef(false);
+  const discordAttempt = useRef<string | null>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
   const tableBasePath = variant === "v2" ? "/casino/blackjack-v2" : "/casino/blackjack";
 
   useEffect(() => {
-    const id = window.setInterval(() => setTick((x) => x + 1), 1200);
-    return () => window.clearInterval(id);
+    const update = () => setNow(Date.now());
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    let timer: number | null = null;
-    let retryCount = 0;
-
-    const clearTimer = () => {
-      if (timer != null) {
-        window.clearTimeout(timer);
-        timer = null;
-      }
-    };
-
-    const scheduleNext = (ok: boolean) => {
-      if (cancelled) return;
-      const visible = typeof document === "undefined" ? true : document.visibilityState === "visible";
-      const base = visible ? 5000 : 15000;
-      const wait = ok ? base : Math.min(30000, base * 2 ** Math.min(retryCount, 3));
-      clearTimer();
-      timer = window.setTimeout(() => {
-        void run();
-      }, wait);
-    };
-
+    let timer: number | undefined;
+    let failures = 0;
+    let loaded = false;
+    let running = false;
     const run = async () => {
+      if (running) return;
+      running = true;
       try {
-        const res = await fetch("/api/blackjack/tables", { cache: "no-store" });
-        if (!res.ok) {
-          retryCount += 1;
-          scheduleNext(false);
-          return;
-        }
-        const data = (await res.json().catch(() => ({}))) as { tables?: TableRow[] };
+        const response = await fetch("/api/blackjack/tables", { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.tables)) throw new Error("Lobby unavailable");
         if (cancelled) return;
-        setTables(data.tables ?? []);
-        retryCount = 0;
-        scheduleNext(true);
+        setTables(data.tables);
+        setStatus("ready");
+        loaded = true;
+        failures = 0;
       } catch {
         if (cancelled) return;
-        retryCount += 1;
-        // Keep existing lobby state on transient failures.
-        scheduleNext(false);
-      }
+        setStatus(loaded ? "stale" : "error");
+        failures += 1;
+      } finally { running = false; }
+      if (!cancelled) timer = window.setTimeout(run, Math.min(30000, (document.hidden ? 15000 : 5000) * 2 ** Math.min(failures, 3)));
     };
-
-    const onVisibilityChange = () => {
-      if (cancelled) return;
-      if (document.visibilityState === "visible") {
-        retryCount = 0;
-        clearTimer();
-        void run();
-      }
+    const resume = () => {
+      if (!document.hidden) { window.clearTimeout(timer); void run(); }
     };
-
     void run();
-    try {
-      document.addEventListener("visibilitychange", onVisibilityChange);
-    } catch {
-      // ignore
-    }
+    document.addEventListener("visibilitychange", resume);
+    return () => { cancelled = true; window.clearTimeout(timer); document.removeEventListener("visibilitychange", resume); };
+  }, [refreshKey]);
 
-    return () => {
-      cancelled = true;
-      clearTimer();
-      try {
-        document.removeEventListener("visibilitychange", onVisibilityChange);
-      } catch {
-        // ignore
-      }
-    };
-  }, []);
-
+  // Preserve channel pairing and verify acknowledgement before redirecting.
   useEffect(() => {
-    if (authLoading) return;
-    if (!discordMode) return;
-    if (!user) return;
-    if (autoJoining) return;
-
-    let channelId: string | null = null;
-    try {
-      const sp = new URLSearchParams(window.location.search || "");
-      channelId = sp.get("channel_id");
-      if (!channelId) {
-        const qs = sessionStorage.getItem("lgc.discord.qs") ?? "";
-        const sp2 = new URLSearchParams(qs.startsWith("?") ? qs.slice(1) : qs);
-        channelId = sp2.get("channel_id");
-      }
-    } catch {
-      // ignore
-    }
-    if (!channelId) return;
-
-    setAutoJoining(true);
-    (async () => {
-      try {
-        await fetch(`/api/blackjack/tables/${encodeURIComponent(channelId)}/ensure`, { method: "POST" });
-        await fetch(`/api/blackjack/tables/${encodeURIComponent(channelId)}/join`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ spectate: false }),
-        });
-        window.location.href = `${tableBasePath}/${encodeURIComponent(channelId)}`;
-      } finally {
-        setAutoJoining(false);
-      }
+    if (authLoading || !discordMode || !user) return;
+    let channel = new URLSearchParams(window.location.search).get("channel_id");
+    try { channel ||= new URLSearchParams(sessionStorage.getItem("lgc.discord.qs") || "").get("channel_id"); } catch { /* optional storage */ }
+    if (!channel || discordAttempt.current === channel) return;
+    discordAttempt.current = channel;
+    setPending("discord");
+    void (async () => {
+      try { await joinTable(channel); }
+      catch (error) { setErr(error instanceof Error ? error.message : "Could not join your Discord table."); }
+      finally { setPending(null); }
     })();
-  }, [authLoading, discordMode, user, autoJoining, tableBasePath]);
+    // Channel joining happens once per entry, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, discordMode, user?.id, tableBasePath]);
 
-  const now = Date.now();
-  const sorted = useMemo(() => [...tables].sort((a, b) => (b.bettingEndsAt ?? 0) - (a.bettingEndsAt ?? 0)), [tables]);
-  const livePlayers = useMemo(
-    () => sorted.reduce((sum, t) => sum + Math.max(0, Number(t.seatsFilled ?? 0)) + Math.max(0, Number(t.spectators ?? 0)), 0),
-    [sorted],
-  );
-
-  if (variant === "classic") {
-    return (
-      <div className="flex flex-col gap-6">
-        {autoJoining ? (
-          <div className="glass glass-shine rounded-3xl p-6 text-white/80">
-            <div className="text-sm font-semibold text-white">Joining your Discord call table…</div>
-            <div className="mt-2 text-xs text-white/60">Creating the table if needed, then redirecting.</div>
-          </div>
-        ) : null}
-        <div className="glass glass-shine rounded-3xl p-6">
-          <h2 className="text-xl font-semibold text-white">Blackjack (Multiplayer)</h2>
-          <p className="mt-2 text-sm leading-6 text-white/70">
-            Tables support up to 10 seated players plus spectators. Each round has a 30s betting timer.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
-          <CreateTablePanel
-            name={name}
-            setName={setName}
-            isPublic={isPublic}
-            setIsPublic={setIsPublic}
-            err={err}
-            setErr={setErr}
-            loading={loading}
-            setLoading={setLoading}
-            tableBasePath={tableBasePath}
-            variant={variant}
-          />
-          <PublicTablesPanel sorted={sorted} now={now} tableBasePath={tableBasePath} variant={variant} />
-        </div>
-      </div>
-    );
+  async function joinTable(id: string) {
+    const encoded = encodeURIComponent(id);
+    const ensured = await fetch(`/api/blackjack/tables/${encoded}/ensure`, { method: "POST" });
+    if (!ensured.ok) {
+      const result = await ensured.json().catch(() => ({}));
+      throw new Error(result.error || "Could not open the table.");
+    }
+    const response = await fetch(`/api/blackjack/tables/${encoded}/join`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ spectate: false }) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Could not join the table.");
+    router.push(`${tableBasePath}/${encoded}`);
   }
 
+  function requireAccount() {
+    if (user) return true;
+    window.dispatchEvent(new CustomEvent("lgc:signIn"));
+    return false;
+  }
+
+  async function createTable() {
+    if (busy.current || !requireAccount()) return;
+    busy.current = true; setPending("create"); setErr(null);
+    try {
+      const response = await fetch("/api/blackjack/tables", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: name.trim() || "Blackjack Table", public: isPublic }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not create the table.");
+      const id = getBlackjackTableIdFromPayload(result);
+      if (!id) throw new Error("The table response was incomplete. Refresh the lobby before trying again.");
+      router.push(`${tableBasePath}/${encodeURIComponent(id)}`);
+    } catch (error) { setErr(error instanceof Error ? error.message : "Could not create the table."); }
+    finally { busy.current = false; setPending(null); }
+  }
+
+  async function joinByCode() {
+    if (busy.current || !requireAccount()) return;
+    const code = joinCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!code) { setErr("Enter the join code shared by your friend."); return; }
+    busy.current = true; setPending("join"); setErr(null);
+    try {
+      const response = await fetch(`/api/blackjack/tables/resolve?code=${encodeURIComponent(code)}`, { cache: "no-store" });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.tableId) throw new Error(result.error || "That join code was not found.");
+      await joinTable(String(result.tableId));
+    } catch (error) { setErr(error instanceof Error ? error.message : "Could not join by code."); }
+    finally { busy.current = false; setPending(null); }
+  }
+
+  const sorted = useMemo(() => [...tables].sort((a, b) => b.seatsFilled - a.seatsFilled || b.bettingEndsAt - a.bettingEndsAt), [tables]);
+  const players = sorted.reduce((sum, table) => sum + table.seatsFilled, 0);
+  const focusCreate = () => { nameInput.current?.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" }); nameInput.current?.focus({ preventScroll: true }); };
+
   return (
-    <div className="flex flex-col gap-5 sm:gap-6">
-      {autoJoining ? (
-        <div className="glass glass-shine rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-5 text-white/85">
-          <div className="text-sm font-semibold text-white">Joining your Discord call table…</div>
-          <div className="mt-2 text-xs leading-5 text-white/70">
-            Creating the room if needed and dropping you straight into the table.
-          </div>
-        </div>
-      ) : null}
-
-      <section className="glass glass-shine rounded-[28px] border border-white/10 p-5 sm:p-6">
-        <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-2xl">
-              <div className="inline-flex items-center rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold tracking-wide text-cyan-100">
-                BLACKJACK LIVE
-              </div>
-              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-                Blackjack is the main floor now.
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-white/70 sm:text-[15px]">
-                Jump into live tables built for Discord Activity, desktop, and mobile. Open a seat, watch a live room, or create a table
-                with the streamlined V2 flow that now powers the main casino home.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:min-w-[320px]">
-              <MetricCard label="Live tables" value={String(sorted.length)} />
-              <MetricCard label="Players live" value={String(livePlayers)} />
-              <MetricCard label="Seat limit" value="10" />
-              <MetricCard label="Status" value="Live" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <QuickLink href="/casino/tutorial" title="Tutorial" desc="Walk through betting, powerups, and table flow." />
-            <QuickLink href="/casino/profile" title="Profile" desc="Account, sign-in, and identity." />
-            <QuickLink href="/casino/customizations" title="Customizations" desc="Cards, name color, and cosmetics." />
-            <QuickLink href="/casino/prestige-shop" title="Prestige Shop" desc="Progression, bonds, and prestige buys." />
-            <QuickLink href="/casino/legacy" title="Legacy Casino" desc="Slots, roulette, dice, poker, and side modes." />
-          </div>
-        </div>
-      </section>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <PublicTablesPanel sorted={sorted} now={now} tableBasePath={tableBasePath} variant={variant} />
-        <div className="flex flex-col gap-4">
-          {variant === "v2" ? (
-            <div className="glass-soft glass-shine rounded-3xl p-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-white">Join with code</p>
-                <span className="text-[11px] text-white/50">Discord handoff</span>
-              </div>
-              <div className="mt-3 text-xs leading-5 text-white/60">
-                Enter the code shown in a Discord blackjack table and jump straight into that same live room from the browser.
-              </div>
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                <input
-                  value={joinCode}
-                  onChange={(e) => setJoinCode(String(e.target.value ?? "").toUpperCase())}
-                  placeholder="Enter join code"
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm uppercase tracking-[0.2em] text-white outline-none focus:border-white/20"
-                />
-                <button
-                  type="button"
-                  disabled={joinLoading}
-                  className="glass-soft rounded-2xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-2.5 text-sm font-medium text-cyan-100 hover:bg-cyan-500/15 disabled:opacity-40"
-                  onClick={async () => {
-                    setErr(null);
-                    const code = String(joinCode ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-                    if (!code) {
-                      setErr("Enter a join code.");
-                      return;
-                    }
-                    setJoinLoading(true);
-                    try {
-                      const resolveRes = await fetch(`/api/blackjack/tables/resolve?code=${encodeURIComponent(code)}`, { cache: "no-store" });
-                      const resolveData = (await resolveRes.json().catch(() => ({}))) as any;
-                      if (!resolveRes.ok || !resolveData?.tableId) throw new Error(resolveData?.error ?? "Join code not found");
-                      await fetch(`/api/blackjack/tables/${encodeURIComponent(resolveData.tableId)}/ensure`, { method: "POST" });
-                      await fetch(`/api/blackjack/tables/${encodeURIComponent(resolveData.tableId)}/join`, {
-                        method: "POST",
-                        headers: { "content-type": "application/json" },
-                        body: JSON.stringify({ spectate: false }),
-                      });
-                      window.location.href = `${tableBasePath}/${encodeURIComponent(resolveData.tableId)}`;
-                    } catch (e: any) {
-                      setErr(String(e?.message ?? "Failed to join by code"));
-                    } finally {
-                      setJoinLoading(false);
-                    }
-                  }}
-                >
-                  Join code
-                </button>
-              </div>
-              {err ? <div className="mt-3 text-xs text-rose-200">{err}</div> : null}
-            </div>
-          ) : null}
-          <CreateTablePanel
-            name={name}
-            setName={setName}
-            isPublic={isPublic}
-            setIsPublic={setIsPublic}
-            err={err}
-            setErr={setErr}
-            loading={loading}
-            setLoading={setLoading}
-            tableBasePath={tableBasePath}
-            variant={variant}
-            compact
-          />
-        </div>
+    <div>
+      <div className="casino-lobby-heading">
+        <div><div className="casino-eyebrow">The social table</div><h1 className="casino-heading mt-2">A seat for you. A table for everyone.</h1><p>Live Blackjack with friends, in your browser or Discord.</p></div>
+        <button className="casino-button casino-primary shrink-0" type="button" onClick={focusCreate}>Create a table <span aria-hidden="true">↗</span></button>
       </div>
-    </div>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="text-[11px] uppercase tracking-wide text-white/45">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-white">{value}</div>
-    </div>
-  );
-}
-
-function QuickLink({ href, title, desc }: { href: string; title: string; desc: string }) {
-  return (
-    <Link href={href} className="glass-soft rounded-3xl border border-white/10 bg-white/5 p-4 transition hover:bg-white/10">
-      <div className="text-sm font-semibold text-white">{title}</div>
-      <div className="mt-2 text-xs leading-5 text-white/65">{desc}</div>
-    </Link>
-  );
-}
-
-function CreateTablePanel(props: {
-  name: string;
-  setName: (v: string) => void;
-  isPublic: boolean;
-  setIsPublic: (v: boolean) => void;
-  err: string | null;
-  setErr: (v: string | null) => void;
-  loading: boolean;
-  setLoading: (v: boolean) => void;
-  tableBasePath: string;
-  variant?: "v2" | "classic";
-  compact?: boolean;
-}) {
-  const { name, setName, isPublic, setIsPublic, err, setErr, loading, setLoading, tableBasePath, variant = "classic", compact } = props;
-  const isV2 = variant === "v2";
-  return (
-    <div className="glass-soft glass-shine rounded-3xl p-5" data-tour="bj-create-join">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-white">
-          {compact ? (isV2 ? "Open a live table" : "Create a new room") : isV2 ? "Create live table" : "Create table"}
-        </p>
-        {compact ? <span className="text-[11px] text-white/50">{isV2 ? "Live-ready" : "Discord-friendly"}</span> : null}
-      </div>
-      <label className="mt-4 block text-xs text-white/60">{isV2 ? "Table name" : "Name"}</label>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-white/20"
-      />
-      <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-white/70">
-        <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
-        {isV2 ? "Show in live lobby" : "Public table (visible in lobby)"}
-      </label>
-      <button
-        type="button"
-        disabled={loading}
-        className="mt-4 glass-soft rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/90 transition hover:bg-white/10 disabled:opacity-40"
-        onClick={async () => {
-          setErr(null);
-          setLoading(true);
-          try {
-            const res = await fetch("/api/blackjack/tables", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ name, public: isPublic }),
-            });
-            const data = (await res.json()) as any;
-            if (!res.ok) throw new Error(data?.error ?? "Failed");
-            const tableId = getBlackjackTableIdFromPayload(data);
-            if (!tableId) throw new Error("Table created but id missing");
-            window.location.href = `${tableBasePath}/${tableId}`;
-          } catch (e: any) {
-            setErr(String(e?.message ?? "Failed"));
-          } finally {
-            setLoading(false);
-          }
-        }}
-      >
-        {isV2 ? "Create live table" : "Create & Join"}
-      </button>
-      {err ? <div className="mt-3 text-xs text-rose-200">{err}</div> : null}
-      <div className="mt-4 rounded-2xl border border-white/10 bg-black/10 p-3 text-xs leading-5 text-white/60">
-        {isV2
-          ? "Live tables stay synced across Discord Activity and browser clients, with the V2 shell as the primary blackjack home."
-          : "This table uses the shared live multiplayer flow."}
-      </div>
-    </div>
-  );
-}
-
-function PublicTablesPanel({
-  sorted,
-  now,
-  tableBasePath,
-  variant = "classic",
-}: {
-  sorted: TableRow[];
-  now: number;
-  tableBasePath: string;
-  variant?: "v2" | "classic";
-}) {
-  const isV2 = variant === "v2";
-  return (
-    <div className="glass-soft glass-shine rounded-3xl p-5" data-tour="bj-public-tables">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-white">{isV2 ? "Live tables" : "Public tables"}</p>
-          <p className="mt-1 text-xs text-white/55">
-            {isV2 ? "Open a live seat or watch the table first." : "Jump straight into a live room or spectate first."}
-          </p>
-        </div>
-        <span className="text-xs text-white/60">{sorted.length} found</span>
-      </div>
-      <div className="mt-4 grid grid-cols-1 gap-3">
-        {sorted.map((t) => {
-          const secs = Math.max(0, Math.ceil(((t.bettingEndsAt ?? 0) - now) / 1000));
-          return (
-            <Link
-              key={t.id}
-              href={`${tableBasePath}/${t.id}`}
-              className="glass-soft rounded-3xl border border-white/10 bg-white/5 p-4 transition hover:bg-white/10"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-white">{t.name}</div>
-                  <div className="mt-1 text-xs leading-5 text-white/60">
-                    {isV2 ? "Seats filled" : "Seats"}: <span className="font-mono">{t.seatsFilled}/10</span> • {isV2 ? "Watching live" : "Spectators"}:{" "}
-                    <span className="font-mono">{t.spectators}</span>
-                  </div>
-                  <div className="mt-2 inline-flex rounded-full border border-white/10 bg-black/10 px-2.5 py-1 text-[11px] text-white/65">
-                    Round {Math.max(1, Number(t.round ?? 0))}
-                  </div>
-                </div>
-                <div className="text-right text-xs text-white/60">
-                  <div className="font-mono text-white/80">{t.phase}</div>
-                  <div className="mt-1">
-                    {isV2 ? "Betting window" : "Betting"}: <span className="font-mono">{secs}s</span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-        {sorted.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-white/10 bg-white/5 p-5 text-sm text-white/60">
-            {isV2 ? "No live tables yet. Open the first live table." : "No public tables yet. Create one and make it the first room in the lobby."}
+      {pending === "discord" ? <p className="casino-notice mb-5" role="status">Joining your Discord call table…</p> : null}
+      {err ? <p className="casino-error mb-5" role="alert">{err}</p> : null}
+      <div className="casino-lobby-layout">
+        <section className="casino-panel" aria-labelledby="live-tables-heading" data-tour="bj-public-tables">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 id="live-tables-heading" className="text-lg font-semibold">Live tables</h2><p className="casino-muted mt-1 text-xs">Choose a room, then take a seat or watch.</p></div><span className="casino-tag">{status === "ready" ? `${sorted.length} tables · ${players} seated` : status === "loading" ? "Connecting…" : "Connection interrupted"}</span></div>
+          {status === "error" || status === "stale" ? <div className="casino-notice mt-5" role="status"><p>{status === "stale" ? "These are the last known tables. Reconnecting…" : "The lobby could not load. Your connection may be interrupted."}</p><button className="casino-button casino-secondary mt-3" onClick={() => { setStatus("loading"); setRefreshKey(value => value + 1); }} type="button">Retry lobby</button></div> : null}
+          <div className="casino-table-list" aria-busy={status === "loading"}>
+            {status === "loading" ? <p className="casino-muted py-10 text-center" role="status">Finding live tables…</p> : sorted.map(table => (
+              <Link key={table.id} href={`${tableBasePath}/${encodeURIComponent(table.id)}`} className="casino-table-row"><div><h3>{table.name}</h3><p>{table.seatsFilled}/10 seated · {table.spectators} watching · Round {Math.max(1, table.round)}</p></div><div className="flex flex-wrap items-center gap-3"><span className="casino-tag">{phaseLabels[table.phase] || "Round in progress"}{table.phase === "betting" && now > 0 ? ` · ${Math.max(0, Math.ceil((table.bettingEndsAt - now) / 1000))}s` : ""}</span><span className="text-sm font-semibold" aria-hidden="true">Open →</span></div></Link>
+            ))}
+            {status === "ready" && sorted.length === 0 ? <div className="casino-empty"><div className="casino-empty__mark" aria-hidden="true">♠</div><h3>The first table is yours.</h3><p>Start a room and invite your friends. Public tables appear here when they open.</p><button type="button" className="casino-button casino-primary" onClick={focusCreate}>Create the first table</button></div> : null}
           </div>
-        ) : null}
+          <div className="casino-lobby-help"><Link href="/casino/tutorial">New here? Take the tutorial</Link><Link href="/casino/blackjack/rules">Rules &amp; payouts</Link><Link href="/casino/blackjack/special-rules">Power-up rules</Link></div>
+        </section>
+        <div className="casino-lobby-forms">
+          <form className="casino-panel" onSubmit={event => { event.preventDefault(); void joinByCode(); }}>
+            <h2 className="text-base font-semibold">Meet your friends</h2><p className="casino-muted mt-2 text-xs leading-5">Have a join code? Go straight to their room.</p>
+            <label className="casino-field" htmlFor="casino-join-code">Join code<input id="casino-join-code" value={joinCode} onChange={event => setJoinCode(event.target.value.toUpperCase())} placeholder="e.g. ABC123" autoCapitalize="characters" autoComplete="off" maxLength={32} /></label>
+            <button type="submit" className="casino-button casino-secondary mt-4 w-full" disabled={!!pending || authLoading}>{pending === "join" ? "Joining…" : "Join with code"}</button>
+          </form>
+          <form className="casino-panel" data-tour="bj-create-join" onSubmit={event => { event.preventDefault(); void createTable(); }}>
+            <h2 className="text-base font-semibold">Your table, your company.</h2>
+            <label className="casino-field" htmlFor="casino-table-name">Table name<input id="casino-table-name" ref={nameInput} value={name} onChange={event => setName(event.target.value)} maxLength={48} /></label>
+            <label className="casino-muted mt-4 flex items-center gap-3 text-xs"><input type="checkbox" checked={isPublic} onChange={event => setIsPublic(event.target.checked)} className="h-5 w-5 accent-emerald-300" />Show in the public lobby</label>
+            <p className="casino-muted mt-3 text-xs leading-5">{isPublic ? "Anyone can discover your room. Up to 10 seated players." : "Hidden from the lobby. Share your invite with friends."}</p>
+            <button type="submit" className="casino-button casino-primary mt-4 w-full" disabled={!!pending || authLoading}>{pending === "create" ? "Creating…" : "Create & join"}</button>
+          </form>
+        </div>
       </div>
     </div>
   );

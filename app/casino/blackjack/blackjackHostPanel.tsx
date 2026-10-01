@@ -1,5 +1,7 @@
 "use client";
 
+import { CasinoDialog } from "../../components/casino/CasinoDialog";
+
 const POWERUP_CATEGORIES = ["boosts", "saves", "utility", "magic", "dealer", "mythic"] as const;
 
 export function BlackjackHostPanel({
@@ -36,8 +38,8 @@ export function BlackjackHostPanel({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
-      <div className="glass glass-shine w-full max-w-[720px] rounded-3xl border border-white/10 p-6">
+    <CasinoDialog open={open} onClose={onClose} title="Host options" showHeading={false}>
+      <div>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-white">Host options</div>
@@ -133,6 +135,6 @@ export function BlackjackHostPanel({
           </button>
         </div>
       </div>
-    </div>
+    </CasinoDialog>
   );
 }

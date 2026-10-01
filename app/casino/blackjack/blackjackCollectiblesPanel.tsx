@@ -1,5 +1,7 @@
 "use client";
 
+import { CasinoDialog } from "../../components/casino/CasinoDialog";
+
 export function blackjackCollectibleLabel(key: string) {
   const map: Record<string, string> = { SODA_CUP: "🥤", CHICKEN_WING: "🍗", FRIES: "🍟", DICE: "🎲" };
   return map[key] ?? key;
@@ -47,8 +49,8 @@ export function BlackjackCollectiblesPanel({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 p-4">
-      <div className="glass glass-shine w-full max-w-[560px] rounded-3xl border border-white/10 p-6">
+    <CasinoDialog open={open} onClose={onClose} title="Collectibles" showHeading={false}>
+      <div>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-white">Collectibles</div>
@@ -191,7 +193,7 @@ export function BlackjackCollectiblesPanel({
 
         <div className="mt-4 text-xs text-white/50">Tip: enter Table Edit Mode to place and move items.</div>
       </div>
-    </div>
+    </CasinoDialog>
   );
 }
 

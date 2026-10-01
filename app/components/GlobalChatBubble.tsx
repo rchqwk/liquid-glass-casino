@@ -1,5 +1,7 @@
 "use client";
 
+import { CasinoDialog } from "./casino/CasinoDialog";
+
 import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "../lib/authClient";
@@ -41,9 +43,8 @@ export function GlobalChatBubble() {
   const hide = useMemo(() => {
     const p = String(pathname ?? "");
     const parts = p.split("/").filter(Boolean);
-    return parts.length >= 3 && parts[0] === "casino" && parts[1] === "blackjack" && parts[2] !== "games";
+    return parts.length >= 3 && parts[0] === "casino" && ["blackjack", "blackjack-v2"].includes(parts[1]) && !["games", "rules", "special-rules", "strategy", "discord"].includes(parts[2]);
   }, [pathname]);
-  if (hide) return null;
 
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -138,9 +139,11 @@ export function GlobalChatBubble() {
     }
   };
 
+  if (hide) return null;
+
   return (
     <>
-      <div className="pointer-events-none fixed bottom-4 left-4 z-[65]">
+      <div className="casino-global-chat pointer-events-none fixed bottom-4 left-4 z-[65]">
         <button
           type="button"
           className="pointer-events-auto glass glass-shine relative rounded-3xl border border-white/10 px-4 py-3 text-left text-xs text-white/85 hover:bg-white/10"
@@ -162,8 +165,8 @@ export function GlobalChatBubble() {
       </div>
 
       {open ? (
-        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4">
-          <div className="glass glass-shine w-full max-w-[720px] rounded-3xl border border-white/10 p-6">
+        <CasinoDialog open={open} onClose={() => setOpen(false)} title="Global chat" showHeading={false}>
+          <div>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-white">Global chat</div>
@@ -225,7 +228,7 @@ export function GlobalChatBubble() {
               </button>
             </div>
           </div>
-        </div>
+        </CasinoDialog>
       ) : null}
     </>
   );

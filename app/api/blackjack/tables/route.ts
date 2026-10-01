@@ -17,8 +17,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function GETImpl() {
+  // Public discovery returns only public room metadata. Guests never tick or persist game state.
   const user = await getAuthedUserAsync();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const metas = await listBlackjackTables();
   const now = Date.now();
@@ -27,18 +27,18 @@ async function GETImpl() {
     if (!m.public) continue;
     const t = await getBlackjackTable(m.id);
     if (!t) continue;
-    const state = tickTable(t.state, now);
+    const state = user ? tickTable(t.state, now) : t.state;
 
     // Close rooms after 5 minutes of inactivity (no players + no spectators).
     const empty = state.seats.filter(Boolean).length === 0 && (state.spectators?.length ?? 0) === 0;
     const lastAct = Number(state.lastActivityAt ?? t.updated_at ?? t.created_at ?? 0);
     if (empty && lastAct > 0 && now - lastAct > 5 * 60 * 1000) {
       // Soft-delete by making it non-public and skipping it; a later cleanup can hard-delete.
-      await saveBlackjackTableState({...t, public:false}, state);
+      if (user) await saveBlackjackTableState({...t, public:false}, state);
       continue;
     }
     // persist tick updates lazily
-    if (state.updatedAt !== t.updated_at) {
+    if (user && state.updatedAt !== t.updated_at) {
       await saveBlackjackTableState(t, state);
     }
     const seatsFilled = state.seats.filter(Boolean).length;

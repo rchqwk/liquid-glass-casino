@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useAuth } from "../../lib/authClient";
 
@@ -14,8 +15,7 @@ export default function ProfilePage() {
       <div className="glass glass-shine rounded-3xl p-6">
         <h2 className="text-xl font-semibold text-white">Profile</h2>
         <p className="mt-2 text-sm leading-6 text-white/70">
-          Username-only sign-in for the play-money service. No passwords (not secure for
-          real money).
+          Your identity, progress, and account controls in one place.
         </p>
       </div>
 
@@ -89,9 +89,13 @@ export default function ProfilePage() {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            <label className="text-xs font-medium text-white/70">Username</label>
+            <Link href="/account" className="casino-button casino-primary">Sign in or manage an existing account</Link>
+            <p className="text-xs text-white/70">Create a new username profile below. Existing accounts require their password, passcode, or verified ownership.</p>
+            <label htmlFor="profile-username" className="text-xs font-medium text-white/70">New username</label>
             <input
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:border-white/20"
+              id="profile-username"
+              autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="e.g. tim"
@@ -110,7 +114,7 @@ export default function ProfilePage() {
                   }
                 }}
               >
-                Sign in
+                Create username profile
               </button>
             </div>
             <p className="text-[11px] leading-5 text-white/55">

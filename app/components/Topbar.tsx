@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { InventorySummary } from "./casino/InventorySummary";
+import { CasinoDialog } from "./casino/CasinoDialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "../lib/wallet";
 import { useAuth } from "../lib/authClient";
@@ -11,7 +14,8 @@ export function Topbar() {
   const { user, loading, refresh } = useAuth();
   const role = user?.role_level ?? 0;
   const [barOpen, setBarOpen] = useState(false);
-  const autoHideTimerRef = useRef<number | null>(null);
+  const pathname = usePathname();
+  const [inventoryOpen, setInventoryOpen] = useState(false);
   const [prestigeBusy, setPrestigeBusy] = useState(false);
   const [prestigeModalOpen, setPrestigeModalOpen] = useState(false);
   const [bjCtx, setBjCtx] = useState<{ active: boolean; tableId?: string; inviteUrl?: string } | null>(null);
@@ -28,10 +32,10 @@ export function Topbar() {
       return 0;
     }
   });
-  const [, forceTick] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const id = window.setInterval(() => forceTick((x) => (x + 1) % 1000000), 1000);
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -52,34 +56,10 @@ export function Topbar() {
     displayBalanceRef.current = displayBalance;
   }, [displayBalance]);
 
-  // Auto-hide the expanded top bar after 5s of no cursor/activity.
-  useEffect(() => {
-    if (!barOpen) return;
-    const resetTimer = () => {
-      if (autoHideTimerRef.current) window.clearTimeout(autoHideTimerRef.current);
-      autoHideTimerRef.current = window.setTimeout(() => setBarOpen(false), 5000) as any;
-    };
-    resetTimer();
-    window.addEventListener("mousemove", resetTimer, { passive: true });
-    window.addEventListener("mousedown", resetTimer, { passive: true });
-    window.addEventListener("keydown", resetTimer);
-    window.addEventListener("touchstart", resetTimer, { passive: true });
-    window.addEventListener("scroll", resetTimer, { passive: true });
-    return () => {
-      window.removeEventListener("mousemove", resetTimer);
-      window.removeEventListener("mousedown", resetTimer);
-      window.removeEventListener("keydown", resetTimer);
-      window.removeEventListener("touchstart", resetTimer);
-      window.removeEventListener("scroll", resetTimer);
-      if (autoHideTimerRef.current) window.clearTimeout(autoHideTimerRef.current);
-      autoHideTimerRef.current = null;
-    };
-  }, [barOpen]);
-
   // Blackjack page can provide context so top bar can show in-game actions.
   useEffect(() => {
-    const handler = (e: any) => {
-      const d = e?.detail ?? null;
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<{ active: boolean; tableId?: string; inviteUrl?: string }>).detail;
       if (!d) return;
       setBjCtx({
         active: !!d.active,
@@ -88,13 +68,13 @@ export function Topbar() {
       });
     };
     try {
-      window.addEventListener("lgc:blackjackCtx", handler as any);
+      window.addEventListener("lgc:blackjackCtx", handler);
     } catch {
       // ignore
     }
     return () => {
       try {
-        window.removeEventListener("lgc:blackjackCtx", handler as any);
+        window.removeEventListener("lgc:blackjackCtx", handler);
       } catch {
         // ignore
       }
@@ -117,14 +97,12 @@ export function Topbar() {
   useEffect(() => {
     const target = Number(balance ?? 0);
     if (!Number.isFinite(target)) return;
-    // jump on first render
-    setDisplayBalance((prev) => (prev == null ? target : prev));
     let raf = 0;
     const start = performance.now();
     const from = Number(displayBalanceRef.current ?? target);
-    const duration = 650; // ms
+    const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 650;
     const step = (t: number) => {
-      const p = Math.min(1, (t - start) / duration);
+      const p = duration === 0 ? 1 : Math.min(1, (t - start) / duration);
       const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
       const v = from + (target - from) * eased;
       setDisplayBalance(Math.round(v * 100) / 100);
@@ -132,14 +110,10 @@ export function Topbar() {
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [balance]);
 
   useEffect(() => {
-    if (isMobileViewport) {
-      setBroadcast(null);
-      return;
-    }
+    if (isMobileViewport) return;
     let cancelled = false;
     const tick = async () => {
       try {
@@ -171,11 +145,10 @@ export function Topbar() {
     };
   }, [afterId, isMobileViewport]);
 
-  const now = Date.now();
   const refillCooldownMs = Math.max(0, refill5000AvailableAt - now);
   const refill100CooldownMs = Math.max(0, refill100AvailableAt - now);
   const canRefill = !loading && !!user;
-  const prestigeLevel = Number((user as any)?.prestige_level ?? 0);
+  const prestigeLevel = Number(user?.prestige_level ?? 0);
   const refillAmount = useMemo(() => {
     // Base refill is +5000 every 15 minutes. Each prestige level adds +10000.
     return Math.max(0, 5000 + 10000 * Math.max(0, prestigeLevel));
@@ -192,7 +165,7 @@ export function Topbar() {
   }, [prestigeLevel]);
   const canPrestigeNow = !!user && Number(balance ?? 0) >= nextPrestigeAt;
   const nextPrestigeLevel = prestigeLevel + 1;
-  const prestigePoints = Number((user as any)?.prestige_points ?? 0);
+  const prestigePoints = Number(user?.prestige_points ?? 0);
   const mobileTableMenuMode = !!bjCtx?.active && isMobileViewport;
   const refillLabel = useMemo(() => {
     const amt = `+${formatChips(refillAmount)}`;
@@ -216,23 +189,33 @@ export function Topbar() {
 
   return (
     <>
-      {/* Prestige bubble (shows when eligible) */}
-      {!barOpen && canPrestigeNow ? (
-        <div className="fixed top-3 left-3 z-[75]">
-          <button
-            type="button"
-            disabled={prestigeBusy}
-            className="nn-card nn-card-hover px-4 py-3 text-left text-xs"
-            style={{ borderColor: "rgba(255,215,0,0.3)", boxShadow: "0 0 30px var(--neon-gold-glow)" }}
-            onClick={() => setPrestigeModalOpen(true)}
-            title={`Prestige ${nextPrestigeLevel}`}
-          >
-            <div className="text-[11px] text-neon-gold">Prestige ready</div>
-            <div className="mt-0.5 text-sm font-semibold text-white">Prestige {nextPrestigeLevel} ★</div>
-          </button>
-        </div>
-      ) : null}
 
+      <header className="casino-header">
+        <div className="casino-header__row">
+          <Link className="casino-brand" href="/casino/blackjack-v2"><span className="casino-brand__mark" aria-hidden="true">♠</span><span>Liquid Glass<small>Social arcade</small></span></Link>
+          <nav className="casino-nav" aria-label="Casino navigation">
+            <Link href="/casino/blackjack-v2" aria-current={pathname.startsWith("/casino/blackjack") ? "page" : undefined}>Play</Link>
+            <Link href="/casino/legacy" aria-current={pathname === "/casino/legacy" ? "page" : undefined}>Games</Link>
+            <button type="button" className="casino-button casino-muted" onClick={() => setInventoryOpen(true)}>Inventory</button>
+            <Link href="/casino/profile" aria-current={pathname === "/casino/profile" ? "page" : undefined}>Profile</Link>
+          </nav>
+          <div className="casino-header__account">
+            <button className="casino-balance" type="button" onClick={() => setBarOpen(value => !value)} aria-expanded={barOpen} aria-controls="casino-wallet" title="Balance and token controls"><small>{user ? "Tokens" : "Guest"}</small><span className="font-mono">{user ? formatChips(displayBalance) : "—"} ⓒ</span></button>
+            <Link className="casino-profile-link" href="/casino/profile">{loading ? "Loading…" : user ? ("@" + user.username) : "Sign in"}</Link>
+          </div>
+        </div>
+      </header>
+      <CasinoDialog open={inventoryOpen} onClose={() => setInventoryOpen(false)} title="Inventory & progression">
+        <p className="casino-muted mb-5 text-sm leading-6">Use cards, boosts, and bonds from your table&apos;s controls. Manage cosmetics and progression here.</p>
+        {inventoryOpen ? <InventorySummary key={user?.id ?? "guest"} userId={user?.id ?? null} onOpenBoxes={() => { setInventoryOpen(false); window.dispatchEvent(new CustomEvent("lgc:openBoxes")); }} /> : null}
+        <div className="casino-inventory-links">
+          <Link className="casino-button casino-secondary" href="/casino/customizations" onClick={() => setInventoryOpen(false)}>Cards, name colour & cosmetics</Link>
+          <Link className="casino-button casino-secondary" href="/casino/prestige-shop" onClick={() => setInventoryOpen(false)}>Prestige Shop & bonds</Link>
+          <Link className="casino-button casino-secondary" href="/casino/blackjack/special-rules" onClick={() => setInventoryOpen(false)}>Power-ups: effects & rules</Link>
+          <Link className="casino-button casino-secondary" href="/casino/settings" onClick={() => setInventoryOpen(false)}>Layout & settings</Link>
+        </div>
+      </CasinoDialog>
+      {canPrestigeNow ? <button type="button" className="casino-button casino-secondary mx-auto mt-3" onClick={() => setPrestigeModalOpen(true)}>Prestige {nextPrestigeLevel} ready ★</button> : null}
       {prestigeModalOpen ? (
         <div className="nn-modal-backdrop nn-fade-in">
           <div className="nn-modal w-full max-w-[520px] p-6">
@@ -283,15 +266,15 @@ export function Topbar() {
                       headers: { "content-type": "application/json" },
                       body: JSON.stringify({ action: "prestige" }),
                     });
-                    const j = (await res.json().catch(() => ({}))) as any;
+                    const j = (await res.json().catch(() => ({}))) as { error?: string };
                     if (!res.ok) throw new Error(j?.error ?? "Failed");
                     await reset({ balance: 0 });
                     await syncFromServer();
                     await refresh();
                     setPrestigeModalOpen(false);
                     setMsg(`Prestiged to ${nextPrestigeLevel}.`);
-                  } catch (e: any) {
-                    setMsg(String(e?.message ?? "Failed"));
+                  } catch (e: unknown) {
+                    setMsg(e instanceof Error ? e.message : "Failed");
                   } finally {
                     setPrestigeBusy(false);
                   }
@@ -304,23 +287,8 @@ export function Topbar() {
         </div>
       ) : null}
 
-      {/* Floating balance bubble (always visible) */}
-      {!barOpen ? (
-        <div className="fixed top-3 right-3 z-[75]">
-          <button
-            type="button"
-            className="nn-card nn-card-hover px-4 py-3 text-left text-xs opacity-80"
-            onClick={() => setBarOpen(true)}
-            title="Toggle top bar"
-          >
-            <div className="text-[11px] text-white/60">Tokens</div>
-            <div className="mt-0.5 font-mono text-sm font-semibold text-neon-cyan">{formatChips(displayBalance)} ⓒ</div>
-          </button>
-        </div>
-      ) : null}
-
       {barOpen ? (
-        <header className="sticky top-0 z-20 px-4 pt-4 sm:px-6">
+        <section id="casino-wallet" className="casino-wallet" aria-label="Token controls">
           <div className="nn-card flex items-center justify-between gap-3 px-4 py-3">
             <div className="flex items-center gap-3">
               <Link href="/casino/blackjack-v2" className="nn-btn nn-btn-secondary nn-btn-sm" title="Home">
@@ -375,7 +343,7 @@ export function Topbar() {
                 </>
               ) : null}
               <Link className="hidden nn-btn nn-btn-ghost nn-btn-sm sm:inline" href="/casino/legacy">
-                Legacy Games
+                All games
               </Link>
               <Link className="hidden nn-btn nn-btn-ghost nn-btn-sm sm:inline" href="/casino/leaderboard">
                 Leaderboard
@@ -463,7 +431,7 @@ export function Topbar() {
               <div className="nn-card px-3 py-2 text-xs text-white/80">{broadcast}</div>
             </div>
           ) : null}
-        </header>
+        </section>
       ) : null}
     </>
   );

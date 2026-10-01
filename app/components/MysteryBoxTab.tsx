@@ -1,5 +1,7 @@
 "use client";
 
+import { CasinoDialog } from "./casino/CasinoDialog";
+
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../lib/authClient";
@@ -35,7 +37,7 @@ function rarityLabel(r: string) {
 export function MysteryBoxTab() {
   const { user } = useAuth();
   const pathname = usePathname();
-  const isOnBlackjack = pathname?.startsWith("/casino/blackjack");
+  const isOnBlackjack = pathname?.startsWith("/casino");
   const tableIdFromPath = useMemo(() => {
     const p = String(pathname ?? "");
     const parts = p.split("/").filter(Boolean);
@@ -46,7 +48,7 @@ export function MysteryBoxTab() {
       (parts[1] === "blackjack" || parts[1] === "blackjack-v2")
     ) {
       const id = parts[2]!;
-      if (id && id !== "discord" && id !== "games") return id;
+      if (id && !["discord", "games", "rules", "special-rules", "strategy"].includes(id)) return id;
     }
     return null;
   }, [pathname]);
@@ -61,6 +63,7 @@ export function MysteryBoxTab() {
   const [data, setData] = useState<BoxesResp | null>(null);
   const [open, setOpen] = useState(false);
   const [opening, setOpening] = useState(false);
+  useEffect(() => { const show = () => { if (user) setOpen(true); else window.dispatchEvent(new CustomEvent("lgc:signIn")); }; window.addEventListener("lgc:openBoxes", show); return () => window.removeEventListener("lgc:openBoxes", show); }, [user]);
   const [revealStep, setRevealStep] = useState(0);
   const [lastOpened, setLastOpened] = useState<{ contents: string[]; rarity: string[] } | null>(null);
   const [lastOpenedAll, setLastOpenedAll] = useState<{ openedCount: number; rewards: Array<{ id: string; rarity: string }> } | null>(null);
@@ -234,7 +237,7 @@ export function MysteryBoxTab() {
 
       {/* Floating tab */}
       <div
-        className="pointer-events-none fixed right-3 z-[65]"
+        className="casino-mystery-trigger pointer-events-none fixed right-3 z-[65]"
         // Position under the Balance bubble when the topbar is closed, and under the
         // expanded topbar header when it is open.
         style={{ top: topbarOpen ? 124 : 88 }}
@@ -257,8 +260,8 @@ export function MysteryBoxTab() {
 
       {/* Overlay */}
       {open ? (
-        <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/80 p-4 sm:items-center">
-          <div className="glass glass-shine flex w-full max-w-[720px] flex-col rounded-3xl border border-white/10">
+        <CasinoDialog open={open} onClose={() => setOpen(false)} title="Mystery boxes" showHeading={false}>
+          <div>
             {/* Sticky header so the Close button never gets pushed off-screen on mobile */}
             <div className="sticky top-0 z-10 rounded-t-3xl border-b border-white/10 bg-black/30 px-6 py-4 backdrop-blur">
               <div className="flex items-start justify-between gap-3">
@@ -423,7 +426,7 @@ export function MysteryBoxTab() {
               </div>
             </div>
           </div>
-        </div>
+        </CasinoDialog>
       ) : null}
     </>
   );
