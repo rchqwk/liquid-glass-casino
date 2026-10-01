@@ -158,6 +158,7 @@ export default function DiscordV2EntryPage() {
           addLog("Pairing completed, session stored");
           setStage("redirecting");
           const nextChannelId = String(data?.channelId ?? mobileAuth.channelId ?? "").trim();
+          if (nextChannelId) await joinTableFlow(nextChannelId);
           await refresh();
           router.replace(nextChannelId ? `${TABLE_BASE}/${encodeURIComponent(nextChannelId)}` : TABLE_BASE);
         }
