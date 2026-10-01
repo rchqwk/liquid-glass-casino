@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-export type UiScale = 100 | 125 | 150 | 175;
+export type UiScale = 75 | 85 | 100 | 125 | 150 | 175;
 
 const STORAGE_KEY = "lgc.uiScale";
 
@@ -25,7 +25,7 @@ function applyScaleToDocument(scale: UiScale) {
 function readStoredScale(): UiScale | null {
   try {
     const raw = Number(localStorage.getItem(STORAGE_KEY) ?? "");
-    if (raw === 100 || raw === 125 || raw === 150 || raw === 175) return raw as UiScale;
+    if ([75, 85, 100, 125, 150, 175].includes(raw)) return raw as UiScale;
     return null;
   } catch {
     return null;
@@ -33,11 +33,11 @@ function readStoredScale(): UiScale | null {
 }
 
 export function UiScaleProvider({ children }: { children: React.ReactNode }) {
-  const [uiScale, setUiScaleState] = useState<UiScale>(150);
+  const [uiScale, setUiScaleState] = useState<UiScale>(100);
 
   useEffect(() => {
     const stored = readStoredScale();
-    const initial: UiScale = stored ?? 150;
+    const initial: UiScale = stored ?? 100;
     setUiScaleState(initial);
     applyScaleToDocument(initial);
   }, []);
@@ -59,7 +59,6 @@ export function UiScaleProvider({ children }: { children: React.ReactNode }) {
 
 export function useUiScale() {
   const ctx = useContext(UiScaleContext);
-  if (!ctx) return { uiScale: 150 as UiScale, setUiScale: (_: UiScale) => {} };
+  if (!ctx) return { uiScale: 100 as UiScale, setUiScale: (_: UiScale) => {} };
   return ctx;
 }
-
