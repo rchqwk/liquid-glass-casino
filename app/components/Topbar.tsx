@@ -209,7 +209,7 @@ export function Topbar() {
         <p className="casino-muted mb-5 text-sm leading-6">Use cards, boosts, and bonds from your table&apos;s controls. Manage cosmetics and progression here.</p>
         {inventoryOpen ? <InventorySummary key={user?.id ?? "guest"} userId={user?.id ?? null} onOpenBoxes={() => { setInventoryOpen(false); window.dispatchEvent(new CustomEvent("lgc:openBoxes")); }} /> : null}
         <div className="casino-inventory-links">
-          <Link className="casino-button casino-secondary" href="/casino/customizations" onClick={() => setInventoryOpen(false)}>Cards, name colour & cosmetics</Link>
+          <Link className="casino-button casino-secondary" href="/casino/settings#customizations" onClick={() => setInventoryOpen(false)}>Cards, name colour & cosmetics</Link>
           <Link className="casino-button casino-secondary" href="/casino/prestige-shop" onClick={() => setInventoryOpen(false)}>Prestige Shop & bonds</Link>
           <Link className="casino-button casino-secondary" href="/casino/blackjack/special-rules" onClick={() => setInventoryOpen(false)}>Power-ups: effects & rules</Link>
           <Link className="casino-button casino-secondary" href="/casino/settings" onClick={() => setInventoryOpen(false)}>Layout & settings</Link>
@@ -350,7 +350,7 @@ export function Topbar() {
               </Link>
               {!mobileTableMenuMode ? (
                 <>
-                  <Link className="nn-btn nn-btn-ghost nn-btn-sm" href="/casino/customizations">
+                  <Link className="nn-btn nn-btn-ghost nn-btn-sm" href="/casino/settings#customizations">
                     Customizations
                   </Link>
                   <Link className="nn-btn nn-btn-ghost nn-btn-sm" href="/casino/prestige-shop">

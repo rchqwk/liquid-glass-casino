@@ -24,6 +24,8 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   const isAllowed = useMemo(() => {
     if (process.env.NODE_ENV === "development" && pathname === "/casino/ui-preview") return true;
     if (["/casino", "/casino/blackjack-v2", "/casino/blackjack", "/casino/legacy", "/casino/games"].includes(pathname)) return true;
+    // Display preferences are available before sign-in.
+    if (pathname === "/casino/settings" || pathname === "/casino/customizations") return true;
     // Always allow the dedicated profile page so users can manage sign-in/out.
     if (pathname === "/casino/profile") return true;
     // Allow tutorial / docs pages without forcing sign-in (useful for first-time visitors).

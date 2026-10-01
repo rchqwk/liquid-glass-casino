@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { CasinoCustomizations } from "../../components/casino/CasinoCustomizations";
 import { useWallet } from "../../lib/wallet";
 
 export default function SettingsPage() {
@@ -17,14 +18,16 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="glass glass-shine rounded-3xl p-6">
-        <h2 className="text-xl font-semibold text-white">Settings</h2>
+        <h1 className="text-xl font-semibold text-white">Settings</h1>
         <p className="mt-2 text-sm leading-6 text-white/70">
-          This service uses a “commit → reveal” flow. The app commits to a
-          server seed hash, then uses <code>serverSeed:clientSeed:nonce</code> to
-          derive outcomes.
+          Customize your appearance, table layout, and floating HUD size.
         </p>
       </div>
 
+      <CasinoCustomizations />
+      <details className="glass rounded-3xl p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Fairness &amp; seeds</summary>
+        <p className="my-4 text-sm text-white/70">The app commits to a server seed hash, then uses <code>serverSeed:clientSeed:nonce</code> to derive outcomes.</p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="glass-soft glass-shine rounded-3xl p-5">
           <p className="text-sm font-medium text-white">Server seed (commit)</p>
@@ -64,7 +67,7 @@ export default function SettingsPage() {
 
           <input
             className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:border-white/20"
-            value={seedDraft}
+            aria-label="Client seed" value={seedDraft}
             onChange={(e) => setSeedDraft(e.target.value)}
             placeholder="e.g. tim-2026-05-31"
           />
@@ -83,6 +86,7 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      </details>
     </div>
   );
 }
