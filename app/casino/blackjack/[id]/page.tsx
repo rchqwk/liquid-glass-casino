@@ -3452,7 +3452,7 @@ export function BlackjackTablePageClient({
                     ) : null}
                     {isMobileViewport ? (
                       <>
-                        <Link href="/casino/customizations" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => setHMenuOpen(false)}>
+                        <Link href="/casino/settings#customizations" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => setHMenuOpen(false)}>
                           Customizations
                         </Link>
                         <Link href="/casino/prestige-shop" className="glass-soft rounded-2xl px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/10" onClick={() => setHMenuOpen(false)}>

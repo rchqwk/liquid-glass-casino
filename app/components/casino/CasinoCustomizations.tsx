@@ -1,0 +1,243 @@
+"use client";
+
+
+import { useState } from "react";
+import { useAuth } from "../../lib/authClient";
+import { useSkin } from "../../lib/skin";
+import { useUiLayout } from "../../lib/uiLayout";
+import { useUiScale } from "../../lib/uiScale";
+
+type ApiResp =
+  | { ok: true; user?: unknown; prestige_level?: number; prestige_points?: number; name_color?: string | null }
+  | { error: string };
+
+export function CasinoCustomizations() {
+  const { user, loading, refresh } = useAuth();
+  const { skin, setSkin } = useSkin();
+  const { layout, setLayout } = useUiLayout();
+  const { uiScale, setUiScale } = useUiScale();
+  const [saving, setSaving] = useState(false);
+  const [requestingReset, setRequestingReset] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const nameColor = user?.name_color ?? null;
+
+  const prestige = Number(user?.prestige_level ?? 0);
+  const COLORS: Array<{ key: string; label: string; minPrestige: number }> = [
+    { key: "brown", label: "Brown", minPrestige: 1 },
+    { key: "red", label: "Red", minPrestige: 2 },
+    { key: "orange", label: "Orange", minPrestige: 3 },
+    { key: "yellow", label: "Yellow", minPrestige: 4 },
+    { key: "green", label: "Green", minPrestige: 5 },
+    { key: "teal", label: "Teal", minPrestige: 6 },
+    { key: "blue", label: "Blue", minPrestige: 7 },
+    { key: "indigo", label: "Indigo", minPrestige: 8 },
+    { key: "violet", label: "Violet", minPrestige: 9 },
+    { key: "pink", label: "Pink", minPrestige: 10 },
+    { key: "cyan", label: "Cyan", minPrestige: 15 },
+    { key: "lime", label: "Lime", minPrestige: 20 },
+  ];
+
+  const saveColor = async (next: string | null) => {
+    if (saving) return;
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/customizations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name_color: next ?? "default" }),
+      });
+      const j = (await res.json().catch(() => ({}))) as ApiResp;
+      if (!res.ok || "error" in j) throw new Error("error" in j ? j.error : "Failed");
+
+      await refresh();
+      setMsg("Saved.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section id="customizations" className="scroll-mt-24">
+      <h2 className="text-lg font-semibold text-white">Customizations</h2>
+      <p className="mt-1 text-sm text-white/60">Display preferences save automatically on this device.</p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">          <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+            <div className="text-sm font-semibold text-white">UI skin</div>
+            <div className="mt-1 text-xs text-white/60">
+              Pick a visual style that fits Discord Activities. This is a local preference on this device.
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={`rounded-2xl border px-3 py-2 text-xs ${
+                  skin === "glass"
+                    ? "border-cyan-300/25 bg-cyan-500/10 text-cyan-100"
+                    : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                }`}
+                aria-pressed={skin === "glass"} onClick={() => setSkin("glass")}
+              >
+                Liquid Glass
+              </button>
+              <button
+                type="button"
+                className={`rounded-2xl border px-3 py-2 text-xs ${
+                  skin === "cartoon"
+                    ? "border-yellow-300/30 bg-yellow-500/10 text-yellow-100"
+                    : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                }`}
+                aria-pressed={skin === "cartoon"} onClick={() => setSkin("cartoon")}
+              >
+                Cartoon
+              </button>
+            </div>
+
+            <div className="mt-3 text-xs text-white/55">
+              Tip: the cartoon skin uses thicker “sticker” shadows and brighter gradients while keeping the same layout.
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+            <div className="text-sm font-semibold text-white">UI layout</div>
+            <div className="mt-1 text-xs text-white/60">
+              Horizontal mode is optimized for Discord Activities: the felt stays full-screen and panels float in only when needed.
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={`rounded-2xl border px-3 py-2 text-xs ${
+                  layout === "standard"
+                    ? "border-cyan-300/25 bg-cyan-500/10 text-cyan-100"
+                    : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                }`}
+                aria-pressed={layout === "standard"} onClick={() => setLayout("standard")}
+              >
+                Standard
+              </button>
+              <button
+                type="button"
+                className={`rounded-2xl border px-3 py-2 text-xs ${
+                  layout === "horizontal"
+                    ? "border-yellow-300/30 bg-yellow-500/10 text-yellow-100"
+                    : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                }`}
+                aria-pressed={layout === "horizontal"} onClick={() => setLayout("horizontal")}
+              >
+                Horizontal
+              </button>
+            </div>
+
+            <div className="mt-3 text-xs text-white/55">
+              In horizontal mode, controls collapse to side buttons and open as centered panels. Betting stake stays visible while you’re seated and
+              haven’t locked a stake yet.
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+            <div className="text-sm font-semibold text-white">Floating HUD size</div>
+            <div className="mt-1 text-xs text-white/60">
+              Scales the floating horizontal HUD and menus. Default is <span className="font-mono text-white/80">100%</span>.
+              Choose 75% or 85% for a smaller HUD in Discord Activities.
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[75, 85, 100, 125, 150, 175].map((scale) => (
+                <button
+                  key={scale}
+                  type="button"
+                  className={`rounded-2xl border px-3 py-2 text-xs ${
+                    uiScale === scale
+                      ? "border-fuchsia-300/25 bg-fuchsia-500/10 text-fuchsia-100"
+                      : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                  }`}
+                  aria-pressed={uiScale === scale} onClick={() => setUiScale(scale as 75 | 85 | 100 | 125 | 150 | 175)}
+                >
+                  {scale}%
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 text-xs text-white/55">This is a local preference on this device and mainly affects the horizontal blackjack HUD.</div>
+          </div>
+
+      </div>
+      {user ? (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">          <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+            <div className="text-sm font-semibold text-white">Name color</div>
+            <div className="mt-1 text-xs text-white/60">Controls how your name appears at the Blackjack table. Your prestige: {prestige}.</div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={saving}
+                className={`rounded-2xl border px-3 py-2 text-xs ${
+                  !nameColor
+                    ? "border-white/20 bg-white/15 text-white"
+                    : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                }`}
+                onClick={() => void saveColor(null)}
+              >
+                Default
+              </button>
+              {COLORS.map((c) => {
+                const unlocked = prestige >= c.minPrestige;
+                const selected = nameColor === c.key;
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    disabled={saving || !unlocked}
+                    className={`rounded-2xl border px-3 py-2 text-xs ${
+                      selected
+                        ? "border-yellow-300/30 bg-yellow-500/10 text-yellow-100"
+                        : "border-white/10 bg-white/5 text-white/70 hover:text-white disabled:opacity-40"
+                    }`}
+                    onClick={() => void saveColor(c.key)}
+                    title={unlocked ? `Unlocked at Prestige ${c.minPrestige}` : `Unlock at Prestige ${c.minPrestige}`}
+                  >
+                    {c.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            
+          </div>
+
+          <div className="rounded-3xl border border-rose-300/15 bg-rose-500/5 p-5">
+            <div className="text-sm font-semibold text-white">Reset all progress</div>
+            <div className="mt-1 text-xs leading-6 text-white/60">
+              This sends a reset request for your account progress. A moderator must approve it before your wallet, blackjack inventory, collectibles,
+              prestige progress, and leaderboard stats are cleared.
+            </div>
+            <button
+              type="button"
+              disabled={requestingReset}
+              className="mt-4 glass-soft rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-500/15 disabled:opacity-40"
+              onClick={async () => {
+                setRequestingReset(true);
+                setMsg(null);
+                try {
+                  const res = await fetch("/api/moderation/progress-reset", { method: "POST" });
+                  const j = (await res.json().catch(() => ({}))) as { error?: string };
+                  if (!res.ok) throw new Error(j?.error ?? "Failed to submit reset request");
+                  setMsg("Reset request submitted for moderator approval.");
+                } catch (e: unknown) {
+                  setMsg(e instanceof Error ? e.message : "Failed to submit reset request");
+                } finally {
+                  setRequestingReset(false);
+                }
+              }}
+            >
+              {requestingReset ? "Submitting request…" : "Request progress reset"}
+            </button>
+          </div>
+        </div>
+      ) : <p className="mt-4 text-sm text-white/60">{loading ? "Loading account customizations…" : "Sign in to customize your name colour or manage account progress."}</p>}
+      {msg ? <p role="status" className="mt-3 text-sm text-white/70">{msg}</p> : null}
+    </section>
+  );
+}
