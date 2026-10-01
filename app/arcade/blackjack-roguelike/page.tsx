@@ -37,6 +37,7 @@ import {
   usePowerup,
 } from "./game";
 import MultiplayerBlackjack from "./multiplayer";
+import { useAuth } from "../../lib/authClient";
 
 type LastResult = { label: string; color: string; score: number } | null;
 
@@ -48,6 +49,8 @@ function rarityColor(rarity: "common" | "uncommon" | "rare"): string {
 }
 
 export default function RoguelikeBlackjackPage() {
+  const { discordMode } = useAuth();
+  const [discordDismissed, setDiscordDismissed] = useState(false);
   const [meta, setMeta] = useState<MetaState>(() => loadMeta());
   const [run, setRun] = useState<RunState | null>(null);
   const [preset, setPreset] = useState("standard");
@@ -60,6 +63,13 @@ export default function RoguelikeBlackjackPage() {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [removeMode, setRemoveMode] = useState(false);
   const [multiplayer, setMultiplayer] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("multiplayer") === "1") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- URL selects the multiplayer screen after hydration.
+      setMultiplayer(true);
+    }
+  }, []);
 
   useEffect(() => {
     saveMeta(meta);
@@ -260,8 +270,8 @@ export default function RoguelikeBlackjackPage() {
 
   const showHouseTotal = !!run && run.dealerDone && run.dealer.length > 0;
 
-  if (multiplayer) {
-    return <MultiplayerBlackjack onBack={() => setMultiplayer(false)} />;
+  if (multiplayer || (discordMode && !discordDismissed)) {
+    return <MultiplayerBlackjack discordActivity={discordMode && !discordDismissed} onBack={() => { setMultiplayer(false); setDiscordDismissed(true); }} />;
   }
 
   return (

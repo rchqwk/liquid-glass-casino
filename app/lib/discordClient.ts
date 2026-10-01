@@ -22,6 +22,32 @@ export function getDiscordSdk(clientId: string): Promise<DiscordSDK> {
   return state.sdk ??= import("@discord/embedded-app-sdk").then(({ DiscordSDK }) => new DiscordSDK(clientId));
 }
 
+export function discordLaunchParams(): URLSearchParams {
+  const current = new URLSearchParams(window.location.search);
+  if (current.has("frame_id") || current.has("instance_id")) return current;
+  try { return new URLSearchParams(sessionStorage.getItem("lgc.discord.qs") ?? ""); }
+  catch { return current; }
+}
+
+export async function getDiscordCall() {
+  const params = discordLaunchParams();
+  // Browser pairing restores the account even when Discord's mobile RPC is unavailable.
+  // Keep multiplayer working from the retained call context in that case.
+  try {
+    if (sessionStorage.getItem("lgc.discord.paired") === "1" && params.get("channel_id")) {
+      return { sdk: null, channelId: params.get("channel_id")!, instanceId: params.get("instance_id") ?? "" };
+    }
+  } catch { /* Continue with the Embedded SDK handshake. */ }
+  if (!params.has("frame_id")) return null;
+  const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK;
+  if (!clientId) throw new Error("Discord Activity is not configured.");
+  const sdk = await getDiscordSdk(clientId);
+  await withDiscordTimeout(sdk.ready(), "Discord is taking too long to connect. Reopen the Activity or retry.");
+  const channelId = sdk.channelId ?? params.get("channel_id");
+  if (!channelId) throw new Error("Open this Activity from a Discord call to play together.");
+  return { sdk, channelId, instanceId: sdk.instanceId };
+}
+
 export function exchangeDiscordCode(code: string, redirectUri: string, mobileAuthCode?: string | null): Promise<Login> {
   const state = runtime();
   const key = JSON.stringify([code, redirectUri, mobileAuthCode]);

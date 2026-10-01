@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
-import { joinRoom, loadRoom, roomView, saveRoom } from "../../../../../lib/roguelikeRoom";
+import { joinRoom, updateRoom, RoomError, roomView } from "../../../../../lib/roguelikeRoom";
 
 import { issueSeat, ownsSeat } from "../../../../../lib/roguelikeAuthority";
 
@@ -15,19 +15,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ code: string }
   const username = String(body?.username ?? "Player").slice(0, 24);
   if (!playerId) return NextResponse.json({ error: "playerId required." }, { status: 400 });
 
-  const room = await loadRoom(code);
-  if (!room) return NextResponse.json({ error: "Room not found." }, { status: 404 });
-
-  const existing = room.players.some(p => p.playerId === playerId);
-  if (existing && !await ownsSeat(room, playerId)) return NextResponse.json({ error: "Seat ownership required." }, { status: 403 });
-
-  // Link the room seat to the signed-in account (for XP persistence).
   const authed = await getAuthedUserAsync().catch(() => null);
-  const userId = authed?.id ?? null;
-
-  const { room: next, error } = joinRoom(room, playerId, username, userId);
-  if (error) return NextResponse.json({ error }, { status: 409 });
-  if (!existing) await issueSeat(next, playerId);
-  await saveRoom(next);
-  return NextResponse.json({ room: roomView(next, playerId) });
+  try {
+    const next = await updateRoom(code, async room => {
+      if (!room) throw new RoomError("Room not found.", 404);
+      const existing = room.players.some(p => p.playerId === playerId);
+      if (existing && !await ownsSeat(room, playerId)) throw new RoomError("Seat ownership required.", 403);
+      const result = joinRoom(room, playerId, authed?.username ?? username, authed?.id ?? null);
+      if (result.error) throw new RoomError(result.error);
+      if (!existing) await issueSeat(result.room, playerId);
+      if (room.discordChannelId) room.players.find(p => p.playerId === playerId)!.lastSeenAt = Date.now();
+      return result.room;
+    });
+    return NextResponse.json({ room: roomView(next, playerId) });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not join room." }, { status: error instanceof RoomError ? error.status : 500 });
+  }
 }

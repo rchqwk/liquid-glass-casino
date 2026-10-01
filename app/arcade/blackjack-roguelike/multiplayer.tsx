@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cardColor, computeHandValue, type Card } from "./game";
+import { useAuth } from "../../lib/authClient";
+import { getDiscordCall, withDiscordTimeout } from "../../lib/discordClient";
 
 type MpOutcome = "win" | "lose" | "push" | null;
 type Mode = "coop" | "race" | "elimination";
@@ -75,8 +77,13 @@ function outcomeLabel(o: MpOutcome): string {
   return "Lose";
 }
 
-export default function MultiplayerBlackjack({ onBack }: { onBack: () => void }) {
-  const playerId = useMemo(() => getPlayerId(), []);
+export default function MultiplayerBlackjack({ onBack, discordActivity = false }: { onBack: () => void; discordActivity?: boolean }) {
+  const { user, loading } = useAuth();
+  const guestId = useMemo(() => getPlayerId(), []);
+  const playerId = discordActivity && user ? `u${user.id}` : guestId;
+  const [call, setCall] = useState<Awaited<ReturnType<typeof getDiscordCall>>>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connectAttempt, setConnectAttempt] = useState(0);
   const [username, setUsername] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [mode, setMode] = useState<Mode>("coop");
@@ -86,6 +93,57 @@ export default function MultiplayerBlackjack({ onBack }: { onBack: () => void })
   const [toast, setToast] = useState<string | null>(null);
   const [giftTarget, setGiftTarget] = useState<string | null>(null);
   const codeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!discordActivity || !user?.id) return;
+    let cancelled = false, pending = false;
+    let timer: number | undefined;
+    const connect = async () => {
+      try {
+        const context = await getDiscordCall();
+        if (!context) throw new Error("Reopen Roguelike Blackjack from the Discord Activity to join your call.");
+        if (cancelled) return;
+        setCall(context);
+        const join = async () => {
+          if (pending || cancelled) return;
+          pending = true;
+          try {
+            const res = await fetch("/api/roguelike/activity", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ channelId: context.channelId }), signal: AbortSignal.timeout(15000),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.room) throw new Error(data.error ?? "Could not join your call's game.");
+            if (cancelled) return;
+            setConnectionError(null); setCode(data.room.code); setRoom(data.room as MpRoom);
+          } catch (error) {
+            if (!cancelled) setConnectionError(error instanceof Error ? error.message : "Connection lost. Please retry.");
+          } finally { pending = false; }
+        };
+        await join();
+        if (!cancelled) timer = window.setInterval(join, 20000);
+      } catch (error) {
+        if (!cancelled) setConnectionError(error instanceof Error ? error.message : "Could not connect to Discord.");
+      }
+    };
+    void connect();
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [discordActivity, user?.id, connectAttempt]);
+
+  const presenceCode = room?.code, presenceCount = room?.players.length, presenceRound = room?.round, presencePhase = room?.phase;
+  useEffect(() => {
+    if (!call?.sdk || !presenceCode) return;
+    void withDiscordTimeout(call.sdk.commands.setActivity({ activity: {
+      type: 0, details: "Roguelike Blackjack · Co-op",
+      state: presencePhase === "lobby" ? "Waiting for friends" : `Round ${presenceRound} · ${presencePhase}`,
+      party: { id: call.instanceId || presenceCode, size: [presenceCount ?? 1, 4] },
+      instance: true,
+    } }), "Discord Rich Presence did not respond.").catch(() => { /* Room connectivity remains usable if presence is unavailable. */ });
+  }, [call, presenceCode, presenceCount, presenceRound, presencePhase]);
+
+  useEffect(() => () => {
+    if (call?.sdk) void withDiscordTimeout(call.sdk.commands.setActivity({ activity: null }), "Discord presence cleanup timed out.").catch(() => {});
+  }, [call]);
 
   const flash = useCallback((msg: string) => {
     setToast(msg);
@@ -196,6 +254,7 @@ export default function MultiplayerBlackjack({ onBack }: { onBack: () => void })
       }
     }
     setCode(null);
+    codeRef.current = null;
     setRoom(null);
     onBack();
   }, [code, playerId, onBack]);
@@ -231,13 +290,20 @@ export default function MultiplayerBlackjack({ onBack }: { onBack: () => void })
           <div style={{ width: 70 }} />
         </div>
 
-        {!room ? (
+        {discordActivity ? <div className="mp-muted" role="status">
+          {connectionError ?? (room ? "Connected to your Discord call. Friends opening the Activity join this run automatically." : loading || !user ? "Signing in with Discord…" : "Joining your Discord call's game…")}
+          {connectionError ? <button className="mp-btn mp-btn-secondary" onClick={() => setConnectAttempt(n => n + 1)}>Retry connection</button> : null}
+          {call?.sdk && room ? <button className="mp-btn mp-btn-secondary" onClick={() => {
+            void withDiscordTimeout(call.sdk!.commands.openInviteDialog(), "Discord invite dialog did not respond.").catch(() => flash("Open the Activity invite from your Discord call."));
+          }}>Invite friends</button> : null}
+        </div> : null}
+        {!room && discordActivity ? null : !room ? (
           <div className="mp-panel">
             <div className="mp-title">Multiplayer Table</div>
             <p className="mp-muted">Create a room or join a friend. Up to 4 players share a run against the house. Help teammates with support powerups; XP from the level you reach is split among survivors.</p>
 
-            <label className="mp-label">Your name</label>
-            <input className="mp-input" value={username} maxLength={24} placeholder="Player" onChange={(e) => setUsername(e.target.value)} />
+            <label className="mp-label" htmlFor="rogue-player-name">Your name</label>
+            <input id="rogue-player-name" className="mp-input" value={username} maxLength={24} placeholder="Player" onChange={(e) => setUsername(e.target.value)} />
 
             <label className="mp-label">Game mode</label>
             <div className="mp-modes">
@@ -254,8 +320,8 @@ export default function MultiplayerBlackjack({ onBack }: { onBack: () => void })
 
             <div className="mp-divider">or join with a code</div>
 
-            <label className="mp-label">Room code</label>
-            <input className="mp-input mp-code" value={joinCode} maxLength={6} placeholder="ABC123" onChange={(e) => setJoinCode(e.target.value.toUpperCase())} />
+            <label className="mp-label" htmlFor="rogue-room-code">Room code</label>
+            <input id="rogue-room-code" className="mp-input mp-code" value={joinCode} maxLength={12} placeholder="ABC123" onChange={(e) => setJoinCode(e.target.value.toUpperCase())} />
 
             <div className="mp-row">
               <button className="mp-btn mp-btn-secondary" disabled={busy} onClick={joinRoom}>Join Room</button>
@@ -263,6 +329,7 @@ export default function MultiplayerBlackjack({ onBack }: { onBack: () => void })
           </div>
         ) : (
           <div className="mp-panel">
+            {room.phase === "playing" && me?.hands.length === 0 ? <p className="mp-muted" role="status">You joined during a hand. Your cards will be dealt next round.</p> : null}
             <div className="mp-room-head">
               <div>
                 <div className="mp-room-label">Room code</div>
@@ -391,7 +458,7 @@ export default function MultiplayerBlackjack({ onBack }: { onBack: () => void })
                   </div>
                 ) : me && me.eliminated ? (
                   <div className="mp-actions">
-                    <div className="mp-muted">You've been eliminated. Waiting for the run to end…</div>
+                    <div className="mp-muted">You’ve been eliminated. Waiting for the run to end…</div>
                   </div>
                 ) : me && me.done ? (
                   <div className="mp-actions">

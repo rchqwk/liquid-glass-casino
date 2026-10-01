@@ -2209,6 +2209,30 @@ export async function upsertRoguelikeRoom(code: string, state: any) {
   });
 }
 
+// Atomic creation/update prevents simultaneous Activity joins from overwriting seats.
+export async function commitRoguelikeRoom(code: string, state: unknown, expected: string | null): Promise<boolean> {
+  const sql = getSql(), now = Date.now(), next = JSON.stringify(state);
+  if (sql) {
+    await ensureSchema();
+    const rows = expected === null
+      ? await sql`INSERT INTO roguelike_rooms (code, state_json, created_at, updated_at) VALUES (${code}, ${next}, ${now}, ${now}) ON CONFLICT (code) DO NOTHING RETURNING code`
+      : await sql`UPDATE roguelike_rooms SET state_json = ${next}, updated_at = ${now} WHERE code = ${code} AND state_json = ${expected} RETURNING code`;
+    return rows.length > 0;
+  }
+  return withStore(s => {
+    s.roguelike_rooms ??= [];
+    const row = s.roguelike_rooms.find(r => r.code === code);
+    if (expected === null) {
+      if (row) return false;
+      s.roguelike_rooms.push({ code, state, created_at: now, updated_at: now });
+    } else {
+      if (!row || JSON.stringify(row.state) !== expected) return false;
+      row.state = state; row.updated_at = now;
+    }
+    return true;
+  });
+}
+
 export async function getRoguelikeRoom(code: string) {
   const c = String(code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
   if (!c) return null;

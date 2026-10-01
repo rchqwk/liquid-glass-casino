@@ -106,7 +106,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       sessionStorage.removeItem("lgc.discord.disableOauthSession");
       const qs = sessionStorage.getItem("lgc.discord.qs") ?? "";
-      router.replace(`${DISCORD_ENTRY}${qs || ""}`);
+      const params = new URLSearchParams(qs);
+      if (window.location.pathname.startsWith("/arcade/blackjack-roguelike")) params.set("returnTo", "/arcade/blackjack-roguelike?multiplayer=1");
+      router.replace(`${DISCORD_ENTRY}?${params.toString()}`);
     } catch {
       router.replace(DISCORD_ENTRY);
     }
@@ -172,13 +174,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSessionExpired(!authed && !!getSessionTokenClient());
 
         // The entry page owns authorization. Never start a second SDK/login flow here.
-        if (!authed && isDiscord && !discordAttempted) {
+        if (isDiscord && !discordAttempted && (!authed || new URLSearchParams(search).has("frame_id"))) {
           setDiscordAttempted(true);
           setDiscordError(null);
           const path = window.location.pathname;
           if (!path.endsWith("/discord") && path !== "/discord/callback" && !new URLSearchParams(search).has("code")) {
             const context = search || sessionStorage.getItem("lgc.discord.qs") || "";
-            router.replace(DISCORD_ENTRY + context);
+            const params = new URLSearchParams(context);
+            if (path.startsWith("/arcade/blackjack-roguelike")) params.set("returnTo", "/arcade/blackjack-roguelike?multiplayer=1");
+            router.replace(DISCORD_ENTRY + "?" + params.toString());
           }
         }
       } catch {

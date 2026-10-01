@@ -152,15 +152,16 @@ export default function DiscordV2EntryPage() {
         if (data?.status === "completed" && data?.sessionToken) {
           try {
             localStorage.setItem("lgc.session", String(data.sessionToken));
+            sessionStorage.setItem("lgc.discord.paired", "1");
           } catch {
             // ignore
           }
           addLog("Pairing completed, session stored");
           setStage("redirecting");
           const nextChannelId = String(data?.channelId ?? mobileAuth.channelId ?? "").trim();
-          if (nextChannelId) await joinTableFlow(nextChannelId);
+          const target = await joinTableFlow(nextChannelId);
           await refresh();
-          router.replace(nextChannelId ? `${TABLE_BASE}/${encodeURIComponent(nextChannelId)}` : TABLE_BASE);
+          router.replace(target);
         }
       } catch {
         // ignore transient poll failures
@@ -185,8 +186,21 @@ export default function DiscordV2EntryPage() {
     }
   };
 
-  const joinTableFlow = async (targetChannelId: string | null | undefined) => {
-    if (!targetChannelId) return;
+  const joinTableFlow = async (targetChannelId: string | null | undefined): Promise<string> => {
+    const requested = qs?.get("returnTo") ?? oauthStateFromQuery;
+    const roguelikeRequested = requested?.startsWith("/arcade/blackjack-roguelike");
+    if (!targetChannelId) return roguelikeRequested ? "/arcade/blackjack-roguelike?multiplayer=1" : TABLE_BASE;
+    try {
+      const context = new URLSearchParams(sessionStorage.getItem("lgc.discord.qs") ?? window.location.search);
+      context.set("channel_id", targetChannelId);
+      sessionStorage.setItem("lgc.discord.qs", "?" + context.toString());
+    } catch { /* The SDK still carries the current call context. */ }
+    if (roguelikeRequested) return "/arcade/blackjack-roguelike?multiplayer=1";
+    try {
+      const activityRes = await fetch(`/api/roguelike/activity?channelId=${encodeURIComponent(targetChannelId)}`, { cache: "no-store", signal: AbortSignal.timeout(10000) });
+      const activity = await activityRes.json().catch(() => ({}));
+      if (activityRes.ok && activity.active) return "/arcade/blackjack-roguelike?multiplayer=1";
+    } catch { addLog("Call game discovery unavailable; continuing normal blackjack login."); }
     setStage("ensuring_table");
     const ensureRes = await fetch(`/api/blackjack/tables/${encodeURIComponent(targetChannelId)}/ensure`, { method: "POST" });
     const ensureJson = (await ensureRes.json().catch(() => ({}))) as any;
@@ -197,6 +211,7 @@ export default function DiscordV2EntryPage() {
       body: JSON.stringify({ spectate: false }),
     });
     if (!joinRes.ok) throw new Error("Could not join the table. Please retry.");
+    return `${TABLE_BASE}/${encodeURIComponent(targetChannelId)}`;
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -225,11 +240,11 @@ export default function DiscordV2EntryPage() {
             return;
           }
 
-          if (channelId) await joinTableFlow(channelId);
+          const target = channelId ? await joinTableFlow(channelId) : discordReturnPath(oauthStateFromQuery);
           if (cancelled) return;
           setStage("redirecting");
           await refresh();
-          router.replace(channelId ? `${TABLE_BASE}/${encodeURIComponent(channelId)}` : discordReturnPath(oauthStateFromQuery));
+          router.replace(target);
           return;
         }
 
@@ -266,6 +281,7 @@ export default function DiscordV2EntryPage() {
             const loginJson = await exchangeDiscordCode(sdkCode, redirectUri);
             persistSession(loginJson?.session_token);
             addLog("Login OK (SDK)");
+            try { sessionStorage.removeItem("lgc.discord.paired"); } catch { /* SDK context remains available. */ }
 
             const accessToken = String(loginJson?.access_token ?? "");
             if (accessToken) {
@@ -277,11 +293,11 @@ export default function DiscordV2EntryPage() {
               }
             }
 
-            await joinTableFlow(effectiveChannelId);
+            const target = await joinTableFlow(effectiveChannelId);
             if (cancelled) return;
             setStage("redirecting");
             await refresh();
-            router.replace(`${TABLE_BASE}/${encodeURIComponent(effectiveChannelId)}`);
+            router.replace(target);
             return;
           } catch (sdkErr: any) {
             const msg = String(sdkErr?.message ?? "");
@@ -311,7 +327,7 @@ export default function DiscordV2EntryPage() {
 
   const oauthAuthorizeUrl = useMemo(() => {
     if (!clientId) return null;
-    const state = channelId ? `${TABLE_BASE}/${encodeURIComponent(channelId)}` : TABLE_BASE;
+    const state = qs?.get("returnTo")?.startsWith("/arcade/blackjack-roguelike") ? "/arcade/blackjack-roguelike?multiplayer=1" : channelId ? `${TABLE_BASE}/${encodeURIComponent(channelId)}` : TABLE_BASE;
     const url = new URL("https://discord.com/oauth2/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("response_type", "code");
