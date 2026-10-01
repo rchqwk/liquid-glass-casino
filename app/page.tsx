@@ -1,11 +1,12 @@
 import { DiscordRootCallback } from "./components/DiscordRootCallback";
 import { redirect } from "next/navigation";
 
-export default function Home({
-  searchParams,
+export default async function Home({
+  searchParams: query,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const searchParams = await query;
   // If Discord OAuth redirected back to the site root (rchqwk.com),
   // complete the login client-side from here.
   const code = typeof searchParams?.code === "string" ? searchParams.code : null;

@@ -23,7 +23,7 @@ export default function DiscordMobileLinkPage() {
   return (
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-xl items-center justify-center px-4 py-10">
       <div className="glass glass-shine w-full rounded-3xl p-6">
-        <div className="text-xl font-semibold text-white">Link mobile Discord Activity</div>
+        <div className="text-xl font-semibold text-white">Link Discord Activity</div>
         <div className="mt-2 text-sm leading-6 text-white/70">
           Enter the code shown inside the Discord blackjack Activity, then continue with Discord in this browser.
         </div>

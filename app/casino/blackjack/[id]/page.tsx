@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { CasinoDialog } from "../../../components/casino/CasinoDialog";
 import { BlackjackResponsiveTable } from "../BlackjackResponsiveTable";
-import { useParams } from "next/navigation";
+import { getDiscordSdk, withDiscordTimeout } from "../../../lib/discordClient";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
 import { useWallet } from "../../../lib/wallet";
@@ -48,6 +49,7 @@ export function BlackjackTablePageClient({
   const { user, discordMode } = useAuth();
   const { layout: uiLayout } = useUiLayout();
   const { uiScale } = useUiScale();
+  const discordRouter = useRouter();
   const params = useParams<{ id?: string | string[] }>();
   const tableId =
     typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params?.id?.[0] : undefined;
@@ -103,7 +105,7 @@ export function BlackjackTablePageClient({
       try {
         const qs = window.location.search || "";
         if (window.location.pathname !== `${routeBase}/${id}`) {
-          window.location.href = `${routeBase}/${id}${qs}`;
+          discordRouter.replace(`${routeBase}/${id}${qs}`);
         }
       } catch {
         // ignore
@@ -129,15 +131,8 @@ export function BlackjackTablePageClient({
           (process as any)?.env?.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ??
           "";
         if (!clientId) return;
-        const { DiscordSDK } = await import("@discord/embedded-app-sdk");
-        // eslint-disable-next-line new-cap
-        sdk = new DiscordSDK(clientId);
-        await Promise.race([
-          sdk.ready(),
-          new Promise((_, reject) =>
-            window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), 9000),
-          ),
-        ]);
+        sdk = await getDiscordSdk(clientId);
+        await withDiscordTimeout(sdk.ready(), "Discord client handshake timed out.", 9000);
         if (cancelled) return;
 
         // Subscribe to join events (Discord will send the join secret).
@@ -331,7 +326,7 @@ export function BlackjackTablePageClient({
     if (!channelId) return;
     if (!safeTableId) return;
     if (safeTableId === channelId) return;
-    window.location.replace(`${routeBase}/${encodeURIComponent(channelId)}`);
+    discordRouter.replace(`${routeBase}/${encodeURIComponent(channelId)}`);
   }, [discordMode, safeTableId, routeBase]);
 
 

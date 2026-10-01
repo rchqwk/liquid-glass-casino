@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:casino-ui": "node tests/casino-ui.test.cjs"
+    "test:casino-ui": "node tests/casino-ui.test.cjs",
+    "test:discord-auth": "node tests/discord-auth.test.cjs"
   },
   "dependencies": {
     "@discord/embedded-app-sdk": "2.5.0",

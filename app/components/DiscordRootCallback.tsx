@@ -1,36 +1,37 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "../lib/authClient";
+import { discordReturnPath, exchangeDiscordCode } from "../lib/discordClient";
 
 export function DiscordRootCallback({ code, state }: { code: string; state?: string | null }) {
   const [err, setErr] = useState<string | null>(null);
-  const [stage, setStage] = useState<"logging_in" | "redirecting" | "error">("logging_in");
+  const router = useRouter();
+  const { refresh } = useAuth();
+  const [stage, setStage] = useState<"logging_in" | "redirecting" | "linked" | "error">("logging_in");
+  const mobileAuthCode = state?.startsWith("mobile:") ? state.slice(7).replace(/[^a-z0-9]/gi, "").toUpperCase() : null;
 
   const returnTo = useMemo(() => {
     const s = String(state ?? "");
-    if (s && s.startsWith("/")) return s;
+    if (s) return discordReturnPath(s);
     try {
       const stored = sessionStorage.getItem("lgc.discord.webReturnTo") ?? "";
-      if (stored.startsWith("/")) return stored;
+      if (stored) return discordReturnPath(stored);
     } catch {
       // ignore
     }
-    return "/casino";
+    return "/casino/blackjack-v2";
   }, [state]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const redirectUri = window.location.origin;
+        const redirectUri = process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI || "https://rchqwk.com";
         setStage("logging_in");
-        const res = await fetch("/api/discord/login", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ code, redirectUri }),
-        });
-        const data = (await res.json().catch(() => ({}))) as any;
-        if (!res.ok) throw new Error(data?.error ?? "Discord login failed");
+        const storedRedirect = sessionStorage.getItem("lgc.discord.redirectUri");
+        const data = await exchangeDiscordCode(code, storedRedirect || redirectUri, mobileAuthCode);
         if (cancelled) return;
         if (data?.session_token) {
           try {
@@ -39,8 +40,10 @@ export function DiscordRootCallback({ code, state }: { code: string; state?: str
             // ignore
           }
         }
+        if (mobileAuthCode) { setStage("linked"); return; }
+        await refresh();
         setStage("redirecting");
-        window.location.href = returnTo;
+        router.replace(returnTo);
       } catch (e: any) {
         if (cancelled) return;
         setStage("error");
@@ -59,9 +62,9 @@ export function DiscordRootCallback({ code, state }: { code: string; state?: str
         <div className="mt-2 text-sm text-white/70">
           Stage: <span className="font-mono text-white/80">{stage}</span>
         </div>
+        {stage === "linked" ? <p className="mt-4 text-emerald-200">Discord sign-in completed. Return to the Activity to continue.</p> : null}
         {err ? <div className="mt-4 text-sm text-rose-200">{err}</div> : null}
       </main>
     </div>
   );
 }
-

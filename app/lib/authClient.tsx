@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 type User = { id: number; username: string };
@@ -76,6 +77,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [user, setUser] = useState<UserWithRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [discordMode, setDiscordMode] = useState(false);
@@ -104,9 +106,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       sessionStorage.removeItem("lgc.discord.disableOauthSession");
       const qs = sessionStorage.getItem("lgc.discord.qs") ?? "";
-      window.location.href = `${DISCORD_ENTRY}${qs || ""}`;
+      router.replace(`${DISCORD_ENTRY}${qs || ""}`);
     } catch {
-      window.location.href = DISCORD_ENTRY;
+      router.replace(DISCORD_ENTRY);
     }
   };
 
@@ -169,107 +171,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(authed);
         setSessionExpired(!authed && !!getSessionTokenClient());
 
-        // If we're inside Discord and not authed yet, automatically sign-in via Embedded App SDK.
+        // The entry page owns authorization. Never start a second SDK/login flow here.
         if (!authed && isDiscord && !discordAttempted) {
           setDiscordAttempted(true);
           setDiscordError(null);
-
-          const sp = new URLSearchParams(search);
-          const hasFrameId = sp.has("frame_id");
-
-          // Mobile Discord Activities are much less reliable with the Embedded App SDK handshake.
-          // Route all mobile users through the dedicated OAuth-first entry flow instead.
-          try {
-            const ua = navigator.userAgent ?? "";
-            const isMobile = /iPhone|iPad|iPod|Android/i.test(ua);
-            if (isMobile) {
-              const path = window.location.pathname || "";
-              if (!path.startsWith("/casino/blackjack-v2/discord")) {
-                window.location.replace(`${DISCORD_ENTRY}${search || ""}`);
-                return;
-              }
-            }
-          } catch {
-            // ignore
-          }
-
-          if (!hasFrameId) {
-            // Some Discord contexts (notably iOS/webview) may omit `frame_id`, which prevents the Embedded App SDK
-            // from initializing. In that case, fall back to the dedicated Discord entry page which provides an
-            // OAuth authorize link and can still complete login with `code` + `channel_id`.
-            try {
-              const path = window.location.pathname || "";
-              if (!path.startsWith("/casino/blackjack-v2/discord")) {
-                window.location.replace(`${DISCORD_ENTRY}${search || ""}`);
-                return;
-              }
-            } catch {
-              // ignore
-            }
-            setDiscordError("Discord embed params are missing (frame_id). Tap Retry to use OAuth sign-in.");
-          } else {
-            const clientId =
-              process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ??
-              process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ??
-              "";
-            const redirectUri =
-              process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI ??
-              "https://rchqwk.com/casino/blackjack-v2/discord";
-            if (!clientId) {
-              setDiscordError("Missing NEXT_PUBLIC_DISCORD_CLIENT_ID.");
-            } else {
-              try {
-                const { DiscordSDK } = await import("@discord/embedded-app-sdk");
-                // eslint-disable-next-line new-cap
-                const sdk = new DiscordSDK(clientId);
-                await Promise.race([
-                  sdk.ready(),
-                  new Promise((_, reject) =>
-                    window.setTimeout(() => reject(new Error("Discord client handshake timed out.")), 20000),
-                  ),
-                ]);
-                const authz = await (sdk as any).commands.authorize({
-                  client_id: clientId,
-                  response_type: "code",
-                  prompt: "none",
-                  scope: ["identify", "rpc.activities.write"],
-                });
-                const code = String(authz?.code ?? "");
-                if (!code) throw new Error("Discord authorize did not return a code.");
-
-                const loginRes = await fetch("/api/discord/login", {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ code, redirectUri }),
-                });
-                const loginJson = (await loginRes.json().catch(() => ({}))) as any;
-                if (!loginRes.ok) throw new Error(loginJson?.error ?? "Discord login failed.");
-                if (loginJson?.session_token) {
-                  try {
-                    localStorage.setItem("lgc.session", String(loginJson.session_token));
-                  } catch {
-                    // ignore
-                  }
-                }
-                if (loginJson?.user) {
-                  setUser(loginJson.user as UserWithRole);
-                  setSessionExpired(false);
-                }
-              } catch (e: any) {
-                const msg = String(e?.message ?? "Discord sign-in failed.");
-                // iOS can get stuck during Activity initialization and never complete the RPC handshake.
-                // If that happens, fall back to the OAuth entry page so the user can still play.
-                if (msg.includes("handshake timed out")) {
-                  try {
-                    window.location.replace(`${DISCORD_ENTRY}${search || ""}`);
-                    return;
-                  } catch {
-                    // ignore
-                  }
-                }
-                setDiscordError(msg);
-              }
-            }
+          const path = window.location.pathname;
+          if (!path.endsWith("/discord") && path !== "/discord/callback" && !new URLSearchParams(search).has("code")) {
+            const context = search || sessionStorage.getItem("lgc.discord.qs") || "";
+            router.replace(DISCORD_ENTRY + context);
           }
         }
       } catch {

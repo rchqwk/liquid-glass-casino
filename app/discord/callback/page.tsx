@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "../../lib/authClient";
+import { exchangeDiscordCode, discordReturnPath } from "../../lib/discordClient";
 
 export default function DiscordCallbackPage() {
+  const router = useRouter();
+  const { refresh } = useAuth();
   const [err, setErr] = useState<string | null>(null);
   const [stage, setStage] = useState<"init" | "logging_in" | "redirecting" | "linked" | "error">("init");
 
@@ -27,13 +32,7 @@ export default function DiscordCallbackPage() {
       try {
         if (!code) throw new Error("Missing code");
         setStage("logging_in");
-        const res = await fetch("/api/discord/login", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ code, redirectUri, mobileAuthCode }),
-        });
-        const data = (await res.json().catch(() => ({}))) as any;
-        if (!res.ok) throw new Error(data?.error ?? "Discord login failed");
+        const data = await exchangeDiscordCode(code, redirectUri, mobileAuthCode);
         if (cancelled) return;
         if (data?.session_token) {
           try {
@@ -47,8 +46,8 @@ export default function DiscordCallbackPage() {
           return;
         }
         setStage("redirecting");
-        const next = String(state || "/");
-        window.location.href = next.startsWith("/") ? next : "/";
+        await refresh();
+        router.replace(discordReturnPath(state));
       } catch (e: any) {
         if (cancelled) return;
         setStage("error");
