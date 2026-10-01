@@ -19,6 +19,7 @@ import { type BJState, type Seat } from "../blackjackTableTypes";
 import { CardView, cardFromIndex, handValue, PowerupStickerIcon } from "../blackjackUiPrimitives";
 import { BlackjackTableSeat, getBlackjackChatNameClass } from "../blackjackSeatViews";
 import { useBlackjackTableContract } from "../useBlackjackTableContract";
+import { useWagerReservationGuard } from "../useWagerReservationGuard";
 
 export function BlackjackTablePageClient({
   routeBase = "/casino/blackjack",
@@ -38,11 +39,12 @@ export function BlackjackTablePageClient({
     quickRefillEventActive,
     deposit,
     reset,
-    reserveServerBet,
+    reserveServerBet: reserveServerBetRaw,
     settleServerBet,
     cancelServerBet,
     adjustServerBalance,
   } = useWallet();
+  const { reserveBet: reserveServerBet, release: releaseWagerReservation, pending: wagerActionPending } = useWagerReservationGuard(reserveServerBetRaw);
   const { user, discordMode } = useAuth();
   const { layout: uiLayout } = useUiLayout();
   const { uiScale } = useUiScale();
@@ -931,7 +933,8 @@ export function BlackjackTablePageClient({
   };
 
   const post = async (path: string, body?: any) => {
-    return requestTableRoute(path, body, "Action failed");
+    try { return await requestTableRoute(path, body, "Action failed"); }
+    finally { if (body?.betNonce != null) releaseWagerReservation(); }
   };
 
   const postBond = async (body?: any) => {
@@ -1083,8 +1086,8 @@ export function BlackjackTablePageClient({
   };
 
   return (
-    <div className="casino-table-page flex flex-col gap-4">
-      <div className="casino-table-session"><span role="status">{pendingCount > 0 ? "Submitting action…" : connected ? "Connected · Table synced" : "Reconnecting · Actions paused"}</span>{!connected ? <button className="casino-button casino-secondary" type="button" onClick={() => void fetchTable()}>Reconnect</button> : null}<Link href="/casino/blackjack/rules">Rules & payouts</Link></div>
+    <div className="casino-table-page flex flex-col gap-4" inert={wagerActionPending}>
+      <div className="casino-table-session"><span role="status">{wagerActionPending ? "Reserving stake and confirming action…" : pendingCount > 0 ? "Submitting action…" : connected ? "Connected · Table synced" : "Reconnecting · Actions paused"}</span>{!connected ? <button className="casino-button casino-secondary" type="button" onClick={() => void fetchTable()}>Reconnect</button> : null}<Link href="/casino/blackjack/rules">Rules & payouts</Link></div>
       {err ? <div className="casino-error" role="alert">{err}</div> : null}
       {actionError ? <div className="casino-error" role="alert">{actionError}</div> : null}
       <CasinoDialog open={leaveOpen} onClose={() => setLeaveOpen(false)} title="Leave this table?">
