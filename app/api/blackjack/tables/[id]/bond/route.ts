@@ -1,3 +1,5 @@
+import { blackjackRequest } from "../../../../../lib/blackjackOperation";
+import { retryBlackjack } from "../../../../../lib/blackjackStatePersistence";
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackInventory, getBlackjackTable, upsertBlackjackInventory } from "../../../../../lib/db";
@@ -9,7 +11,7 @@ import { blackjackTableJsonResponse } from "../../../../../lib/blackjackTableCon
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function POSTImpl(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
@@ -72,9 +74,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   // Re-broadcast the updated inventory into active live table copies for this user.
   // Without this, another stale table state can later overwrite the DB copy.
-  const latestInventory = ensureInventory(seat.inventory);
-  await upsertBlackjackInventory(user.id, latestInventory);
-  await syncUserBlackjackInventoryIntoTables(user.id, latestInventory);
+  // The request wrapper commits this table, inventory and replay receipt together.
 
   return blackjackTableJsonResponse(state, user.id, { extra: { ok: true, redeemedAmount } });
 }
+
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) { return blackjackRequest(req,(await ctx.params).id,() => POSTImpl(req.clone(), ctx)); }

@@ -1,3 +1,5 @@
+import { blackjackRequest } from "../../../../../lib/blackjackOperation";
+import { retryBlackjack } from "../../../../../lib/blackjackStatePersistence";
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackInventory, getBlackjackTable, upsertBlackjackInventory } from "../../../../../lib/db";
@@ -10,7 +12,7 @@ import { blackjackTableJsonResponse } from "../../../../../lib/blackjackTableCon
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function POSTImpl(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
@@ -52,7 +54,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // spectate
     if (!state.spectators.includes(user.id)) state.spectators.push(user.id);
   } else {
-    const inv = ensureInventory((await getBlackjackInventory(user.id)) ?? defaultInventory());
+    const originalInventory = (await getBlackjackInventory(user.id)) ?? defaultInventory();
+    t.sourceInventories ??= {};
+    t.sourceInventories[user.id] = JSON.stringify(originalInventory);
+    const inv = ensureInventory(structuredClone(originalInventory));
     state.seats[seatOpen] = {
       userId: user.id,
       username: user.username,
@@ -95,7 +100,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       bjProtected: false,
       extendUsedThisTurn: false,
     };
-    await upsertBlackjackInventory(user.id, inv);
+    // Inventory is persisted atomically with the table state.
 
     const placed = (inv as any)?.collectibles?.placed ?? [];
     syncPlacedCollectiblesToBlackjackDecorations(state, user.id, placed, now);
@@ -104,3 +109,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   await saveBlackjackTableState(t, state);
   return blackjackTableJsonResponse(state, user.id);
 }
+
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) { return blackjackRequest(req,(await ctx.params).id,() => POSTImpl(req.clone(), ctx)); }

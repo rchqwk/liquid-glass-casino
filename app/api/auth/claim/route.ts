@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
-import { setSessionToken } from "../../../lib/authServer";
-import { activatePasswordSession, getUserAuthRow, hasUserProgress, setUserCredential } from "../../../lib/db";
+import { getAuthedUserAsync, setSessionToken } from "../../../lib/authServer";
+import { activatePasswordSession, getUserAuthRow, hasUserProgress, claimUserCredential } from "../../../lib/db";
 import { generateSessionToken, hashPasscode, hashPassword, isValidEmail, isValidPasscode, normalizeEmail } from "../../../lib/passwordAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Lets an existing, progressed, unprotected account set a password or passcode and sign in.
+// Only the existing authenticated owner may migrate an unprotected account.
 export async function POST(req: Request) {
+  const owner = await getAuthedUserAsync();
+  if (!owner) return NextResponse.json({ error: "Sign in to the existing account before setting its credential." }, { status: 401 });
   const body = (await req.json().catch(() => null)) as { username?: string; password?: string; passcode?: string; email?: string } | null;
   const username = String(body?.username ?? "").trim();
   const password = String(body?.password ?? "");
@@ -17,7 +19,7 @@ export async function POST(req: Request) {
   if (!username) return NextResponse.json({ error: "Username required." }, { status: 400 });
 
   const row = await getUserAuthRow(username);
-  if (!row) return NextResponse.json({ error: "Account not found." }, { status: 404 });
+  if (!row || row.id !== owner.id) return NextResponse.json({ error: "Account ownership required." }, { status: 403 });
 
   const progress = await hasUserProgress(row.id);
   if (!progress) return NextResponse.json({ error: "This account has no progress; sign in normally." }, { status: 400 });
@@ -51,7 +53,7 @@ export async function POST(req: Request) {
     fields.password_hash = h.hash;
     fields.password_salt = h.salt;
   }
-  await setUserCredential(row.id, fields);
+  if (!await claimUserCredential(row.id, fields)) return NextResponse.json({ error: "This account already has a credential." }, { status: 409 });
 
   const token = generateSessionToken();
   await activatePasswordSession(row.id, token);

@@ -1,3 +1,5 @@
+import { blackjackRequest } from "../../../../../lib/blackjackOperation";
+import { retryBlackjack } from "../../../../../lib/blackjackStatePersistence";
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../../lib/authServer";
 import { getBlackjackTable } from "../../../../../lib/db";
@@ -8,7 +10,7 @@ import { blackjackTableJsonResponse } from "../../../../../lib/blackjackTableCon
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function POSTImpl(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
@@ -38,3 +40,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
   return blackjackTableJsonResponse(res.state, user.id);
 }
+
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) { return blackjackRequest(req,(await ctx.params).id,() => POSTImpl(req.clone(), ctx)); }

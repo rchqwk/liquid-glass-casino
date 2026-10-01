@@ -1,8 +1,9 @@
+import { BlackjackConflict, retryBlackjack } from "../../../../lib/blackjackStatePersistence";
 import { NextResponse } from "next/server";
 import { getAuthedUserAsync } from "../../../../lib/authServer";
 import {
   getBlackjackInventory,
-  upsertBlackjackInventory,
+  compareAndSetBlackjackInventory,
 } from "../../../../lib/db";
 import { SPECIALS } from "../../../../lib/blackjackMultiplayer";
 import { ensureInventory } from "../../../../lib/blackjackInventory";
@@ -45,7 +46,7 @@ function rollBox(tier: "rare" | "legendary" | "mythic", seed: number) {
   return [a, b];
 }
 
-export async function POST(req: Request) {
+async function POSTImpl(req: Request) {
   const user = await getAuthedUserAsync();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = (await req.json().catch(() => null)) as { toTier?: "rare" | "legendary" | "mythic"; tableId?: string } | null;
@@ -53,7 +54,8 @@ export async function POST(req: Request) {
   const fromTier = toTier === "rare" ? "normal" : toTier === "legendary" ? "rare" : "legendary";
   const tableId = body?.tableId ? String(body.tableId) : null;
 
-  const inv = ensureInventory((await getBlackjackInventory(user.id)) ?? null);
+  const original = await getBlackjackInventory(user.id);
+  const inv = ensureInventory(structuredClone(original));
   inv.boxes = inv.boxes ?? [];
 
   const candidates = inv.boxes.filter((b) => !b.opened && (b.tier ?? "normal") === fromTier);
@@ -76,9 +78,11 @@ export async function POST(req: Request) {
     contents: contents as any,
   });
 
-  await upsertBlackjackInventory(user.id, inv);
+  if(!await compareAndSetBlackjackInventory(user.id, original, inv))throw new BlackjackConflict();
 
-  await syncUserBlackjackInventoryIntoTables(user.id, inv, tableId);
+  // Active tables load the canonical inventory and compare it atomically before saving.
 
   return NextResponse.json({ ok: true });
 }
+
+export async function POST(req:Request){return retryBlackjack(()=>POSTImpl(req.clone()));}

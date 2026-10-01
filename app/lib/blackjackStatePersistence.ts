@@ -1,26 +1,23 @@
 "server-only";
 
+import { operationContext } from "./blackjackOperation";
 import type { TableState } from "./blackjackMultiplayer";
 import type { Inventory } from "./blackjackInventory";
-import { getBlackjackTable, listBlackjackTables, upsertBlackjackInventory, upsertBlackjackTable } from "./db";
+import { getBlackjackTable, listBlackjackTables, upsertBlackjackInventory, upsertBlackjackTable, commitBlackjackState } from "./db";
 
 export type BlackjackTableRecordMeta = {
   id: string;
   public: boolean;
   name: string;
   created_at: number;
+  sourceStateJson?: string;
+  sourceInventories?: Record<string,string>;
 };
 
 export async function saveBlackjackTableState(meta: BlackjackTableRecordMeta, state: TableState) {
-  await upsertBlackjackTable({
-    id: meta.id,
-    public: meta.public,
-    name: meta.name,
-    state,
-    created_at: meta.created_at,
-    updated_at: state.updatedAt,
-  });
-  await persistBlackjackStateInventories(state);
+  const context=operationContext.getStore();
+  if(context){if(context.pending)throw new Error("Multiple table commits in one request are unsupported");context.pending={meta,state};return;}
+  if (!await commitBlackjackState(meta, state)) throw new BlackjackConflict();
 }
 
 export async function persistBlackjackStateInventories(state: TableState) {
@@ -55,4 +52,10 @@ export async function syncUserBlackjackInventoryIntoTables(userId: number, inven
       await saveBlackjackTableState(t, st as TableState);
     }
   }
+}
+
+export class BlackjackConflict extends Error {}
+export async function retryBlackjack(operation: () => Promise<Response>): Promise<Response> {
+  for(let attempt=0;attempt<5;attempt++){try{return await operation();}catch(error){if(!(error instanceof BlackjackConflict))throw error;}}
+  return new Response(JSON.stringify({error:"Table changed; please retry your action."}),{status:409,headers:{"Content-Type":"application/json"}});
 }
