@@ -9,7 +9,7 @@ const docs = new Set(["rules", "special-rules", "strategy", "discord", "games"])
 export function CasinoShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const parts = pathname.split("/").filter(Boolean);
-  const table = parts.length === 3 && ["blackjack", "blackjack-v2"].includes(parts[1]) && !docs.has(parts[2]);
+  const table = pathname === "/casino/ui-preview" || (parts.length === 3 && ["blackjack", "blackjack-v2"].includes(parts[1]) && !docs.has(parts[2]));
   return (
     <div className={`casino-shell ${table ? "casino-shell--table" : "casino-shell--browse"}`}>
       <a className="casino-skip" href="#casino-content">Skip to content</a>
