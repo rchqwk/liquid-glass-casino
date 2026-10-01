@@ -6,6 +6,8 @@ The Blackjack lobby is shared by classic/V2 entry points. Guests can browse publ
 
 `BlackjackResponsiveTable` renders the player's seat first and displays split hands independently. It consumes the existing authoritative state, without changing game rules. Decorations retain the existing drag/pickup actions. `CasinoDialog` uses native dialog focus trapping, Escape handling, and focus restoration for inventory, sign-in, table chat, host options, collectibles, and mystery boxes. Leaving requires confirmation.
 
+On desktop (above 900px), your hand and the dealer share the front row, with a bounded, keyboard-focusable player region beneath. Standard round controls occupy a sticky 320px sidebar, including on 1024px laptops. Mobile keeps the player's hand first and the full player list in normal page flow. The main Double/Split controls use the guarded server wallet reservation, await its nonce, and cancel rejected table actions through the existing wallet flow.
+
 The transport hook shares identical in-flight requests, preserves uncertain request IDs in session storage across refreshes, scopes them to the actor/table/payload digest, and treats incomplete acknowledgements as unconfirmed. Only request IDs are persisted; credentials and action payloads are not stored. Keep the server ownership, receipts, and table/inventory compare-and-set protections intact.
 
 ## Verification

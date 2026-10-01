@@ -21,17 +21,9 @@ type Props = {
 export function BlackjackResponsiveTable({ state, currentUserId, nameColor, prestige, turnSeat, feltRef, editMode, onDrag, onPickup }: Props) {
   const seats = state.seats.map((seat, index) => ({ seat, index })).filter(entry => entry.seat !== null);
   seats.sort((a, b) => Number(b.seat?.userId === currentUserId) - Number(a.seat?.userId === currentUserId) || a.index - b.index);
-  return (
-    <div className="casino-responsive-felt" ref={feltRef}>
-      <section className="casino-dealer" aria-label="Dealer hand">
-        <div className="casino-eyebrow">Dealer</div>
-        <p className="mt-2 text-sm">Visible total <strong className="font-mono">{handValue(state.dealer.cards.filter(card => card >= 0), state.dealer.bonusPoints).total}</strong></p>
-        <div className="casino-dealer__cards">{state.dealer.cards.map((card, index) => <CardView key={index} idx={card} hidden={card < 0} />)}</div>
-        {state.dealer.cards.length === 0 ? <p className="mt-3 text-xs text-white/70">Waiting for the next deal</p> : null}
-        {state.dealer.effects?.length ? <p className="mt-3 text-xs">{state.dealer.effects.slice(-4).map(effect => effect.powerupName).join(" · ")}</p> : null}
-      </section>
-      <div className="casino-seat-grid">
-        {seats.map(({ seat, index }) => {
+  const ownSeat = seats.find(({ seat }) => seat?.userId === currentUserId);
+  const otherSeats = seats.filter(({ seat }) => seat?.userId !== currentUserId);
+  const renderSeat = ({ seat, index }: (typeof seats)[number]) => {
           if (!seat) return null;
           const self = seat.userId === currentUserId;
           const turn = state.phase === "player_turns" && turnSeat === index;
@@ -54,8 +46,23 @@ export function BlackjackResponsiveTable({ state, currentUserId, nameColor, pres
               {seat.cards.length === 0 ? <p className="mt-2 text-xs text-white/70">Waiting for cards</p> : null}
             </section>
           );
-        })}
+  };
+  return (
+    <div className="casino-responsive-felt" ref={feltRef}>
+      <div className={`casino-table-focus ${ownSeat ? "casino-table-focus--seated" : ""}`}>
+        {ownSeat ? renderSeat(ownSeat) : null}
+        <section className="casino-dealer" aria-label="Dealer hand">
+          <div className="casino-eyebrow">Dealer</div>
+          <p className="mt-2 text-sm">Visible total <strong className="font-mono">{handValue(state.dealer.cards.filter(card => card >= 0), state.dealer.bonusPoints).total}</strong></p>
+          <div className="casino-dealer__cards">{state.dealer.cards.map((card, index) => <CardView key={index} idx={card} hidden={card < 0} />)}</div>
+          {state.dealer.cards.length === 0 ? <p className="mt-3 text-xs text-white/70">Waiting for the next deal</p> : null}
+          {state.dealer.effects?.length ? <p className="mt-3 text-xs">{state.dealer.effects.slice(-4).map(effect => effect.powerupName).join(" · ")}</p> : null}
+        </section>
       </div>
+      {otherSeats.length ? <div className="casino-opponents">
+        <h3 className="casino-eyebrow">{ownSeat ? "Other players" : "Players"} · {otherSeats.length}</h3>
+        <div className="casino-seat-grid" role="region" aria-label="Player hands" tabIndex={0}>{otherSeats.map(renderSeat)}</div>
+      </div> : null}
       <p className="casino-open-seats">{10 - seats.length} open seats · {state.spectators.length} watching{editMode ? " · Drag your decorations to move them" : ""}</p>
       <div className="casino-decoration-layer">
         {(state.decorations ?? []).map(decoration => {

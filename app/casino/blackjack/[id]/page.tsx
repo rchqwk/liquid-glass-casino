@@ -1886,7 +1886,7 @@ export function BlackjackTablePageClient({
 
       <BlackjackTurnActionBar
         visible={!!(state && mySeat && isMyTurn && !horizontalMode)}
-        busy={pendingCount > 0 || !connected}
+        busy={pendingCount > 0 || wagerActionPending || !connected}
         myHandIndex={myHandIndex}
         myHandCount={myHandCount}
         turnLeft={turnLeft}
@@ -1900,23 +1900,25 @@ export function BlackjackTablePageClient({
         onStand={() => {
           void post("action", { type: "stand" });
         }}
-        onDoubleDown={() => {
+        onDoubleDown={async () => {
           const wager = Number(mySeat?.bet ?? 0);
-          const started = beginBet({ game: "Arcade Blackjack", wager });
+          const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
           if ("error" in started) {
             setErr(started.error);
             return;
           }
-          void post("action", { type: "double_down", betNonce: started.nonce });
+          const res = await post("action", { type: "double_down", betNonce: started.nonce });
+          if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
         }}
-        onSplit={() => {
+        onSplit={async () => {
           const wager = Number(mySeat?.bet ?? 0);
-          const started = beginBet({ game: "Arcade Blackjack", wager });
+          const started = await reserveServerBet({ game: "Blackjack (MP)", wager });
           if ("error" in started) {
             setErr(started.error);
             return;
           }
-          void post("action", { type: "split", betNonce: started.nonce });
+          const res = await post("action", { type: "split", betNonce: started.nonce });
+          if (!res?.ok) await cancelServerBet({ nonce: started.nonce, outcome: "Bet canceled" });
         }}
         onVoteSkip={() => {
           void post("action", { type: "vote_skip" });
@@ -1946,7 +1948,7 @@ export function BlackjackTablePageClient({
           )}
         </div>
       ) : (
-        <div className={`casino-table-grid grid grid-cols-1 gap-4 ${!horizontalMode ? (showV2Shell ? "xl:grid-cols-[minmax(0,1.15fr)_360px]" : "lg:grid-cols-[360px_1fr]") : ""}`}>
+        <div className={`casino-table-grid ${showV2Shell && !horizontalMode ? "casino-table-grid--desktop" : ""} grid grid-cols-1 gap-4 ${!horizontalMode && !showV2Shell ? "lg:grid-cols-[360px_1fr]" : ""}`}>
           {horizontalMode && hControlsOpen ? (
             <button
               type="button"
@@ -2867,14 +2869,14 @@ export function BlackjackTablePageClient({
 
           <div
             ref={tableViewRef}
-            className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "order-1 xl:order-1" : ""}`}
+            className={`glass-soft glass-shine rounded-3xl p-5 ${showV2Shell ? "casino-table-surface order-1" : ""}`}
             style={fullHeightFeltMode ? { minHeight: "calc(100dvh - 1rem)" } : undefined}
           >
             {showV2Shell ? (
               <BlackjackV2SectionHeader
-                eyebrow="Surface"
-                title="Live felt, dealer lane, and player seats"
-                subtitle="Stay on the live surface first, then jump back to controls only when you need to place stakes or use tools."
+                eyebrow="Live table"
+                title={mySeat ? "Your hand & the dealer" : "Watch the table"}
+                subtitle={mySeat ? "Your cards stay at the front. Follow the other players below." : "Take a seat from the round controls to join the next hand."}
               />
             ) : null}
             {!showV2Shell ? <p className="text-sm font-medium text-white">Table</p> : null}

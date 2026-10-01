@@ -21,6 +21,20 @@ const tick=()=>new Promise(r=>setTimeout(r,20));
  guard.release();const retryReservation=guard.reserveBet({game:'fixture',wager:10});finishReservation({error:'rejected'});await retryReservation;
  const afterFailure=guard.reserveBet({game:'fixture',wager:10});finishReservation({nonce:2});await afterFailure;assert.equal(reservationCalls,3);guard.release();
  console.log('PASS stake reservations reject repeat clicks until acknowledgement and recover after rejection');
+ // Exercise the actual rendered action callbacks, with wallet/transport boundaries stubbed.
+ const pageSource=ts.createSourceFile('page.tsx',fs.readFileSync(root+'/app/casino/blackjack/[id]/page.tsx','utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+ let turnAttributes;
+ function findTurnBar(node){if(ts.isJsxSelfClosingElement(node)&&node.tagName.getText(pageSource)==='BlackjackTurnActionBar')turnAttributes=node.attributes;ts.forEachChild(node,findTurnBar)}findTurnBar(pageSource);assert(turnAttributes);
+ for(const [attribute,type] of [['onDoubleDown','double_down'],['onSplit','split']]){
+   const handler=turnAttributes.properties.find(p=>p.name?.getText(pageSource)===attribute).initializer.expression.getText(pageSource);
+   let finishStake,posted=[],canceled=[],errors=[];
+   const context={mySeat:{bet:25},reserveServerBet:()=>new Promise(r=>finishStake=r),post:async(path,body)=>{posted.push({path,body});return{ok:false}},cancelServerBet:async input=>canceled.push(input),setErr:error=>errors.push(error)};
+   const callback=vm.runInNewContext(ts.transpileModule('('+handler+')',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
+   const pending=callback();assert.equal(posted.length,0);finishStake({nonce:91});await pending;
+   assert.equal(posted[0].body.type,type);assert.equal(posted[0].body.betNonce,91);assert.equal(canceled[0].nonce,91);
+   posted=[];const rejected=callback();finishStake({error:'insufficient balance'});await rejected;assert.equal(posted.length,0);assert.equal(errors[0],'insufficient balance');
+ }
+ console.log('PASS main Double and Split await server reservation, use its nonce, and recover on rejection');
  let hook=moduleFixture.exports.useBlackjackTableContract('fixture',undefined,7);
  const first=hook.requestTableRoute('action',{type:'hit'});const second=hook.requestTableRoute('action',{type:'hit'});await tick();assert.equal(requests.length,1);resolve({ok:true,status:200,json:async()=>({state:{phase:'player_turns'},meta:{tableId:'fixture'}})});assert((await first).ok);assert((await second).ok);assert.equal(storage.size,0);console.log('PASS simultaneous identical actions share one HTTP request');
  responseMode='lost';assert.equal((await hook.requestTableRoute('action',{type:'stand'})).ok,false);const lostKey=requests.at(-1).key;assert.equal(storage.size,1);assert(updates.some(x=>typeof x==='string'&&x.includes('not confirmed')));
@@ -35,5 +49,5 @@ const tick=()=>new Promise(r=>setTimeout(r,20));
  const joined=await request('/api/blackjack/tables/'+id+'/join',{spectate:false},beta.data.session_token);assert.equal(joined.status,200);assert.equal(joined.data.meta.seatCount,2);
  const lobby=await request('/api/blackjack/tables');assert.equal(lobby.status,200);assert(lobby.data.tables.some(t=>t.id===id&&t.seatsFilled===2));assert(!lobby.data.tables.some(t=>t.id===privateRoom.data.meta.tableId));assert(lobby.data.tables.every(t=>!('state'in t)&&!('meInventory'in t)));console.log('PASS two isolated clients join; public discovery excludes private rooms and inventories');
  const inventory=await request('/api/blackjack/inventory',undefined,alpha.data.session_token);assert.equal(inventory.status,200);assert(Array.isArray(inventory.data.cards));assert(!('userId'in inventory.data));console.log('PASS inventory summary returns only the authenticated player inventory');
- if(process.env.CASINO_TEST_RESULTS) fs.writeFileSync(process.env.CASINO_TEST_RESULTS,JSON.stringify({passed:8,fixtureTable:id,privateRoomNotListed:true,liveDataTouched:false},null,2));
+ if(process.env.CASINO_TEST_RESULTS) fs.writeFileSync(process.env.CASINO_TEST_RESULTS,JSON.stringify({passed:9,fixtureTable:id,privateRoomNotListed:true,liveDataTouched:false},null,2));
 })().catch(error=>{console.error(error);process.exitCode=1});
