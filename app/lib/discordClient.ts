@@ -48,18 +48,18 @@ export async function getDiscordCall() {
   return { sdk, channelId, instanceId: sdk.instanceId };
 }
 
-export function exchangeDiscordCode(code: string, redirectUri: string, mobileAuthCode?: string | null): Promise<Login> {
+export function exchangeDiscordCode(code: string, redirectUri: string | null, mobileAuthCode?: string | null, sdk = false): Promise<Login> {
   const state = runtime();
-  const key = JSON.stringify([code, redirectUri, mobileAuthCode]);
+  const key = JSON.stringify([code, redirectUri, mobileAuthCode, sdk]);
   const existing = state.exchanges.get(key);
   if (existing) return existing;
   const request = (async () => {
     const response = await fetch("/api/discord/login", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code, redirectUri, mobileAuthCode }), signal: AbortSignal.timeout(20000),
+      body: JSON.stringify({ code, redirectUri, mobileAuthCode, sdk }), signal: AbortSignal.timeout(20000),
     });
     const data = await response.json();
-    if (!response.ok || !data.session_token) throw new Error(data.error ?? "Discord login did not return a session.");
+    if (!response.ok || !data.session_token) throw new Error(data.detail ? `${data.error}: ${data.detail}` : (data.error ?? "Discord login did not return a session."));
     return data as Login;
   })();
   state.exchanges.set(key, request);
