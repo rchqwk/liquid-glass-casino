@@ -43,7 +43,7 @@ function randomToken() {
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json().catch(() => null)) as { code?: string; redirectUri?: string; mobileAuthCode?: string } | null;
+    const body = (await req.json().catch(() => null)) as { code?: string; redirectUri?: string; mobileAuthCode?: string; sdk?: boolean } | null;
     const code = String(body?.code ?? "");
     if (!code) return NextResponse.json({ error: "Missing code" }, { status: 400 });
 
@@ -59,7 +59,8 @@ export async function POST(req: Request) {
     form.set("client_secret", clientSecret);
     form.set("grant_type", "authorization_code");
     form.set("code", code);
-    form.set("redirect_uri", redirectUri);
+    // Embedded App SDK codes come from authorize() with no redirect, so the exchange must not send one.
+    if (!body?.sdk) form.set("redirect_uri", redirectUri);
 
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",

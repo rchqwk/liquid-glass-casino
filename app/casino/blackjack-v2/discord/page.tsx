@@ -278,7 +278,7 @@ export default function DiscordV2EntryPage() {
             addLog("Got SDK auth code");
 
             setStage("logging_in");
-            const loginJson = await exchangeDiscordCode(sdkCode, redirectUri);
+            const loginJson = await exchangeDiscordCode(sdkCode, null, null, true);
             persistSession(loginJson?.session_token);
             addLog("Login OK (SDK)");
             try { sessionStorage.removeItem("lgc.discord.paired"); } catch { /* SDK context remains available. */ }
