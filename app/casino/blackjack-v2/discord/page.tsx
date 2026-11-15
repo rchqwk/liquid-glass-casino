@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../../lib/authClient";
-import { getDiscordSdk, withDiscordTimeout, exchangeDiscordCode, discordReturnPath } from "../../../lib/discordClient";
+import { signInWithDiscordActivity, exchangeDiscordCode, discordReturnPath } from "../../../lib/discordClient";
 import { useEffect, useMemo, useState } from "react";
 
 type Stage =
@@ -223,7 +223,7 @@ export default function DiscordV2EntryPage() {
     (async () => {
       try {
         setErr(null);
-        if (!clientId) throw new Error("Missing NEXT_PUBLIC_DISCORD_CLIENT_ID");
+        // The SDK path resolves the application id at runtime when the build did not bake it in.
         addLog(`hasFrameId=${hasFrameId} hasCode=${!!oauthCodeFromQuery} channelId=${channelId} isMobile=${isMobile}`);
 
         // ── PATH 1: OAuth callback (code in URL) ─────────────────
@@ -252,45 +252,20 @@ export default function DiscordV2EntryPage() {
         if (hasFrameId) {
           addLog("PATH 2: Embedded App SDK");
           try {
-            const discordSdk = await getDiscordSdk(clientId);
-            addLog("Shared SDK loaded");
-            addLog("Waiting for SDK ready…");
-            await withDiscordTimeout(discordSdk.ready(), "Discord client handshake timed out. Use browser pairing below.", isMobile ? 10000 : 12000);
+            // Same Embedded App SDK sign-in as the other Activities (dirt-duel, tarot-table, cratered).
+            const signIn = await signInWithDiscordActivity((text) => {
+              addLog(text);
+              if (text.startsWith("Approve")) setStage("authorizing");
+              else if (text.startsWith("Signing")) setStage("logging_in");
+            });
             if (cancelled) return;
-            addLog("SDK ready");
+            persistSession(signIn.login.session_token);
+            addLog(`Login OK (SDK)${signIn.user ? ` as ${signIn.user.name}` : ""}`);
 
-            const sdkChannelId = (discordSdk as any).channelId as string | undefined;
-            const effectiveChannelId = sdkChannelId ?? channelId;
+            const effectiveChannelId = signIn.channelId ?? channelId;
             if (!effectiveChannelId) {
               addLog("Missing channel id");
               throw new Error("Missing channel id (must be launched from a voice call Activity).");
-            }
-
-            setStage("authorizing");
-            const authz = await withDiscordTimeout(discordSdk.commands.authorize({
-              client_id: clientId,
-              response_type: "code",
-              prompt: "none",
-              scope: ["identify", "rpc.activities.write"],
-            }), "Discord authorization timed out. Use browser pairing below.");
-            const sdkCode = String(authz?.code ?? "");
-            if (!sdkCode) throw new Error("Discord authorize did not return a code.");
-            addLog("Got SDK auth code");
-
-            setStage("logging_in");
-            const loginJson = await exchangeDiscordCode(sdkCode, redirectUri);
-            persistSession(loginJson?.session_token);
-            addLog("Login OK (SDK)");
-            try { sessionStorage.removeItem("lgc.discord.paired"); } catch { /* SDK context remains available. */ }
-
-            const accessToken = String(loginJson?.access_token ?? "");
-            if (accessToken) {
-              try {
-                await withDiscordTimeout(discordSdk.commands.authenticate({ access_token: accessToken }), "Discord authentication timed out.");
-                addLog("authenticate() OK");
-              } catch (authErr: any) {
-                addLog(`authenticate() failed: ${authErr?.message ?? "unknown"}`);
-              }
             }
 
             const target = await joinTableFlow(effectiveChannelId);

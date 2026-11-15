@@ -43,7 +43,7 @@ function randomToken() {
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json().catch(() => null)) as { code?: string; redirectUri?: string; mobileAuthCode?: string } | null;
+    const body = (await req.json().catch(() => null)) as { code?: string; redirectUri?: string; mobileAuthCode?: string; sdk?: boolean } | null;
     const code = String(body?.code ?? "");
     if (!code) return NextResponse.json({ error: "Missing code" }, { status: 400 });
 
@@ -59,19 +59,25 @@ export async function POST(req: Request) {
     form.set("client_secret", clientSecret);
     form.set("grant_type", "authorization_code");
     form.set("code", code);
-    form.set("redirect_uri", redirectUri);
+    // Embedded App SDK codes come from authorize() with no redirect, so the exchange must not send one.
+    if (!body?.sdk) form.set("redirect_uri", redirectUri);
 
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: form.toString(),
     });
-    const tokenJson = (await tokenRes.json().catch(() => null)) as DiscordTokenResp | null;
+    const tokenText = await tokenRes.text().catch(() => "");
+    let tokenJson: DiscordTokenResp | null = null;
+    try { tokenJson = JSON.parse(tokenText) as DiscordTokenResp; } catch { /* Non-JSON reply (rate limit page). */ }
     if (!tokenRes.ok || !tokenJson || "error" in tokenJson || !(tokenJson as any).access_token) {
-      return NextResponse.json(
-        { error: "Discord token exchange failed", detail: tokenJson && "error" in tokenJson ? tokenJson.error : undefined },
-        { status: 400 },
-      );
+      // Surface Discord's reason (invalid_grant, invalid_client, 429...) in the entry page log.
+      const reason = tokenJson && "error" in tokenJson
+        ? [tokenJson.error, tokenJson.error_description].filter(Boolean).join(" - ")
+        : (tokenJson as any)?.message ?? tokenText.slice(0, 120);
+      const detail = `HTTP ${tokenRes.status}${reason ? ` ${reason}` : ""}${body?.sdk ? " (sdk)" : ` (redirect_uri=${redirectUri})`}`;
+      console.error("[Discord Login] Token exchange failed:", detail);
+      return NextResponse.json({ error: "Discord token exchange failed", detail }, { status: 400 });
     }
     const accessToken = (tokenJson as any).access_token as string;
 

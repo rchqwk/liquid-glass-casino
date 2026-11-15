@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CasinoDialog } from "../../../components/casino/CasinoDialog";
 import { BlackjackResponsiveTable } from "../BlackjackResponsiveTable";
-import { getDiscordSdk, withDiscordTimeout } from "../../../lib/discordClient";
+import { getDiscordSdk, resolveDiscordClientId, withDiscordTimeout } from "../../../lib/discordClient";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TurnQuickPanel } from "../../../components/TurnQuickPanel";
@@ -127,11 +127,8 @@ export function BlackjackTablePageClient({
 
     (async () => {
       try {
-        const clientId =
-          (process as any)?.env?.NEXT_PUBLIC_DISCORD_CLIENT_ID ??
-          (process as any)?.env?.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK ??
-          "";
-        if (!clientId) return;
+        const clientId = await resolveDiscordClientId();
+        if (!clientId || cancelled) return;
         sdk = await getDiscordSdk(clientId);
         await withDiscordTimeout(sdk.ready(), "Discord client handshake timed out.", 9000);
         if (cancelled) return;
