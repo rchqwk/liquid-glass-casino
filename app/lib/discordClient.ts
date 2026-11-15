@@ -16,6 +16,78 @@ export function withDiscordTimeout<T>(promise: Promise<T>, message: string, mill
   });
 }
 
+/** '/.proxy' inside Discord (its tunnel to this site), '' in a plain browser. Same rule as the other Activities. */
+export function discordApiBase(): string {
+  try { return /\.discordsays\.com$/i.test(window.location.hostname ?? "") ? "/.proxy" : ""; }
+  catch { return ""; }
+}
+
+/** The build's application id, else the server's copy (for builds that did not bake NEXT_PUBLIC_* in). */
+export async function resolveDiscordClientId(): Promise<string> {
+  const baked = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK;
+  if (baked) return baked;
+  try {
+    const res = await fetch(`${discordApiBase()}/api/discord/config`, { cache: "no-store" });
+    if (!res.ok) return "";
+    const cfg = (await res.json()) as { clientId?: string };
+    return cfg.clientId ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export type DiscordActivitySignIn = {
+  sdk: DiscordSDK;
+  channelId: string | null;
+  instanceId: string;
+  login: Login;
+  user: { id: string; name: string } | null;
+};
+
+/**
+ * Embedded App SDK sign-in, the same sequence dirt-duel / tarot-table / cratered use:
+ * ready() -> authorize(identify, prompt none) -> server token exchange -> authenticate().
+ * The server exchange here also returns the casino session token.
+ */
+export async function signInWithDiscordActivity(onStage: (text: string) => void = () => {}): Promise<DiscordActivitySignIn> {
+  onStage("Waiting for Discord…");
+  const clientId = await resolveDiscordClientId();
+  if (!clientId) throw new Error("No Discord application id: set NEXT_PUBLIC_DISCORD_CLIENT_ID (or DISCORD_CLIENT_ID on the server).");
+  const sdk = await getDiscordSdk(clientId);
+  await withDiscordTimeout(
+    sdk.ready(),
+    "Discord did not answer. Open the table from the Activity inside Discord, and check that the Activities URL mapping points at this site.",
+    15000,
+  );
+
+  onStage("Approve the sign-in in Discord if it asks…");
+  const { code } = await sdk.commands.authorize({
+    client_id: clientId,
+    response_type: "code",
+    state: "",
+    prompt: "none",
+    scope: ["identify"],
+  });
+  if (!code) throw new Error("Discord authorize did not return a code.");
+
+  onStage("Signing you in…");
+  const login = await exchangeDiscordCode(code, null, null, true);
+
+  let user: DiscordActivitySignIn["user"] = null;
+  if (login.access_token) {
+    try {
+      const auth = await withDiscordTimeout(sdk.commands.authenticate({ access_token: login.access_token }), "Discord authentication timed out.");
+      if (auth?.user) user = { id: auth.user.id, name: auth.user.global_name || auth.user.username };
+    } catch (err) {
+      // The casino session is already issued; only SDK features (presence) depend on this.
+      console.warn("[discord] authenticate failed", err);
+    }
+  }
+  try { sessionStorage.removeItem("lgc.discord.paired"); } catch { /* Not needed for SDK sign-in. */ }
+
+  return { sdk, channelId: sdk.channelId ?? discordLaunchParams().get("channel_id"), instanceId: sdk.instanceId, login, user };
+}
+
 // One SDK/READY handshake per mounted Activity iframe, including route changes/HMR.
 export function getDiscordSdk(clientId: string): Promise<DiscordSDK> {
   const state = runtime();
@@ -39,7 +111,7 @@ export async function getDiscordCall() {
     }
   } catch { /* Continue with the Embedded SDK handshake. */ }
   if (!params.has("frame_id")) return null;
-  const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID_FALLBACK;
+  const clientId = await resolveDiscordClientId();
   if (!clientId) throw new Error("Discord Activity is not configured.");
   const sdk = await getDiscordSdk(clientId);
   await withDiscordTimeout(sdk.ready(), "Discord is taking too long to connect. Reopen the Activity or retry.");
@@ -54,7 +126,7 @@ export function exchangeDiscordCode(code: string, redirectUri: string | null, mo
   const existing = state.exchanges.get(key);
   if (existing) return existing;
   const request = (async () => {
-    const response = await fetch("/api/discord/login", {
+    const response = await fetch(`${discordApiBase()}/api/discord/login`, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ code, redirectUri, mobileAuthCode, sdk }), signal: AbortSignal.timeout(20000),
     });
