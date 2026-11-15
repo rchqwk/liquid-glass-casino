@@ -67,12 +67,17 @@ export async function POST(req: Request) {
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: form.toString(),
     });
-    const tokenJson = (await tokenRes.json().catch(() => null)) as DiscordTokenResp | null;
+    const tokenText = await tokenRes.text().catch(() => "");
+    let tokenJson: DiscordTokenResp | null = null;
+    try { tokenJson = JSON.parse(tokenText) as DiscordTokenResp; } catch { /* Non-JSON reply (rate limit page). */ }
     if (!tokenRes.ok || !tokenJson || "error" in tokenJson || !(tokenJson as any).access_token) {
-      return NextResponse.json(
-        { error: "Discord token exchange failed", detail: tokenJson && "error" in tokenJson ? tokenJson.error : undefined },
-        { status: 400 },
-      );
+      // Surface Discord's reason (invalid_grant, invalid_client, 429...) in the entry page log.
+      const reason = tokenJson && "error" in tokenJson
+        ? [tokenJson.error, tokenJson.error_description].filter(Boolean).join(" - ")
+        : (tokenJson as any)?.message ?? tokenText.slice(0, 120);
+      const detail = `HTTP ${tokenRes.status}${reason ? ` ${reason}` : ""}${body?.sdk ? " (sdk)" : ` (redirect_uri=${redirectUri})`}`;
+      console.error("[Discord Login] Token exchange failed:", detail);
+      return NextResponse.json({ error: "Discord token exchange failed", detail }, { status: 400 });
     }
     const accessToken = (tokenJson as any).access_token as string;
 
